@@ -36,7 +36,9 @@
       "Bash(git add *)",
       "Bash(git commit *)",
       "Bash(git remote *)",
-      "Bash(ssh -T -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 git@github.com)"
+      "Bash(ssh -T -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 git@github.com)",
+      "Bash(perl -i -pe 's{src=\"/kubik-logo\\\\.png\"}{src=\\\\{`\\\\$\\\\{import.meta.env.BASE_URL\\\\}kubik-logo.png`\\\\}}g' src/App.tsx src/screens/GajiKaryawan.tsx src/screens/Login.tsx src/components/Sidebar.tsx)",
+      "Bash(MSG=\"fix: logo path pakai BASE_URL untuk GitHub Pages\" npm run deploy)"
     ],
     "additionalDirectories": [
       "/tmp"

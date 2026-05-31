@@ -63,7 +63,7 @@ export function Login() {
       <div className="auth-card">
         <div className="auth-brand">
           <div className="auth-logo">
-            <img src="/kubik-logo.png" alt="Kubik" />
+            <img src={`${import.meta.env.BASE_URL}kubik-logo.png`} alt="Kubik" />
           </div>
           <div>
             <div className="auth-kicker">Kubik Photobox Studio</div>

@@ -257,7 +257,7 @@ function SlipCard({
     <div className="gaji-card" data-slip-id={empId}>
       {/* Kop slip — hanya tampil saat di-print */}
       <div className="gaji-print-head">
-        <img className="gaji-print-logo" src="/kubik-logo.png" alt="Kubik" />
+        <img className="gaji-print-logo" src={`${import.meta.env.BASE_URL}kubik-logo.png`} alt="Kubik" />
         <div className="gaji-print-title">{printTitle}</div>
       </div>
 

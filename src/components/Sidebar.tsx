@@ -95,7 +95,7 @@ export function Sidebar({
       <aside className={'sidebar' + (open ? ' is-open' : '')}>
         <div className="sidebar-brand">
           <div className="sidebar-logo">
-            <img src="/kubik-logo.png" alt="Kubik" />
+            <img src={`${import.meta.env.BASE_URL}kubik-logo.png`} alt="Kubik" />
           </div>
           <div className="sidebar-brand-text">
             <span className="kicker">{brandKicker}</span>

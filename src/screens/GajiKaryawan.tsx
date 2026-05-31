@@ -52,26 +52,43 @@ export function GajiKaryawan({ data, setData, isAdmin, currentUserId }: Props) {
   const hariIni = todayKey()
   const bulanIni = hariIni.slice(0, 7)
 
-  // Daftar bulan yang punya data (absen / laporan) + bulan berjalan, terbaru di atas.
-  const bulanTersedia = useMemo(() => {
-    const set = new Set<string>([bulanIni])
+  // Bulan yang benar-benar punya data (absen / laporan), terbaru di atas.
+  const bulanBerdata = useMemo(() => {
+    const set = new Set<string>()
     for (const r of data.records) set.add(r.tanggal.slice(0, 7))
     for (const l of data.laporanIncome) set.add(l.tanggal.slice(0, 7))
     return [...set].sort().reverse()
-  }, [data.records, data.laporanIncome, bulanIni])
+  }, [data.records, data.laporanIncome])
 
-  const [periode, setPeriode] = useState<string>(bulanTersedia[0] ?? bulanIni)
+  // Pilihan di dropdown: bulan berdata + bulan berjalan, terbaru di atas.
+  const bulanTersedia = useMemo(() => {
+    const set = new Set<string>([bulanIni, ...bulanBerdata])
+    return [...set].sort().reverse()
+  }, [bulanBerdata, bulanIni])
+
+  // `periode` = pilihan eksplisit user (null = belum memilih / mengikuti data).
+  const [periode, setPeriode] = useState<string | null>(null)
+
+  // Periode efektif yang dipakai untuk menghitung & menampilkan slip:
+  //  - pilihan user, selama bulan itu masih ada di daftar;
+  //  - jika tidak, ikuti bulan TERBARU yang punya data (jadi data yang baru
+  //    diinput — termasuk bulan lalu / tanggal lampau — langsung muncul);
+  //  - kalau belum ada data sama sekali, pakai bulan berjalan.
+  const periodeAktif =
+    periode && bulanTersedia.includes(periode)
+      ? periode
+      : bulanBerdata[0] ?? bulanIni
 
   // Data bulan terpilih.
   const recordsBulan = useMemo(
-    () => data.records.filter((r) => r.tanggal.startsWith(periode)),
-    [data.records, periode],
+    () => data.records.filter((r) => r.tanggal.startsWith(periodeAktif)),
+    [data.records, periodeAktif],
   )
   const laporanBulan = useMemo(
-    () => data.laporanIncome.filter((l) => l.tanggal.startsWith(periode)),
-    [data.laporanIncome, periode],
+    () => data.laporanIncome.filter((l) => l.tanggal.startsWith(periodeAktif)),
+    [data.laporanIncome, periodeAktif],
   )
-  const hariSeharusnya = hariSeharusnyaBulan(periode, hariIni)
+  const hariSeharusnya = hariSeharusnyaBulan(periodeAktif, hariIni)
 
   // Slip gaji tiap karyawan untuk bulan terpilih.
   const slips = useMemo(
@@ -109,15 +126,36 @@ export function GajiKaryawan({ data, setData, isAdmin, currentUserId }: Props) {
     })
   }
 
+  // Status pembayaran per slip = key `${empId}::${periode}`.
+  const dibayarKey = (empId: string) => `${empId}::${periodeAktif}`
+  function setDibayar(empId: string, paid: boolean) {
+    const next = { ...data.gajiDibayar }
+    if (paid) next[dibayarKey(empId)] = true
+    else delete next[dibayarKey(empId)]
+    setData({ ...data, gajiDibayar: next })
+  }
+
+  // Pisahkan slip bulan terpilih: yang belum dibayar vs yang sudah (riwayat).
+  const { belumDibayar, sudahDibayar } = useMemo(() => {
+    const belum: typeof slips = []
+    const sudah: typeof slips = []
+    for (const s of slips) {
+      if (data.gajiDibayar[dibayarKey(s.emp.id)]) sudah.push(s)
+      else belum.push(s)
+    }
+    return { belumDibayar: belum, sudahDibayar: sudah }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slips, data.gajiDibayar, periodeAktif])
+
   return (
     <>
       <section className="gaji-toolbar">
         <div className="gaji-toolbar-info">
-          <span className="gaji-periode-pill">{labelBulan(periode)}</span>
+          <span className="gaji-periode-pill">{labelBulan(periodeAktif)}</span>
           <p className="gaji-toolbar-sub">
             {isAdmin ? (
               <>
-                Slip gaji {karyawan.length} karyawan · gaji pokok + bonus
+                Slip gaji {slips.length} karyawan · gaji pokok + bonus
                 penjualan (Rp {BONUS_PER_ITEM.toLocaleString('id-ID')}/item) +
                 lembur &amp; shift penuh − keterlambatan − cuti berlebih
               </>
@@ -131,7 +169,7 @@ export function GajiKaryawan({ data, setData, isAdmin, currentUserId }: Props) {
         </div>
         <label className="gaji-periode-select">
           <span>Periode</span>
-          <select value={periode} onChange={(e) => setPeriode(e.target.value)}>
+          <select value={periodeAktif} onChange={(e) => setPeriode(e.target.value)}>
             {bulanTersedia.map((b) => (
               <option key={b} value={b}>
                 {labelBulan(b)}
@@ -147,7 +185,7 @@ export function GajiKaryawan({ data, setData, isAdmin, currentUserId }: Props) {
             tone="pink"
             label="Total gaji dibayar"
             value={formatRupiah(total.gaji)}
-            sub={`${karyawan.length} karyawan · ${labelBulan(periode)}`}
+            sub={`${slips.length} karyawan · ${labelBulan(periodeAktif)}`}
             icon={<Icons.wallet />}
           />
           <KpiCard
@@ -174,33 +212,79 @@ export function GajiKaryawan({ data, setData, isAdmin, currentUserId }: Props) {
         </div>
       )}
 
-      <div className="section-head">
-        <h2 style={{ fontSize: 20 }}>
-          {isAdmin ? 'Slip Gaji per Karyawan' : 'Slip Gaji Saya'}
-        </h2>
-      </div>
-
       {slips.length === 0 ? (
-        <div className="gaji-empty">
-          {isAdmin
-            ? 'Belum ada karyawan. Karyawan baru mendaftar sendiri di halaman login.'
-            : 'Slip gaji kamu belum tersedia.'}
-        </div>
+        <>
+          <div className="section-head">
+            <h2 style={{ fontSize: 20 }}>
+              {isAdmin ? 'Slip Gaji per Karyawan' : 'Slip Gaji Saya'}
+            </h2>
+          </div>
+          <div className="gaji-empty">
+            {isAdmin
+              ? 'Belum ada karyawan. Karyawan baru mendaftar sendiri di halaman login.'
+              : 'Slip gaji kamu belum tersedia.'}
+          </div>
+        </>
       ) : (
-        <div className="gaji-grid">
-          {slips.map(({ emp, slip }) => (
-            <SlipCard
-              key={emp.id}
-              empId={emp.id}
-              nama={emp.nama}
-              jabatan={emp.jabatan}
-              slip={slip}
-              readOnly={!isAdmin}
-              printTitle={`Slip Gaji · ${emp.nama} · ${labelBulan(periode)}`}
-              onGajiPokok={(v) => setGajiPokok(emp.id, v)}
-            />
-          ))}
-        </div>
+        <>
+          <div className="section-head">
+            <h2 style={{ fontSize: 20 }}>
+              {isAdmin ? 'Belum Dibayar' : 'Slip Gaji Saya'}
+            </h2>
+          </div>
+          {belumDibayar.length === 0 ? (
+            <div className="gaji-empty">
+              Semua gaji {labelBulan(periodeAktif)} sudah dibayar. 🎉
+            </div>
+          ) : (
+            <div className="gaji-grid">
+              {belumDibayar.map(({ emp, slip }) => (
+                <SlipCard
+                  key={emp.id}
+                  empId={emp.id}
+                  nama={emp.nama}
+                  jabatan={emp.jabatan}
+                  slip={slip}
+                  readOnly={!isAdmin}
+                  dibayar={false}
+                  onToggleDibayar={
+                    isAdmin ? (v) => setDibayar(emp.id, v) : undefined
+                  }
+                  printTitle={`Slip Gaji · ${emp.nama} · ${labelBulan(periodeAktif)}`}
+                  onGajiPokok={(v) => setGajiPokok(emp.id, v)}
+                />
+              ))}
+            </div>
+          )}
+
+          {sudahDibayar.length > 0 && (
+            <>
+              <div className="section-head" style={{ marginTop: 28 }}>
+                <h2 style={{ fontSize: 20 }}>
+                  Riwayat — Sudah Dibayar · {labelBulan(periodeAktif)}
+                </h2>
+              </div>
+              <div className="gaji-grid">
+                {sudahDibayar.map(({ emp, slip }) => (
+                  <SlipCard
+                    key={emp.id}
+                    empId={emp.id}
+                    nama={emp.nama}
+                    jabatan={emp.jabatan}
+                    slip={slip}
+                    readOnly={!isAdmin}
+                    dibayar={true}
+                    onToggleDibayar={
+                      isAdmin ? (v) => setDibayar(emp.id, v) : undefined
+                    }
+                    printTitle={`Slip Gaji · ${emp.nama} · ${labelBulan(periodeAktif)}`}
+                    onGajiPokok={(v) => setGajiPokok(emp.id, v)}
+                  />
+                ))}
+              </div>
+            </>
+          )}
+        </>
       )}
     </>
   )
@@ -214,6 +298,8 @@ function SlipCard({
   readOnly,
   printTitle,
   onGajiPokok,
+  dibayar = false,
+  onToggleDibayar,
 }: {
   empId: string
   nama: string
@@ -222,6 +308,8 @@ function SlipCard({
   readOnly: boolean
   printTitle: string
   onGajiPokok: (v: number) => void
+  dibayar?: boolean
+  onToggleDibayar?: (paid: boolean) => void
 }) {
   // Input gaji pokok pakai draft lokal supaya tidak menulis DB tiap ketukan;
   // commit saat blur / Enter.
@@ -364,6 +452,26 @@ function SlipCard({
           <span className="gaji-sign-name">&nbsp;</span>
         </div>
       </div>
+
+      {onToggleDibayar ? (
+        <button
+          type="button"
+          className={dibayar ? 'btn btn--ghost' : 'btn'}
+          style={{ width: '100%', marginTop: 4 }}
+          onClick={() => onToggleDibayar(!dibayar)}
+        >
+          {dibayar ? '↩ Tandai belum dibayar' : '✓ Tandai sudah dibayar'}
+        </button>
+      ) : (
+        dibayar && (
+          <div
+            className="gaji-pokok-tarif"
+            style={{ textAlign: 'center', color: 'var(--mint-deep)' }}
+          >
+            ✓ Sudah dibayar
+          </div>
+        )
+      )}
 
       <div className="gaji-card-actions">
         <button type="button" className="btn btn--ghost" onClick={handlePrint}>

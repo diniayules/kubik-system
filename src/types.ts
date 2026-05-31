@@ -232,6 +232,12 @@ export type AppData = {
    * Disimpan di `app_config.gaji_pokok`. `undefined`/kosong = belum diisi (0).
    */
   gajiPokok: Record<string, number>
+  /**
+   * Status "sudah dibayar" per slip gaji, key = `${employeeId}::${YYYY-MM}`.
+   * true = gaji bulan itu untuk karyawan tsb sudah dibayar (pindah ke Riwayat).
+   * Disimpan di `app_config.gaji_dibayar` (JSONB), pola sama seperti gajiPokok.
+   */
+  gajiDibayar: Record<string, boolean>
   stokKertas: JenisKertas[]
   stokTinta: Tinta[]
   stokAmplop: number

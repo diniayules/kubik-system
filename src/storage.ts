@@ -61,6 +61,7 @@ const EMPTY: AppData = {
   hargaUpgrade: { ...HARGA_UPGRADE_DEFAULT },
   hargaProduk: { ...HARGA_PRODUK_DEFAULT },
   gajiPokok: {},
+  gajiDibayar: {},
   stokKertas: defaultStokKertas(),
   stokTinta: defaultStokTinta(),
   stokAmplop: 0,
@@ -304,6 +305,10 @@ export function loadData(): AppData {
       gajiPokok:
         parsed.gajiPokok && typeof parsed.gajiPokok === 'object'
           ? parsed.gajiPokok
+          : {},
+      gajiDibayar:
+        parsed.gajiDibayar && typeof parsed.gajiDibayar === 'object'
+          ? parsed.gajiDibayar
           : {},
       stokKertas: Array.isArray(parsed.stokKertas)
         ? (parsed.stokKertas

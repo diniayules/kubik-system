@@ -148,6 +148,7 @@ type ConfigRow = {
   harga_produk: HargaProduk | null
   event_config: Partial<Record<EventKategori, EventConfig>> | null
   gaji_pokok: Record<string, number> | null
+  gaji_dibayar: Record<string, boolean> | null
   brand_kicker: string | null
   brand_name: string | null
   dash_judul: string | null
@@ -350,6 +351,7 @@ export async function fetchAppData(): Promise<AppData> {
     hargaUpgrade: config?.harga_upgrade ?? { ...HARGA_UPGRADE_DEFAULT },
     hargaProduk: config?.harga_produk ?? { ...HARGA_PRODUK_DEFAULT },
     gajiPokok: config?.gaji_pokok ?? {},
+    gajiDibayar: config?.gaji_dibayar ?? {},
     stokKertas,
     stokTinta,
     stokAmplop: amplop?.stok ?? 0,
@@ -579,6 +581,7 @@ export async function persistChanges(
     'hargaProduk',
     'eventConfig',
     'gajiPokok',
+    'gajiDibayar',
     'brandKicker',
     'brandName',
     'dashJudul',
@@ -603,6 +606,7 @@ export async function persistChanges(
             harga_produk: next.hargaProduk,
             event_config: next.eventConfig ?? null,
             gaji_pokok: next.gajiPokok ?? {},
+            gaji_dibayar: next.gajiDibayar ?? {},
             brand_kicker: next.brandKicker ?? null,
             brand_name: next.brandName ?? null,
             dash_judul: next.dashJudul ?? null,

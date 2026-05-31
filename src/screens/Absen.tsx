@@ -65,6 +65,10 @@ export function Absen({
     (r) => r.employeeId === employeeId && r.tanggal === tanggal,
   )
   const menunggu = record?.status === 'menunggu'
+  // Mengedit catatan manual yang SUDAH disetujui (oleh karyawan) mengembalikan
+  // statusnya jadi 'menunggu' → perlu persetujuan ulang admin.
+  const perluPersetujuanUlang =
+    record?.status === 'disetujui' && recordStatus === 'menunggu'
   const takeover = record ? cariTakeover(record, data.records) : undefined
   const ringkasan = hitungRingkasan(record, takeover)
   const overlapNama = record
@@ -126,6 +130,9 @@ export function Absen({
       ),
     })
     toast('info', `Diganti ke ${SHIFT_LABEL[shift].toLowerCase()}`)
+    if (perluPersetujuanUlang) {
+      toast('warn', 'Catatan diubah — perlu persetujuan ulang admin')
+    }
   }
 
   function catatEvent(tipe: EventTipe) {
@@ -230,6 +237,9 @@ export function Absen({
       'info',
       `${mulaiTipe.includes('siang') ? 'Istirahat siang' : 'Istirahat sore'} dilewati`,
     )
+    if (perluPersetujuanUlang) {
+      toast('warn', 'Catatan diubah — perlu persetujuan ulang admin')
+    }
   }
 
   function bukaEdit(tipe: EventTipe) {
@@ -283,7 +293,68 @@ export function Absen({
       records: data.records.map((r) => (r.id === record.id ? updated : r)),
     })
     toast('info', `${EVENT_LABEL[editingTipe]} di-edit ke ${editValue}`)
+    if (perluPersetujuanUlang) {
+      toast('warn', 'Catatan diubah — perlu persetujuan ulang admin')
+    }
     batalEdit()
+  }
+
+  // Pindahkan catatan ke tanggal lain TANPA mengetik ulang jam — dipakai saat
+  // jamnya sudah benar tapi tanggalnya salah. Jam (HH:MM) tiap event di-stempel
+  // ulang ke tanggal baru; untuk karyawan, status kembali jadi 'menunggu'.
+  function pindahTanggal() {
+    if (!record) return
+    const input = prompt(
+      `Pindahkan catatan absensi ${formatTanggalPanjang(tanggal)} ke tanggal lain.\n` +
+        `Jam yang sudah diisi akan tetap dipertahankan.\n\n` +
+        `Tanggal tujuan (format YYYY-MM-DD):`,
+      tanggal,
+    )?.trim()
+    if (!input) return
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(input) || Number.isNaN(Date.parse(input))) {
+      alert('Format tanggal tidak valid (gunakan YYYY-MM-DD).')
+      return
+    }
+    if (input === tanggal) return
+    if (input > today) {
+      alert('Tidak bisa memindahkan ke tanggal di masa depan.')
+      return
+    }
+    const bentrok = data.records.some(
+      (r) =>
+        r.employeeId === employeeId &&
+        r.tanggal === input &&
+        r.id !== record.id,
+    )
+    if (bentrok) {
+      alert(
+        'Sudah ada catatan absensi di tanggal itu. Hapus dulu salah satu sebelum memindahkan.',
+      )
+      return
+    }
+    const targetStatus: AbsenStatus =
+      input !== today && !isAdmin ? 'menunggu' : 'disetujui'
+    const events = record.events.map((e) => ({
+      ...e,
+      waktu: jadwalISO(input, formatJam(e.waktu)),
+      waktuAsli: e.waktuAsli ? jadwalISO(input, formatJam(e.waktuAsli)) : e.waktuAsli,
+    }))
+    const updated: AbsenHari = {
+      ...record,
+      tanggal: input,
+      events,
+      status: targetStatus,
+    }
+    setData({
+      ...data,
+      records: data.records.map((r) => (r.id === record.id ? updated : r)),
+    })
+    setTanggal(input)
+    batalEdit()
+    toast('ok', `Catatan dipindahkan ke ${formatTanggalPanjang(input)}`)
+    if (record.status === 'disetujui' && targetStatus === 'menunggu') {
+      toast('warn', 'Tanggal diubah — perlu persetujuan ulang admin')
+    }
   }
 
   function resetHariIni() {
@@ -357,16 +428,23 @@ export function Absen({
       {isManual && (
         <div className="overlap-banner manual-banner">
           📅 <strong>Absensi manual untuk {formatTanggalPanjang(tanggal)}</strong>
-          {recordStatus === 'menunggu' ? (
+          {isAdmin ? (
+            <div className="overlap-sub">
+              Entri admin untuk tanggal lampau langsung tercatat sebagai
+              kehadiran resmi (tidak perlu persetujuan).
+            </div>
+          ) : perluPersetujuanUlang ? (
+            <div className="overlap-sub">
+              ✅ Catatan ini <strong>sudah disetujui</strong>. Jika kamu
+              mengubahnya (mengedit jam atau shift), statusnya kembali jadi{' '}
+              <strong>menunggu</strong> dan perlu <strong>persetujuan ulang
+              admin</strong> sebelum dihitung lagi sebagai kehadiran resmi.
+            </div>
+          ) : (
             <div className="overlap-sub">
               Isi jam dengan tombol <strong>Edit</strong> pada tiap baris. Setelah
               disimpan, entri ini berstatus <strong>menunggu persetujuan admin</strong>{' '}
               dan belum dihitung sebagai kehadiran resmi sampai disetujui.
-            </div>
-          ) : (
-            <div className="overlap-sub">
-              Entri admin untuk tanggal lampau langsung tercatat sebagai
-              kehadiran resmi (tidak perlu persetujuan).
             </div>
           )}
         </div>
@@ -634,8 +712,13 @@ export function Absen({
           <Icons.history /> Lihat Riwayat
         </button>
         {record && (
+          <button type="button" className="btn btn--ghost" onClick={pindahTanggal}>
+            📅 Ubah Tanggal
+          </button>
+        )}
+        {record && (
           <button type="button" className="btn btn--pink" onClick={resetHariIni}>
-            <Icons.trash /> Reset Hari Ini
+            <Icons.trash /> {isManual ? 'Hapus Catatan' : 'Reset Hari Ini'}
           </button>
         )}
       </div>

@@ -1,0 +1,442 @@
+/* ============================================================
+   KUBIK PHOTOBOX — ABSENSI KARYAWAN (base)
+   ============================================================ */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+:root {
+  --bg: #FFF8EF;
+  --bg-2: #FCEFE2;
+  --surface: #FFFFFF;
+  --surface-2: #FBF6EE;
+  --ink: #14204C;
+  --ink-soft: #4A557E;
+  --muted: #8B93B0;
+  --line: rgba(20,32,76,0.10);
+
+  --primary: #2A3FA0;
+  --primary-2: #3B5BDB;
+  --on-primary: #FFFFFF;
+
+  --yellow: #FFD43B; --yellow-deep: #B47A00; --yellow-bg: #FFF4C9;
+  --pink:   #FF6FA5; --pink-deep:   #C13B72; --pink-bg:   #FFDFEC;
+  --mint:   #1FC7A0; --mint-deep:   #0B8A6B; --mint-bg:   #CFF6EC;
+
+  --radius-sm: 12px;
+  --radius: 18px;
+  --radius-lg: 26px;
+  --radius-pill: 999px;
+
+  --shadow-card: 0 18px 40px -24px rgba(20,32,76,0.45);
+  --shadow-float: 0 24px 60px -28px rgba(20,32,76,0.55);
+
+  --font-display: "Fredoka", system-ui, sans-serif;
+  --font-body: "Plus Jakarta Sans", system-ui, sans-serif;
+
+  --ring: 0 0 0 4px rgba(59,91,219,0.18);
+
+  --maxw: 1240px;
+}
+
+html, body, #root { margin: 0; padding: 0; min-height: 100svh; }
+:root { --text-scale: 1; }
+body {
+  font-family: var(--font-body);
+  background: var(--bg);
+  color: var(--ink);
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow-x: hidden;
+}
+#root { zoom: var(--text-scale); }
+
+#root { position: relative; z-index: 1; }
+
+button { font-family: inherit; cursor: pointer; border: none; background: none; color: inherit; }
+input, textarea { font-family: inherit; }
+h1, h2, h3, h4 { font-family: var(--font-display); margin: 0; letter-spacing: -0.01em; }
+p { margin: 0; }
+
+/* Defensive default: any inline SVG icon defaults to 1em (≈16px) unless overridden. */
+svg { width: 1em; height: 1em; flex-shrink: 0; }
+
+.bg-decor {
+  position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden;
+}
+
+/* =====================================================
+   THEME POP — chunky stickers, hard colored shadows
+   ===================================================== */
+:root[data-theme="pop"] {
+  --bg: #FFF7EC;
+  --bg-2: #FFE9D6;
+  --surface: #FFFFFF;
+  --surface-2: #FFF6E9;
+  --ink: #131F4A;
+  --ink-soft: #515D86;
+  --muted: #9AA0BC;
+  --line: #E7E2D6;
+
+  --primary: #1F2C77;
+  --primary-2: #3B5BDB;
+  --on-primary: #FFFFFF;
+
+  --yellow: #FFCE2E; --yellow-deep: #9A6A00; --yellow-bg: #FFF1C2;
+  --pink: #FF5E9C;   --pink-deep: #C32C6B;   --pink-bg: #FFDCEA;
+  --mint: #16C79A;   --mint-deep: #097A5E;   --mint-bg: #C7F4E8;
+
+  --radius-sm: 14px; --radius: 20px; --radius-lg: 28px;
+  --card-border: 2.5px solid #131F4A;
+  --shadow-card: 6px 8px 0 0 rgba(19,31,74,0.92);
+  --shadow-float: 10px 14px 0 0 rgba(19,31,74,0.9);
+}
+:root[data-theme="pop"] .hero { border: 2.5px solid var(--ink); }
+:root[data-theme="pop"] .shift { border-width: 1.5px; box-shadow: none; }
+:root[data-theme="pop"] .clock-chip { border: 2.5px solid var(--ink); box-shadow: 4px 5px 0 0 rgba(19,31,74,0.9); }
+:root[data-theme="pop"] .brand .logo { border: 2.5px solid var(--ink); box-shadow: 3px 4px 0 0 rgba(19,31,74,0.9); }
+:root[data-theme="pop"] .btn--primary { box-shadow: 3px 4px 0 0 var(--ink); }
+:root[data-theme="pop"] .btn--pink { box-shadow: 3px 4px 0 0 var(--pink-deep); }
+:root[data-theme="pop"] .stat { border-width: 2px; }
+:root[data-theme="pop"] .badge { border: 2px solid currentColor; }
+
+:root[data-theme="pop"] .bg-decor { background: var(--bg); }
+:root[data-theme="pop"] .blob { position: absolute; opacity: .9; }
+:root[data-theme="pop"] .b1 { top: 8%; left: 4%; width: 70px; height: 70px; border-radius: 22px; background: var(--yellow); transform: rotate(-12deg); border: 2.5px solid var(--ink); }
+:root[data-theme="pop"] .b2 { top: 18%; right: 6%; width: 54px; height: 54px; border-radius: 50%; background: var(--pink); border: 2.5px solid var(--ink); }
+:root[data-theme="pop"] .b3 { bottom: 14%; left: 7%; width: 60px; height: 60px; border-radius: 50%; background: var(--mint); border: 2.5px solid var(--ink); }
+:root[data-theme="pop"] .b4 { top: 46%; right: 3%; width: 46px; height: 46px; background: var(--primary-2); transform: rotate(18deg); border-radius: 12px; border: 2.5px solid var(--ink); }
+:root[data-theme="pop"] .b5 { bottom: 8%; right: 14%; width: 38px; height: 38px; border-radius: 50%; background: var(--yellow); border: 2.5px solid var(--ink); }
+:root[data-theme="pop"] .b6 { top: 70%; left: 3%; width: 40px; height: 40px; background: var(--pink); transform: rotate(-20deg); border-radius: 10px; border: 2.5px solid var(--ink); }
+
+/* =====================================================
+   THEME AURORA — glassy gradient mesh
+   ===================================================== */
+:root[data-theme="aurora"] {
+  --bg: #F3F1FF;
+  --bg-2: #FFE9F4;
+  --surface: rgba(255,255,255,0.72);
+  --surface-2: rgba(255,255,255,0.55);
+  --ink: #1B2356;
+  --ink-soft: #57608F;
+  --muted: #9AA0C6;
+  --line: rgba(91,103,180,0.18);
+
+  --primary: #4338CA;
+  --primary-2: #6366F1;
+  --on-primary: #FFFFFF;
+
+  --yellow: #FFD45E; --yellow-deep: #A87400; --yellow-bg: rgba(255,212,94,0.22);
+  --pink: #FB6FB0;   --pink-deep: #C13C84;   --pink-bg: rgba(251,111,176,0.18);
+  --mint: #34D3B6;   --mint-deep: #0E8C73;   --mint-bg: rgba(52,211,182,0.20);
+
+  --radius-sm: 14px; --radius: 22px; --radius-lg: 30px;
+  --card-border: 1.5px solid rgba(255,255,255,0.8);
+  --shadow-card: 0 20px 50px -26px rgba(67,56,202,0.5);
+  --shadow-float: 0 30px 70px -30px rgba(67,56,202,0.55);
+}
+:root[data-theme="aurora"] .hero,
+:root[data-theme="aurora"] .emp-card,
+:root[data-theme="aurora"] .clock-chip,
+:root[data-theme="aurora"] .modal,
+:root[data-theme="aurora"] .theme-switch,
+:root[data-theme="aurora"] .emp-empty {
+  backdrop-filter: blur(18px) saturate(1.4);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+}
+:root[data-theme="aurora"] .shift { backdrop-filter: blur(8px); }
+:root[data-theme="aurora"] body { background: var(--bg); }
+
+:root[data-theme="aurora"] .bg-decor {
+  background:
+    radial-gradient(50% 50% at 12% 8%, rgba(99,102,241,0.45), transparent 70%),
+    radial-gradient(45% 45% at 88% 14%, rgba(251,111,176,0.42), transparent 70%),
+    radial-gradient(50% 50% at 78% 88%, rgba(52,211,182,0.38), transparent 70%),
+    radial-gradient(40% 40% at 18% 92%, rgba(255,212,94,0.40), transparent 70%),
+    var(--bg);
+}
+:root[data-theme="aurora"] .blob { position: absolute; border-radius: 50%; filter: blur(40px); opacity: .5; animation: drift 18s ease-in-out infinite; }
+:root[data-theme="aurora"] .b1 { top: -6%; left: -4%; width: 340px; height: 340px; background: #6366F1; }
+:root[data-theme="aurora"] .b2 { top: 4%; right: -6%; width: 300px; height: 300px; background: #FB6FB0; animation-delay: -4s; }
+:root[data-theme="aurora"] .b3 { bottom: -8%; left: 10%; width: 320px; height: 320px; background: #34D3B6; animation-delay: -8s; }
+:root[data-theme="aurora"] .b4 { bottom: 2%; right: 8%; width: 260px; height: 260px; background: #FFD45E; animation-delay: -12s; }
+:root[data-theme="aurora"] .b5, :root[data-theme="aurora"] .b6 { display: none; }
+@keyframes drift { 0%,100%{ transform: translate(0,0) scale(1) } 50%{ transform: translate(30px,-24px) scale(1.08) } }
+
+:root[data-theme="aurora"] .emp-card .accent-strip { opacity: .85; }
+:root[data-theme="aurora"] .badge { backdrop-filter: blur(4px); }
+
+/* =====================================================
+   THEME STUDIO — retro film / editorial
+   ===================================================== */
+:root[data-theme="studio"] {
+  --bg: #F4EFE6;
+  --bg-2: #ECE3D4;
+  --surface: #FBF8F1;
+  --surface-2: #F1EADC;
+  --ink: #15233F;
+  --ink-soft: #4C5872;
+  --muted: #9A937F;
+  --line: rgba(21,35,63,0.16);
+
+  --primary: #15233F;
+  --primary-2: #25407F;
+  --on-primary: #FBF8F1;
+
+  --yellow: #F2B705; --yellow-deep: #8A6400; --yellow-bg: #FBEFC2;
+  --pink: #EF5C8C;   --pink-deep: #B23463;   --pink-bg: #FBDBE6;
+  --mint: #2BA98A;   --mint-deep: #156B54;   --mint-bg: #CDEDE2;
+
+  --radius-sm: 6px; --radius: 8px; --radius-lg: 12px; --radius-pill: 6px;
+  --card-border: 1.8px solid var(--ink);
+  --shadow-card: 0 10px 30px -20px rgba(21,35,63,0.6);
+  --shadow-float: 0 20px 44px -22px rgba(21,35,63,0.65);
+  --font-mono: "Space Mono", ui-monospace, monospace;
+}
+:root[data-theme="studio"] .hero,
+:root[data-theme="studio"] .clock-chip,
+:root[data-theme="studio"] .stat,
+:root[data-theme="studio"] .shift,
+:root[data-theme="studio"] .metrics,
+:root[data-theme="studio"] .brand .logo,
+:root[data-theme="studio"] .modal { border: 1.8px solid var(--ink); }
+:root[data-theme="studio"] .shift { box-shadow: none; }
+:root[data-theme="studio"] .badge { border: 1.5px solid currentColor; border-radius: 4px; }
+:root[data-theme="studio"] .btn { border-radius: 6px; }
+:root[data-theme="studio"] .avatar { border-radius: 6px; }
+:root[data-theme="studio"] .emp-card .accent-strip {
+  height: 8px;
+  background: repeating-linear-gradient(90deg, var(--ink) 0 8px, transparent 8px 16px);
+  opacity: .25;
+}
+/* Aksen garis-garis (dashed) di header semua card — seperti card absensi (.emp-card) */
+:root[data-theme="studio"] .kpi-card,
+:root[data-theme="studio"] .dash-laba-card,
+:root[data-theme="studio"] .quick-card,
+:root[data-theme="studio"] .inv-card,
+:root[data-theme="studio"] .tinta-card,
+:root[data-theme="studio"] .amplop-card,
+:root[data-theme="studio"] .settings-card,
+:root[data-theme="studio"] .detail-card,
+:root[data-theme="studio"] .income-card,
+:root[data-theme="studio"] .kal-card,
+:root[data-theme="studio"] .auth-card {
+  position: relative;
+  overflow: hidden;
+}
+:root[data-theme="studio"] .kpi-card::before,
+:root[data-theme="studio"] .dash-laba-card::before,
+:root[data-theme="studio"] .quick-card::before,
+:root[data-theme="studio"] .inv-card::before,
+:root[data-theme="studio"] .tinta-card::before,
+:root[data-theme="studio"] .amplop-card::before,
+:root[data-theme="studio"] .settings-card::before,
+:root[data-theme="studio"] .detail-card::before,
+:root[data-theme="studio"] .income-card:not(.is-printing)::before,
+:root[data-theme="studio"] .kal-card::before,
+:root[data-theme="studio"] .auth-card::before,
+:root[data-theme="studio"] .thumb::after {
+  content: "";
+  position: absolute; top: 0; left: 0; right: 0; height: 8px;
+  background: repeating-linear-gradient(90deg, var(--ink) 0 8px, transparent 8px 16px);
+  opacity: .25;
+  pointer-events: none;
+  z-index: 2;
+}
+:root[data-theme="studio"] .brand-text .kicker,
+:root[data-theme="studio"] .badge,
+:root[data-theme="studio"] .metric .k,
+:root[data-theme="studio"] .stat .lbl,
+:root[data-theme="studio"] .date-pill,
+:root[data-theme="studio"] .hist-row .h-times .ht .hk,
+:root[data-theme="studio"] .key--fn {
+  font-family: var(--font-mono); letter-spacing: 0.02em;
+}
+:root[data-theme="studio"] .clock-chip .now,
+:root[data-theme="studio"] .metric .v,
+:root[data-theme="studio"] .hist-row .h-times .ht .hv { font-family: var(--font-mono); }
+
+:root[data-theme="studio"] .bg-decor { background: var(--bg); }
+:root[data-theme="studio"] .blob { display: none; }
+:root[data-theme="studio"] .bg-decor::before,
+:root[data-theme="studio"] .bg-decor::after {
+  content: ""; position: absolute; top: 0; bottom: 0; width: 26px;
+  background-image: repeating-linear-gradient(180deg, transparent 0 16px, rgba(21,35,63,0.10) 16px 30px);
+  background-size: 26px 46px;
+}
+:root[data-theme="studio"] .bg-decor::before { left: 0; }
+:root[data-theme="studio"] .bg-decor::after { right: 0; }
+
+@media (max-width: 700px) {
+  :root[data-theme="studio"] .bg-decor::before,
+  :root[data-theme="studio"] .bg-decor::after { display: none; }
+}
+
+/* =====================================================
+   THEME TOSCA — background dominan tosca, aksi pink,
+   sidebar deep-teal (turunan shot Dribbble "Tukuteroz")
+   ===================================================== */
+:root[data-theme="tosca"] {
+  --bg: #CFEFEA;
+  --bg-2: #A6E3DB;
+  --surface: #FFFFFF;
+  --surface-2: #EAF8F5;
+  --ink: #0F3A37;
+  --ink-soft: #3E6B66;
+  --muted: #7CA39D;
+  --line: rgba(15,58,55,0.12);
+
+  --primary: #FF6FA5;   /* pink = warna aksi utama */
+  --primary-2: #EC4E8C;
+  --on-primary: #FFFFFF;
+
+  --yellow: #F7C948; --yellow-deep: #9A6A00; --yellow-bg: #FDF0C4;
+  --pink:   #FF6FA5; --pink-deep:   #C13B72; --pink-bg:   #FFE1EC;
+  --mint:   #14B8A6; --mint-deep:   #0B7A6E; --mint-bg:   #D6F4EF;  /* "mint" diarahkan ke tosca */
+
+  --radius-sm: 14px; --radius: 20px; --radius-lg: 28px; --radius-pill: 999px;
+  --shadow-card: 0 18px 40px -26px rgba(12,77,72,0.40);
+  --shadow-float: 0 26px 60px -28px rgba(12,77,72,0.50);
+}
+
+/* Background dominan tosca + sedikit semburat pink */
+:root[data-theme="tosca"] body { background: var(--bg); }
+:root[data-theme="tosca"] .bg-decor {
+  background:
+    radial-gradient(820px 560px at 88% -10%, #A6E3DB, transparent 58%),
+    radial-gradient(520px 460px at 0% 100%, #FFE1EC, transparent 60%),
+    var(--bg);
+}
+:root[data-theme="tosca"] .blob { display: none; }
+
+/* Sidebar deep-teal — redefinisi variabel secara lokal sehingga
+   seluruh sub-elemen (teks, ikon, kartu akun) otomatis menyesuaikan. */
+:root[data-theme="tosca"] .sidebar { background: #0C4D48; border-right-color: rgba(255,255,255,0.12); }
+:root[data-theme="tosca"] .app-shell::before { background: #0C4D48; border-right-color: rgba(255,255,255,0.12); }
+:root[data-theme="tosca"] .sidebar {
+  --ink: #FFFFFF;
+  --ink-soft: rgba(234,251,248,0.80);
+  --muted: rgba(234,251,248,0.50);
+  --surface: rgba(255,255,255,0.08);
+  --surface-2: rgba(255,255,255,0.10);
+  --line: rgba(255,255,255,0.12);
+}
+:root[data-theme="tosca"] .sidebar-logo { background: var(--primary); color: #fff; }
+:root[data-theme="tosca"] .sidebar-brand-text .kicker { color: #5EE6D4; }
+:root[data-theme="tosca"] .sidebar .role-pill.role-admin { background: var(--primary); color: #fff; }
+:root[data-theme="tosca"] .sidebar .role-pill.role-karyawan { background: rgba(255,255,255,0.16); color: #EAFBF8; }
+:root[data-theme="tosca"] .sidebar-logout:hover { background: var(--pink); color: #fff; border-color: var(--pink); }
+
+/* Greeting Landing jadi hero tosca (markup-nya aman: tanpa chip/stat berwarna) */
+:root[data-theme="tosca"] .dash-greet {
+  background: linear-gradient(140deg, var(--mint), #0E9C8C);
+  --ink: #FFFFFF;
+  --ink-soft: rgba(255,255,255,0.85);
+  color: #fff;
+}
+:root[data-theme="tosca"] .dash-greet .date-pill { background: var(--pink); color: #fff; }
+
+/* Clock chip: pulse tosca, detik tetap pink (default) */
+:root[data-theme="tosca"] .clock-chip .pulse { background: var(--mint); color: #fff; }
+
+/* =====================================================
+   THEME OUI (label: "Candy") — design system anak-anak:
+   kartu putih membulat + bayangan lembut, tombol "candy"
+   3D dengan bibir bawah, header pill tosca berbingkai
+   ganda, tipografi Nunito (Black / ExtraBold / SemiBold).
+   Palet: Amethyst #9956DE · Slate Blue #7274ED ·
+   Summer Sky #1FA7E1 · Downy #6ED1CF · Pastel Green
+   #75D06A · Texas Rose #FFB356 · Mona Lisa #FF8B8B ·
+   Illusion #FB96BB
+   ===================================================== */
+:root[data-theme="oui"] {
+  --bg: #FFFFFF;
+  --bg-2: #EAF8F7;        /* semburat Downy */
+  --surface: #FFFFFF;
+  --surface-2: #F4FBFB;
+  --ink: #2E3360;         /* slate-indigo gelap untuk teks badan */
+  --ink-soft: #6B7099;
+  --muted: #A6ABCB;
+  --line: rgba(114,116,237,0.14);
+
+  --primary: #7274ED;     /* Slate Blue — aksi utama */
+  --primary-2: #9956DE;   /* Amethyst — pasangan gradien */
+  --on-primary: #FFFFFF;
+
+  --yellow: #FFB356; --yellow-deep: #C97E2E; --yellow-bg: #FFE9CC;  /* Texas Rose */
+  --pink:   #FB96BB; --pink-deep:   #E25C88; --pink-bg:   #FFE2EC;  /* Illusion */
+  --mint:   #75D06A; --mint-deep:   #46962F; --mint-bg:   #DCF3D5;  /* Pastel Green */
+
+  /* aksen tambahan dari palet */
+  --sky: #1FA7E1; --teal: #6ED1CF; --coral: #FF8B8B; --amethyst: #9956DE;
+
+  --radius-sm: 16px; --radius: 22px; --radius-lg: 28px; --radius-pill: 999px;
+  --card-border: 1.5px solid rgba(114,116,237,0.10);
+  --shadow-card: 0 16px 30px -18px rgba(70,72,140,0.30);
+  --shadow-float: 0 26px 50px -24px rgba(70,72,140,0.38);
+
+  --font-display: "Nunito", system-ui, sans-serif;
+  --ring: 0 0 0 4px rgba(114,116,237,0.22);
+}
+/* Nunito bobot tebal (ExtraBold/Black) untuk judul, sesuai referensi. */
+:root[data-theme="oui"] h1,
+:root[data-theme="oui"] h2,
+:root[data-theme="oui"] .page-title,
+:root[data-theme="oui"] .modal-head .m-title,
+:root[data-theme="oui"] .dash-greet-judul,
+:root[data-theme="oui"] .brand-text .name { font-weight: 800; letter-spacing: -0.01em; }
+/* Judul section & modal memakai aksen tosca seperti referensi. */
+:root[data-theme="oui"] .page-title,
+:root[data-theme="oui"] .modal-head .m-title { color: #149C9C; }
+
+/* Header sapaan = "pill" tosca berbingkai ganda (header section di referensi). */
+:root[data-theme="oui"] .dash-greet {
+  background: #EAFBFA;
+  border: 2.5px solid #8FDCDA;
+  box-shadow: 0 0 0 5px #EAFBFA, var(--shadow-card);
+}
+
+/* ---- Tombol "candy" 3D: bibir bawah sewarna lebih gelap ---- */
+:root[data-theme="oui"] .btn { border-radius: 16px; font-weight: 800; }
+:root[data-theme="oui"] .btn--primary { background: var(--primary); box-shadow: 0 5px 0 0 #4F51C9; }
+:root[data-theme="oui"] .btn--primary:hover { background: var(--primary); filter: brightness(1.05); }
+:root[data-theme="oui"] .btn--pink { box-shadow: 0 5px 0 0 var(--pink-deep); }
+:root[data-theme="oui"] .btn--yellow { box-shadow: 0 5px 0 0 var(--yellow-deep); }
+:root[data-theme="oui"] .btn--add { border-radius: 18px; box-shadow: 0 6px 0 0 #4F51C9; }
+:root[data-theme="oui"] .btn--add:hover { background: var(--primary); filter: brightness(1.05); transform: none; }
+:root[data-theme="oui"] .btn--primary:active,
+:root[data-theme="oui"] .btn--pink:active,
+:root[data-theme="oui"] .btn--yellow:active,
+:root[data-theme="oui"] .btn--add:active {
+  transform: translateY(4px) scale(1);
+  box-shadow: 0 1px 0 0 rgba(31,33,90,0.25);
+}
+
+/* Tombol tutup modal = lingkaran biru dengan X putih (seperti referensi). */
+:root[data-theme="oui"] .modal-head .m-close {
+  background: var(--primary); color: #fff; border-radius: 999px;
+}
+:root[data-theme="oui"] .modal-head .m-close:hover { background: var(--coral); color: #fff; }
+
+/* Latar putih dengan dua semburat lembut (tosca & pink). */
+:root[data-theme="oui"] body { background: var(--bg); }
+:root[data-theme="oui"] .bg-decor {
+  background:
+    radial-gradient(680px 480px at 92% -8%, rgba(110,209,207,0.30), transparent 60%),
+    radial-gradient(560px 460px at -6% 104%, rgba(251,150,187,0.26), transparent 60%),
+    var(--bg);
+}
+
+/* Swatch kotak membulat warna-warni (8 warna palet) — gaya kartu referensi. */
+:root[data-theme="oui"] .blob {
+  position: absolute;
+  border-radius: 22px;
+  opacity: .92;
+  box-shadow: 0 10px 0 -2px rgba(0,0,0,0.10), 0 14px 24px -14px rgba(70,72,140,0.45);
+}
+:root[data-theme="oui"] .b1 { top: 9%;  left: 4%;   width: 60px; height: 60px; background: #9956DE; transform: rotate(-8deg); }
+:root[data-theme="oui"] .b2 { top: 20%; right: 6%;  width: 54px; height: 54px; background: #1FA7E1; transform: rotate(7deg); }
+:root[data-theme="oui"] .b3 { bottom: 16%; left: 7%; width: 58px; height: 58px; background: #75D06A; transform: rotate(-6deg); }
+:root[data-theme="oui"] .b4 { top: 48%; right: 4%;  width: 48px; height: 48px; background: #FFB356; transform: rotate(11deg); }
+:root[data-theme="oui"] .b5 { bottom: 9%; right: 13%; width: 44px; height: 44px; background: #FF8B8B; transform: rotate(-12deg); }
+:root[data-theme="oui"] .b6 { top: 70%; left: 3%;  width: 42px; height: 42px; background: #FB96BB; transform: rotate(9deg); }

@@ -1,0 +1,45 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(awk 'BEGIN{o=0;c=0} {n=gsub\\(/{/,\"{\"\\); m=gsub\\(/}/,\"}\"\\); o+=n; c+=m} END{print \"open_braces=\"o\" close_braces=\"c}' src/App.css)",
+      "Bash(awk 'BEGIN{o=0;c=0}{o+=gsub\\(/{/,\"{\"\\);c+=gsub\\(/}/,\"}\"\\)}END{print \\(o==c\\)?\"braces balanced \\(\"o\"\\)\":\"UNBALANCED open=\"o\" close=\"c}' src/App.css)",
+      "Bash(echo \"EXIT:$?\")",
+      "Bash(awk 'NR>=119 && NR<=230' /Users/diniayulest/Codes/absensi-karyawan/src/App.css)",
+      "Bash(cat /Users/diniayulest/Codes/absensi-karyawan/src/App.css | tail -c 1200 > /tmp/tailcss.txt; wc -c /tmp/tailcss.txt)",
+      "Bash(node -e \"console.log\\(JSON.stringify\\(require\\('./package.json'\\).scripts,null,2\\)\\)\")",
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(awk 'NR>=40 && NR<=80' src/contexts/ThemeContext.tsx)",
+      "WebFetch(domain:dribbble.com)",
+      "Bash(curl -sL -A \"Mozilla/5.0 \\(Macintosh; Intel Mac OS X 10_15_7\\) AppleWebKit/537.36\" \"https://dribbble.com/shots/15513230-Website-UI-Exploration\" -o shot.html)",
+      "Bash(curl -sSL -A \"Mozilla/5.0\" \"https://dribbble.com/shots/15513230\" -o shot.html)",
+      "Bash(echo \"exit=$? size=$\\(wc -c < shot.html\\)\")",
+      "Bash(curl -sSL -A \"Mozilla/5.0\" \"https://dribbble.com/shots/15513230/embed\" -o emb.html)",
+      "Bash(curl -sSL -A \"Mozilla/5.0\" \"http://api.dribbble.com/v1/shots/15513230\" -o api.html)",
+      "Bash(open \"/tmp/preview-tukuteroz.html\")",
+      "Bash(open \"/tmp/preview-tukuteroz-v2.html\")",
+      "Bash(open \"/tmp/preview-tukuteroz-v3.html\")",
+      "Bash(open /Users/diniayulest/Codes/absensi-karyawan/preview-kalender-income.html)",
+      "Bash(open /Users/diniayulest/Codes/absensi-karyawan/preview-kalender-income-v2.html)",
+      "Bash(open /Users/diniayulest/Codes/absensi-karyawan/preview-kalender-income-v3.html)",
+      "Bash(awk 'NR>=1040 && NR<=1160 {printf \"%d: %s\\\\n\", NR, $0}' /Users/diniayulest/Codes/absensi-karyawan/src/App.css)",
+      "Bash(echo \"=== TSC DONE \\(exit $?\\) ===\")",
+      "Bash(open \"/Users/diniayulest/Codes/absensi-karyawan/preview-laporan-income.html\")",
+      "Bash(npx eslint *)",
+      "Bash(gh auth *)",
+      "Read(//opt/homebrew/bin/**)",
+      "Bash(git config *)",
+      "Bash(sed 's/=.*/=<hidden>/' .env.local)",
+      "Bash(git --version)",
+      "Bash(git init *)",
+      "Bash(git branch *)",
+      "Bash(echo \"init OK: $\\(git config user.name\\) <$\\(git config user.email\\)>\")",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git remote *)",
+      "Bash(ssh -T -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 git@github.com)"
+    ],
+    "additionalDirectories": [
+      "/tmp"
+    ]
+  }
+}

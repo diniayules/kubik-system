@@ -1,0 +1,709 @@
+// =============================================================
+// db.ts · Supabase data layer for the AppData model.
+//
+// fetchAppData()    -> assemble the full AppData object from Supabase
+//                      (DB-backed slices) + device-local UI prefs.
+// persistChanges()  -> diff prev vs next AppData and write only the
+//                      slices that changed (write-through `setData`).
+//
+// Device-local UI prefs (font, size, tampilan*) stay in localStorage —
+// they are per-device, not per-account. Theme is handled in App.tsx.
+// =============================================================
+import { supabase } from './supabase'
+import type {
+  AbsenHari,
+  AppData,
+  Employee,
+  EventConfig,
+  EventKategori,
+  HargaProduk,
+  HargaTiket,
+  HargaUpgrade,
+  JenisKertas,
+  LaporanEvent,
+  LaporanIncome,
+  LayananDef,
+  Pengeluaran,
+  ProdukDef,
+  SalahCetak,
+  Shift,
+  SewaTipe,
+  Tinta,
+  UpgradeDef,
+  WarnaTinta,
+} from '../types'
+import {
+  HARGA_CETAK_DEFAULT,
+  HARGA_PRODUK_DEFAULT,
+  HARGA_TIKET_DEFAULT,
+  HARGA_UPGRADE_DEFAULT,
+} from '../storage'
+import {
+  LAYANAN_CATALOG_DEFAULT,
+  PRODUK_CATALOG_DEFAULT,
+  UPGRADE_CATALOG_DEFAULT,
+} from '../income'
+import { WARNA_TINTA_LIST } from '../inventory'
+
+// ---------- device-local UI prefs ----------
+const PREFS_KEY = 'kubik-ui-prefs:v1'
+
+export type UiPrefs = Pick<
+  AppData,
+  | 'fontPair'
+  | 'fontSize'
+  | 'tampilanAbsensi'
+  | 'tampilanInventaris'
+  | 'tampilanTinta'
+>
+
+export function loadPrefs(): UiPrefs {
+  try {
+    const raw = localStorage.getItem(PREFS_KEY)
+    if (!raw) return {}
+    return JSON.parse(raw) as UiPrefs
+  } catch {
+    return {}
+  }
+}
+
+export function savePrefs(p: UiPrefs): void {
+  localStorage.setItem(PREFS_KEY, JSON.stringify(p))
+}
+
+// ---------- row types (snake_case, as stored) ----------
+type ProfileRow = {
+  id: string
+  nama: string
+  jabatan: string
+  pin_hash: string | null
+  role: 'admin' | 'karyawan' | null
+}
+type AbsenRow = {
+  id: string
+  employee_id: string
+  tanggal: string
+  shift: Shift
+  events: AbsenHari['events']
+}
+type LaporanRow = {
+  id: string
+  tanggal: string
+  items: LaporanIncome['items']
+  upgrades: LaporanIncome['upgrades']
+  produk: LaporanIncome['produk']
+  keterangan: string
+  harga_tiket: HargaTiket
+  harga_cetak: number
+  harga_upgrade: HargaUpgrade
+  harga_produk: HargaProduk
+  kertas_id: string | null
+  amplop_terpakai: number | null
+  pemakaian_kertas: { kertasId: string; jumlah: number }[] | null
+}
+type EventRow = {
+  id: string
+  tanggal: string
+  kategori: string
+  tipe: string
+  keterangan: string | null
+  jam: number | null
+  tarif_per_jam: number | null
+  biaya_kertas: number | null
+  biaya_tinta: number | null
+  biaya_listrik: number | null
+  upah_operator: number | null
+  voucher: number | null
+  cetak: number | null
+  harga_voucher: number | null
+  harga_cetak: number | null
+}
+type PengeluaranRow = {
+  id: string
+  tanggal: string
+  kategori: string
+  deskripsi: string
+  jumlah: number
+  catatan: string
+}
+type KertasRow = { id: string; nama: string; stok: number }
+type TintaRow = { warna: WarnaTinta; stok: number; catatan: string | null }
+type AmplopRow = { id: number; stok: number }
+type SalahCetakRow = {
+  id: string
+  tanggal: string
+  kertas_id: string
+  jumlah: number
+  alasan: string
+}
+type ConfigRow = {
+  id: number
+  layanan_catalog: LayananDef[] | null
+  upgrade_catalog: UpgradeDef[] | null
+  produk_catalog: ProdukDef[] | null
+  harga_tiket: HargaTiket
+  harga_cetak: number
+  harga_upgrade: HargaUpgrade
+  harga_produk: HargaProduk | null
+  event_config: Partial<Record<EventKategori, EventConfig>> | null
+  gaji_pokok: Record<string, number> | null
+  brand_kicker: string | null
+  brand_name: string | null
+  dash_judul: string | null
+  dash_sub: string | null
+  header_judul: string | null
+  header_sub: string | null
+  income_judul: string | null
+  income_sub: string | null
+}
+
+function orErr<T>(res: { data: T; error: { message: string } | null }): T {
+  if (res.error) throw new Error(res.error.message)
+  return res.data
+}
+
+// =============================================================
+// fetchAppData
+// =============================================================
+export async function fetchAppData(): Promise<AppData> {
+  const [
+    profilesRes,
+    absenRes,
+    laporanRes,
+    eventRes,
+    pengRes,
+    kertasRes,
+    tintaRes,
+    amplopRes,
+    salahRes,
+    configRes,
+    inactiveRes,
+  ] = await Promise.all([
+    supabase
+      .from('profiles')
+      .select('id, nama, jabatan, pin_hash, role')
+      .eq('active', true)
+      .order('created_at', { ascending: true }),
+    supabase.from('absen_records').select('id, employee_id, tanggal, shift, events'),
+    supabase
+      .from('laporan_income')
+      .select(
+        'id, tanggal, items, upgrades, produk, keterangan, harga_tiket, harga_cetak, harga_upgrade, harga_produk, kertas_id, amplop_terpakai, pemakaian_kertas',
+      ),
+    supabase
+      .from('laporan_event')
+      .select(
+        'id, tanggal, kategori, tipe, keterangan, jam, tarif_per_jam, biaya_kertas, biaya_tinta, biaya_listrik, upah_operator, voucher, cetak, harga_voucher, harga_cetak',
+      ),
+    // pengeluaran: semua user login (admin & karyawan) boleh lihat via RLS.
+    supabase.from('pengeluaran').select('id, tanggal, kategori, deskripsi, jumlah, catatan'),
+    supabase.from('stok_kertas').select('id, nama, stok').order('nama', { ascending: true }),
+    supabase.from('stok_tinta').select('warna, stok, catatan'),
+    supabase.from('stok_amplop').select('id, stok').eq('id', 1).maybeSingle(),
+    supabase.from('salah_cetak').select('id, tanggal, kertas_id, jumlah, alasan'),
+    supabase.from('app_config').select('*').eq('id', 1).maybeSingle(),
+    // Karyawan nonaktif (active = false) — untuk fitur "Aktifkan kembali" admin.
+    supabase
+      .from('profiles')
+      .select('id, nama, jabatan, pin_hash, role')
+      .eq('active', false)
+      .order('created_at', { ascending: true }),
+  ])
+
+  const profiles = orErr(profilesRes) as ProfileRow[]
+  const absen = orErr(absenRes) as AbsenRow[]
+  const laporan = orErr(laporanRes) as LaporanRow[]
+  const event = orErr(eventRes) as EventRow[]
+  const peng = orErr(pengRes) as PengeluaranRow[]
+  const kertas = orErr(kertasRes) as KertasRow[]
+  const tinta = orErr(tintaRes) as TintaRow[]
+  const amplop = orErr(amplopRes) as AmplopRow | null
+  const salah = orErr(salahRes) as SalahCetakRow[]
+  const config = orErr(configRes) as ConfigRow | null
+  const inactiveProfiles = orErr(inactiveRes) as ProfileRow[]
+
+  const toEmployee = (p: ProfileRow): Employee => ({
+    id: p.id,
+    nama: p.nama,
+    jabatan: p.jabatan,
+    pinHash: p.pin_hash ?? '',
+    role: p.role ?? 'karyawan',
+  })
+  const employees: Employee[] = profiles.map(toEmployee)
+  const inactiveEmployees: Employee[] = inactiveProfiles.map(toEmployee)
+
+  const records: AbsenHari[] = absen.map((r) => ({
+    id: r.id,
+    employeeId: r.employee_id,
+    tanggal: r.tanggal,
+    shift: r.shift,
+    events: Array.isArray(r.events) ? r.events : [],
+  }))
+
+  const laporanIncome: LaporanIncome[] = laporan.map((l) => {
+    const items = Array.isArray(l.items) ? l.items : []
+    // Sumber pemakaian kertas: jsonb baru kalau ada; kalau tidak, fallback ke
+    // kolom lama `kertas_id` (laporan dari versi single-kertas) dengan jumlah =
+    // total tiket + cetak.
+    let pemakaianKertas = Array.isArray(l.pemakaian_kertas)
+      ? l.pemakaian_kertas
+      : []
+    if (pemakaianKertas.length === 0 && l.kertas_id) {
+      const lembar = items.reduce(
+        (s, i) => s + (i.tiket || 0) + (i.cetak || 0),
+        0,
+      )
+      pemakaianKertas = [{ kertasId: l.kertas_id, jumlah: lembar }]
+    }
+    return {
+      id: l.id,
+      tanggal: l.tanggal,
+      items,
+      upgrades: Array.isArray(l.upgrades) ? l.upgrades : [],
+      produk: Array.isArray(l.produk) ? l.produk : [],
+      keterangan: l.keterangan ?? '',
+      hargaTiket: l.harga_tiket,
+      hargaCetak: l.harga_cetak,
+      hargaUpgrade: l.harga_upgrade,
+      hargaProduk: l.harga_produk ?? {},
+      pemakaianKertas,
+      amplopTerpakai: l.amplop_terpakai ?? undefined,
+    }
+  })
+
+  const laporanEvent: LaporanEvent[] = event.map((e) => ({
+    id: e.id,
+    tanggal: e.tanggal,
+    kategori: (e.kategori as EventKategori) ?? 'photobooth',
+    tipe: (e.tipe as SewaTipe) ?? 'voucher',
+    keterangan: e.keterangan ?? '',
+    jam: e.jam ?? undefined,
+    tarifPerJam: e.tarif_per_jam ?? undefined,
+    biayaKertas: e.biaya_kertas ?? undefined,
+    biayaTinta: e.biaya_tinta ?? undefined,
+    biayaListrik: e.biaya_listrik ?? undefined,
+    upahOperator: e.upah_operator ?? undefined,
+    voucher: e.voucher ?? undefined,
+    cetak: e.cetak ?? undefined,
+    hargaVoucher: e.harga_voucher ?? undefined,
+    hargaCetak: e.harga_cetak ?? undefined,
+  }))
+
+  const pengeluaran: Pengeluaran[] = peng.map((p) => ({
+    id: p.id,
+    tanggal: p.tanggal,
+    kategori: p.kategori,
+    deskripsi: p.deskripsi,
+    jumlah: p.jumlah,
+    catatan: p.catatan ?? '',
+  }))
+
+  const stokKertas: JenisKertas[] = kertas.map((k) => ({
+    id: k.id,
+    nama: k.nama,
+    stok: k.stok,
+  }))
+
+  // Keep tinta in the canonical 6-warna order regardless of row order.
+  const tintaByWarna = new Map(tinta.map((t) => [t.warna, t]))
+  const stokTinta: Tinta[] = WARNA_TINTA_LIST.map((w) => {
+    const row = tintaByWarna.get(w)
+    return {
+      warna: w,
+      stok: row?.stok ?? 0,
+      catatan: row?.catatan ?? undefined,
+    }
+  })
+
+  const salahCetak: SalahCetak[] = salah.map((s) => ({
+    id: s.id,
+    tanggal: s.tanggal,
+    kertasId: s.kertas_id,
+    jumlah: s.jumlah,
+    alasan: s.alasan ?? '',
+  }))
+
+  const prefs = loadPrefs()
+
+  return {
+    employees,
+    inactiveEmployees,
+    records,
+    laporanIncome,
+    laporanEvent,
+    eventConfig: config?.event_config ?? undefined,
+    layananCatalog:
+      Array.isArray(config?.layanan_catalog) && config.layanan_catalog.length
+        ? config.layanan_catalog
+        : structuredClone(LAYANAN_CATALOG_DEFAULT),
+    upgradeCatalog:
+      Array.isArray(config?.upgrade_catalog) && config.upgrade_catalog.length
+        ? config.upgrade_catalog
+        : structuredClone(UPGRADE_CATALOG_DEFAULT),
+    produkCatalog: Array.isArray(config?.produk_catalog)
+      ? config.produk_catalog
+      : structuredClone(PRODUK_CATALOG_DEFAULT),
+    hargaTiket: config?.harga_tiket ?? { ...HARGA_TIKET_DEFAULT },
+    hargaCetak: config?.harga_cetak ?? HARGA_CETAK_DEFAULT,
+    hargaUpgrade: config?.harga_upgrade ?? { ...HARGA_UPGRADE_DEFAULT },
+    hargaProduk: config?.harga_produk ?? { ...HARGA_PRODUK_DEFAULT },
+    gajiPokok: config?.gaji_pokok ?? {},
+    stokKertas,
+    stokTinta,
+    stokAmplop: amplop?.stok ?? 0,
+    salahCetak,
+    pengeluaran,
+    brandKicker: config?.brand_kicker ?? undefined,
+    brandName: config?.brand_name ?? undefined,
+    dashJudul: config?.dash_judul ?? undefined,
+    dashSub: config?.dash_sub ?? undefined,
+    headerJudul: config?.header_judul ?? undefined,
+    headerSub: config?.header_sub ?? undefined,
+    incomeJudul: config?.income_judul ?? undefined,
+    incomeSub: config?.income_sub ?? undefined,
+    ...prefs,
+  }
+}
+
+// =============================================================
+// persistChanges — diff prev vs next, write only what changed
+// =============================================================
+const eq = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
+
+export async function persistChanges(
+  prev: AppData,
+  next: AppData,
+  userId: string,
+): Promise<void> {
+  const jobs: Promise<unknown>[] = []
+
+  // ---- device-local UI prefs ----
+  const prevPrefs: UiPrefs = {
+    fontPair: prev.fontPair,
+    fontSize: prev.fontSize,
+    tampilanAbsensi: prev.tampilanAbsensi,
+    tampilanInventaris: prev.tampilanInventaris,
+    tampilanTinta: prev.tampilanTinta,
+  }
+  const nextPrefs: UiPrefs = {
+    fontPair: next.fontPair,
+    fontSize: next.fontSize,
+    tampilanAbsensi: next.tampilanAbsensi,
+    tampilanInventaris: next.tampilanInventaris,
+    tampilanTinta: next.tampilanTinta,
+  }
+  if (!eq(prevPrefs, nextPrefs)) savePrefs(nextPrefs)
+
+  // ---- absen_records (own rows for karyawan; all for admin via RLS) ----
+  syncRows(
+    jobs,
+    'absen_records',
+    prev.records,
+    next.records,
+    (r) => r.id,
+    (r) => ({
+      id: r.id,
+      employee_id: r.employeeId,
+      tanggal: r.tanggal,
+      shift: r.shift,
+      events: r.events,
+    }),
+  )
+
+  // ---- laporan_income (created_by stamped on insert) ----
+  syncRows(
+    jobs,
+    'laporan_income',
+    prev.laporanIncome,
+    next.laporanIncome,
+    (l) => l.id,
+    (l) => ({
+      id: l.id,
+      tanggal: l.tanggal,
+      items: l.items,
+      upgrades: l.upgrades,
+      produk: l.produk,
+      keterangan: l.keterangan,
+      harga_tiket: l.hargaTiket,
+      harga_cetak: l.hargaCetak,
+      harga_upgrade: l.hargaUpgrade,
+      harga_produk: l.hargaProduk,
+      // Kolom lama `kertas_id` ditinggalkan (null); sumber kebenaran sekarang
+      // `pemakaian_kertas` (mendukung lebih dari satu jenis kertas per laporan).
+      kertas_id: null,
+      pemakaian_kertas: l.pemakaianKertas ?? [],
+      amplop_terpakai: l.amplopTerpakai ?? null,
+    }),
+    userId,
+  )
+
+  // ---- laporan_event (created_by stamped on insert) ----
+  syncRows(
+    jobs,
+    'laporan_event',
+    prev.laporanEvent,
+    next.laporanEvent,
+    (e) => e.id,
+    (e) => ({
+      id: e.id,
+      tanggal: e.tanggal,
+      kategori: e.kategori,
+      tipe: e.tipe,
+      keterangan: e.keterangan,
+      jam: e.jam ?? null,
+      tarif_per_jam: e.tarifPerJam ?? null,
+      biaya_kertas: e.biayaKertas ?? null,
+      biaya_tinta: e.biayaTinta ?? null,
+      biaya_listrik: e.biayaListrik ?? null,
+      upah_operator: e.upahOperator ?? null,
+      voucher: e.voucher ?? null,
+      cetak: e.cetak ?? null,
+      harga_voucher: e.hargaVoucher ?? null,
+      harga_cetak: e.hargaCetak ?? null,
+    }),
+    userId,
+  )
+
+  // ---- pengeluaran (created_by stamped on insert; admin & karyawan) ----
+  syncRows(
+    jobs,
+    'pengeluaran',
+    prev.pengeluaran,
+    next.pengeluaran,
+    (p) => p.id,
+    (p) => ({
+      id: p.id,
+      tanggal: p.tanggal,
+      kategori: p.kategori,
+      deskripsi: p.deskripsi,
+      jumlah: p.jumlah,
+      catatan: p.catatan,
+    }),
+    userId,
+  )
+
+  // ---- stok_kertas ----
+  syncRows(
+    jobs,
+    'stok_kertas',
+    prev.stokKertas,
+    next.stokKertas,
+    (k) => k.id,
+    (k) => ({ id: k.id, nama: k.nama, stok: k.stok }),
+  )
+
+  // ---- salah_cetak (created_by stamped on insert) ----
+  syncRows(
+    jobs,
+    'salah_cetak',
+    prev.salahCetak,
+    next.salahCetak,
+    (s) => s.id,
+    (s) => ({
+      id: s.id,
+      tanggal: s.tanggal,
+      kertas_id: s.kertasId,
+      jumlah: s.jumlah,
+      alasan: s.alasan,
+    }),
+    userId,
+  )
+
+  // ---- stok_tinta (fixed 6 rows, upsert-only by warna) ----
+  const tintaChanged = next.stokTinta.filter((t) => {
+    const p = prev.stokTinta.find((x) => x.warna === t.warna)
+    return !p || !eq(p, t)
+  })
+  if (tintaChanged.length) {
+    jobs.push(
+      Promise.resolve(
+        supabase.from('stok_tinta').upsert(
+          tintaChanged.map((t) => ({
+            warna: t.warna,
+            stok: t.stok,
+            catatan: t.catatan ?? '',
+          })),
+          { onConflict: 'warna' },
+        ),
+      ).then(throwIfError),
+    )
+  }
+
+  // ---- stok_amplop (singleton id=1) ----
+  if (prev.stokAmplop !== next.stokAmplop) {
+    jobs.push(
+      Promise.resolve(
+        supabase.from('stok_amplop').update({ stok: next.stokAmplop }).eq('id', 1),
+      ).then(throwIfError),
+    )
+  }
+
+  // ---- profiles (update + deactivate only; no inserts) ----
+  const prevEmp = new Map(prev.employees.map((e) => [e.id, e]))
+  const nextEmp = new Map(next.employees.map((e) => [e.id, e]))
+  for (const e of next.employees) {
+    const p = prevEmp.get(e.id)
+    if (p && !eq(p, e)) {
+      jobs.push(
+        Promise.resolve(
+          supabase
+            .from('profiles')
+            .update({ nama: e.nama, jabatan: e.jabatan, pin_hash: e.pinHash || null })
+            .eq('id', e.id),
+        ).then(throwIfError),
+      )
+    }
+  }
+  for (const e of prev.employees) {
+    if (!nextEmp.has(e.id)) {
+      // "Hapus" karyawan = nonaktifkan (hard auth-user delete needs service role).
+      jobs.push(
+        Promise.resolve(
+          supabase.from('profiles').update({ active: false }).eq('id', e.id),
+        ).then(throwIfError),
+      )
+    }
+  }
+
+  // ---- app_config (prices + branding text) ----
+  const configFields: (keyof AppData)[] = [
+    'layananCatalog',
+    'upgradeCatalog',
+    'produkCatalog',
+    'hargaTiket',
+    'hargaCetak',
+    'hargaUpgrade',
+    'hargaProduk',
+    'eventConfig',
+    'gajiPokok',
+    'brandKicker',
+    'brandName',
+    'dashJudul',
+    'dashSub',
+    'headerJudul',
+    'headerSub',
+    'incomeJudul',
+    'incomeSub',
+  ]
+  if (configFields.some((f) => !eq(prev[f], next[f]))) {
+    jobs.push(
+      Promise.resolve(
+        supabase
+          .from('app_config')
+          .update({
+            layanan_catalog: next.layananCatalog,
+            upgrade_catalog: next.upgradeCatalog,
+            produk_catalog: next.produkCatalog,
+            harga_tiket: next.hargaTiket,
+            harga_cetak: next.hargaCetak,
+            harga_upgrade: next.hargaUpgrade,
+            harga_produk: next.hargaProduk,
+            event_config: next.eventConfig ?? null,
+            gaji_pokok: next.gajiPokok ?? {},
+            brand_kicker: next.brandKicker ?? null,
+            brand_name: next.brandName ?? null,
+            dash_judul: next.dashJudul ?? null,
+            dash_sub: next.dashSub ?? null,
+            header_judul: next.headerJudul ?? null,
+            header_sub: next.headerSub ?? null,
+            income_judul: next.incomeJudul ?? null,
+            income_sub: next.incomeSub ?? null,
+          })
+          .eq('id', 1),
+      ).then(throwIfError),
+    )
+  }
+
+  await Promise.all(jobs)
+}
+
+function throwIfError(res: { error: { message: string } | null }) {
+  if (res.error) throw new Error(res.error.message)
+  return res
+}
+
+// Generic insert(new)/upsert(changed)/delete(removed) sync for a table
+// keyed by a stable id. `createdByUser` (if given) stamps created_by on
+// NEW rows only (so updates never reassign ownership).
+function syncRows<T>(
+  jobs: Promise<unknown>[],
+  table: string,
+  prev: T[],
+  next: T[],
+  key: (t: T) => string,
+  toRow: (t: T) => Record<string, unknown>,
+  createdByUser?: string,
+): void {
+  const prevMap = new Map(prev.map((t) => [key(t), t]))
+  const nextKeys = new Set(next.map(key))
+
+  const inserts: Record<string, unknown>[] = []
+  const updates: Record<string, unknown>[] = []
+  for (const t of next) {
+    const p = prevMap.get(key(t))
+    if (!p) {
+      const row = toRow(t)
+      if (createdByUser) row.created_by = createdByUser
+      inserts.push(row)
+    } else if (!eq(p, t)) {
+      updates.push(toRow(t))
+    }
+  }
+  const deletes = prev.filter((t) => !nextKeys.has(key(t))).map(key)
+
+  if (inserts.length) {
+    jobs.push(Promise.resolve(supabase.from(table).insert(inserts)).then(throwIfError))
+  }
+  if (updates.length) {
+    jobs.push(Promise.resolve(supabase.from(table).upsert(updates)).then(throwIfError))
+  }
+  if (deletes.length) {
+    jobs.push(
+      Promise.resolve(supabase.from(table).delete().in('id', deletes)).then(throwIfError),
+    )
+  }
+}
+
+// =============================================================
+// Salah cetak — operasi ATOMIK via RPC.
+// Mencatat salah_cetak + mengurangi stok kertas dalam 1 transaksi server,
+// jadi tidak mungkin lagi "baris salah cetak tersimpan tapi stok tidak turun".
+// Setelah memanggil ini, panggil reload() agar state lokal ikut segar.
+// =============================================================
+export async function catatSalahCetakRpc(
+  kertasId: string,
+  jumlah: number,
+  tanggal: string,
+  alasan: string,
+): Promise<void> {
+  const { error } = await supabase.rpc('catat_salah_cetak', {
+    p_kertas_id: kertasId,
+    p_jumlah: jumlah,
+    p_tanggal: tanggal,
+    p_alasan: alasan,
+  })
+  if (error) throw new Error(error.message)
+}
+
+export async function hapusSalahCetakRpc(id: string): Promise<void> {
+  const { error } = await supabase.rpc('hapus_salah_cetak', { p_id: id })
+  if (error) throw new Error(error.message)
+}
+
+// =============================================================
+// Aktif/nonaktif karyawan (profiles.active).
+// Nonaktif menyembunyikan kartu dari roster; aktif kembali memulihkannya
+// sehingga karyawan bisa mengisi absen lagi. Hanya admin yang diizinkan
+// mengubah `active` (dijaga trigger protect_profile_privileges di RLS).
+// Panggil reload() setelahnya agar daftar aktif & nonaktif ikut segar.
+// =============================================================
+export async function setEmployeeActive(
+  id: string,
+  active: boolean,
+): Promise<void> {
+  const { error } = await supabase
+    .from('profiles')
+    .update({ active })
+    .eq('id', id)
+  if (error) throw new Error(error.message)
+}

@@ -17,7 +17,6 @@ export type EventTipe =
   | 'masuk'
   | 'istirahat-siang-mulai'
   | 'istirahat-siang-selesai'
-  | 'ganti-shift'
   | 'istirahat-sore-mulai'
   | 'istirahat-sore-selesai'
   | 'pulang'

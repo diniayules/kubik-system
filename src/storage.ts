@@ -248,6 +248,7 @@ function migrasiRecord(r: Partial<AbsenHari> & { shift?: unknown }): AbsenHari {
     tanggal: r.tanggal ?? '',
     shift,
     events: Array.isArray(r.events) ? r.events : [],
+    status: r.status === 'menunggu' ? 'menunggu' : 'disetujui',
   }
 }
 

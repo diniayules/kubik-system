@@ -30,12 +30,23 @@ export type AbsenEvent = {
   dilewati?: boolean
 }
 
+/**
+ * Status persetujuan satu hari absensi.
+ *  - 'disetujui' : absensi resmi (real-time hari ini, atau manual yang sudah
+ *                  di-ACC admin). Dihitung & ditampilkan sebagai kehadiran.
+ *  - 'menunggu'  : entri manual karyawan untuk tanggal selain hari ini, belum
+ *                  di-ACC admin. Tidak dihitung sampai disetujui.
+ * `undefined` dianggap 'disetujui' agar data lama tetap kompatibel.
+ */
+export type AbsenStatus = 'menunggu' | 'disetujui'
+
 export type AbsenHari = {
   id: string
   employeeId: string
   tanggal: string
   shift: Shift
   events: AbsenEvent[]
+  status?: AbsenStatus
 }
 
 // Layanan & Upgrade are dynamic now: ids are admin-defined (see layananCatalog /

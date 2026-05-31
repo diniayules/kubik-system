@@ -159,6 +159,39 @@ function Inner() {
     toast('ok', 'Data karyawan diperbarui')
   }
 
+  function setujuiAbsen(recordId: string) {
+    if (!data) return
+    const rec = data.records.find((r) => r.id === recordId)
+    if (!rec) return
+    const emp = data.employees.find((e) => e.id === rec.employeeId)
+    setData({
+      ...data,
+      records: data.records.map((r) =>
+        r.id === recordId ? { ...r, status: 'disetujui' } : r,
+      ),
+    })
+    toast('ok', `Absensi ${emp?.nama ?? 'karyawan'} (${rec.tanggal}) disetujui`)
+  }
+
+  function tolakAbsen(recordId: string) {
+    if (!data) return
+    const rec = data.records.find((r) => r.id === recordId)
+    if (!rec) return
+    const emp = data.employees.find((e) => e.id === rec.employeeId)
+    if (
+      !confirm(
+        `Tolak & hapus absensi manual ${emp?.nama ?? 'karyawan'} untuk ${rec.tanggal}?`,
+      )
+    ) {
+      return
+    }
+    setData({
+      ...data,
+      records: data.records.filter((r) => r.id !== recordId),
+    })
+    toast('warn', `Absensi ${emp?.nama ?? 'karyawan'} (${rec.tanggal}) ditolak`)
+  }
+
   function infoTambahKaryawan() {
     toast(
       'info',
@@ -244,6 +277,8 @@ function Inner() {
                 onHapus={(id) => nonaktifkanKaryawan(id)}
                 onAktifkan={(id) => aktifkanKaryawan(id)}
                 onTambah={infoTambahKaryawan}
+                onSetujuiAbsen={setujuiAbsen}
+                onTolakAbsen={tolakAbsen}
               />
             )}
 
@@ -252,6 +287,7 @@ function Inner() {
                 data={data}
                 setData={setData}
                 employeeId={screen.employeeId}
+                isAdmin={isAdmin}
                 onBack={() => setScreen({ name: 'absensi' })}
                 onLihatRiwayat={() =>
                   setScreen({ name: 'riwayat', employeeId: screen.employeeId })
@@ -263,6 +299,8 @@ function Inner() {
               <Riwayat
                 data={data}
                 employeeId={screen.employeeId}
+                isAdmin={isAdmin}
+                currentUserId={currentUserId}
                 onBack={() => setScreen({ name: 'absensi' })}
               />
             )}

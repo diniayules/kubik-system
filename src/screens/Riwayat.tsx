@@ -3,6 +3,7 @@ import type { AppData } from '../types'
 import {
   SHIFT_IKON,
   SHIFT_LABEL,
+  absenDisetujui,
   cariOperatorOverlap,
   cariTakeover,
   formatDurasi,
@@ -18,18 +19,30 @@ import { Icons } from '../components/Icons'
 type Props = {
   data: AppData
   employeeId: string
+  isAdmin: boolean
+  currentUserId: string
   onBack: () => void
 }
 
-export function Riwayat({ data, employeeId, onBack }: Props) {
+export function Riwayat({
+  data,
+  employeeId,
+  isAdmin,
+  currentUserId,
+  onBack,
+}: Props) {
   const employee = data.employees.find((e) => e.id === employeeId)
+  // Entri manual yang masih 'menunggu' hanya terlihat oleh pemiliknya & admin;
+  // karyawan lain melihat riwayat resmi (yang sudah disetujui) saja.
+  const bolehLihatMenunggu = isAdmin || employeeId === currentUserId
   const records = useMemo(
     () =>
       data.records
         .filter((r) => r.employeeId === employeeId)
+        .filter((r) => bolehLihatMenunggu || absenDisetujui(r))
         .slice()
         .sort((a, b) => b.tanggal.localeCompare(a.tanggal)),
-    [data.records, employeeId],
+    [data.records, employeeId, bolehLihatMenunggu],
   )
 
   const total = useMemo(() => {
@@ -40,6 +53,8 @@ export function Riwayat({ data, employeeId, onBack }: Props) {
     let overlap = 0
     const perShift = { pagi: 0, sore: 0, full: 0 } as Record<string, number>
     for (const r of records) {
+      // Hanya absensi yang sudah disetujui dihitung sebagai kehadiran resmi.
+      if (!absenDisetujui(r)) continue
       const ring = hitungRingkasan(r, cariTakeover(r, data.records))
       kerja += ring.kerjaBersihMenit
       terlambat += ring.terlambatMenit
@@ -203,10 +218,22 @@ export function Riwayat({ data, employeeId, onBack }: Props) {
             {records.map((r) => {
               const ring = hitungRingkasan(r, cariTakeover(r, data.records))
               const shiftCls = r.shift === 'full' ? 'penuh' : r.shift
+              const pending = !absenDisetujui(r)
               return (
-                <div key={r.id} className="riwayat-row">
+                <div
+                  key={r.id}
+                  className={`riwayat-row${pending ? ' riwayat-pending' : ''}`}
+                >
                   <div className="riwayat-tanggal">
                     {formatTanggalPanjang(r.tanggal)}
+                    {pending && (
+                      <span
+                        className="audit-badge audit-manual"
+                        title="Entri manual menunggu persetujuan admin"
+                      >
+                        ⏳ Menunggu persetujuan
+                      </span>
+                    )}
                   </div>
                   <div>
                     <span className={`badge badge--${shiftCls}`}>

@@ -98,6 +98,11 @@ export function getEvent(
   return record?.events.find((e) => e.tipe === tipe)
 }
 
+/** Absensi terhitung resmi? (`menunggu` = entri manual belum di-ACC admin). */
+export function absenDisetujui(record: AbsenHari | undefined): boolean {
+  return record?.status !== 'menunggu'
+}
+
 export function jadwalISO(tanggal: string, jam: string): string {
   const [h, m] = jam.split(':').map(Number)
   const [y, mo, d] = tanggal.split('-').map(Number)
@@ -160,6 +165,7 @@ export function cariTakeover(
   if (!shiftBerikutnya) return undefined
   let paling: number | undefined
   for (const r of semuaRecord) {
+    if (!absenDisetujui(r)) continue
     if (r.employeeId === record.employeeId) continue
     if (r.tanggal !== record.tanggal) continue
     if (r.shift !== shiftBerikutnya) continue
@@ -182,6 +188,7 @@ export function cariOperatorOverlap(
   const pulangMs = new Date(pulang.waktu).getTime()
   const ids: string[] = []
   for (const r of semuaRecord) {
+    if (!absenDisetujui(r)) continue
     if (r.employeeId === record.employeeId) continue
     if (r.tanggal !== record.tanggal) continue
     if (r.shift !== shiftBerikutnya) continue

@@ -31,6 +31,8 @@ type Props = {
   onHapus: (id: string) => void
   onAktifkan: (id: string) => void
   onTambah: () => void
+  onSetujuiAbsen: (recordId: string) => void
+  onTolakAbsen: (recordId: string) => void
 }
 
 export function Home({
@@ -43,6 +45,8 @@ export function Home({
   onHapus,
   onAktifkan,
   onTambah,
+  onSetujuiAbsen,
+  onTolakAbsen,
 }: Props) {
   const hariIni = todayKey()
   const tanggalLabel = formatTanggalPanjang(hariIni)
@@ -57,6 +61,12 @@ export function Home({
   const karyawanNonaktif = data.inactiveEmployees.filter(
     (e) => e.role !== 'admin',
   )
+
+  // Absensi manual yang menunggu persetujuan admin (tanggal terbaru dulu).
+  const pendingAbsen = data.records
+    .filter((r) => r.status === 'menunggu')
+    .slice()
+    .sort((a, b) => b.tanggal.localeCompare(a.tanggal))
 
   const stats = {
     total: karyawan.length,
@@ -176,6 +186,81 @@ export function Home({
             />
           ))}
         </div>
+      )}
+
+      {isAdmin && pendingAbsen.length > 0 && (
+        <>
+          <div className="section-head" style={{ marginTop: 28 }}>
+            <h2>
+              Persetujuan Absensi Manual{' '}
+              <span className="count-badge">{pendingAbsen.length}</span>
+            </h2>
+          </div>
+          <p className="timeline-help" style={{ marginBottom: 12 }}>
+            Karyawan mengisi absensi ini untuk tanggal lampau. Setujui agar
+            dihitung sebagai kehadiran resmi, atau tolak untuk menghapusnya.
+          </p>
+          <div className="emp-list">
+            {pendingAbsen.map((r) => {
+              const emp =
+                data.employees.find((e) => e.id === r.employeeId) ??
+                data.inactiveEmployees.find((e) => e.id === r.employeeId)
+              const masuk = getEvent(r, 'masuk')
+              const pulang = getEvent(r, 'pulang')
+              const shiftCls = r.shift === 'full' ? 'penuh' : r.shift
+              return (
+                <div key={r.id} className="emp-row status-belum">
+                  <Avatar
+                    name={emp?.nama ?? '?'}
+                    colorIndex={colorIndexForName(r.employeeId)}
+                  />
+                  <div className="emp-row-info">
+                    <div className="emp-row-nama">{emp?.nama ?? 'Karyawan'}</div>
+                    <div className="emp-row-meta">
+                      <span className="emp-row-role">
+                        {formatTanggalPanjang(r.tanggal)}
+                      </span>
+                      <span className={`badge badge--${shiftCls}`}>
+                        {SHIFT_IKON[r.shift]} {SHIFT_LABEL[r.shift]}
+                      </span>
+                      <span className="badge badge--idle">⏳ Menunggu</span>
+                    </div>
+                  </div>
+                  <div className="emp-row-stats">
+                    <div className="emp-row-stat">
+                      <span className="k">Masuk</span>
+                      <span className={'v' + (masuk ? '' : ' empty')}>
+                        {masuk ? formatJam(masuk.waktu) : '—'}
+                      </span>
+                    </div>
+                    <div className="emp-row-stat">
+                      <span className="k">Pulang</span>
+                      <span className={'v' + (pulang ? '' : ' empty')}>
+                        {pulang ? formatJam(pulang.waktu) : '—'}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="emp-row-actions">
+                    <button
+                      type="button"
+                      className="btn btn--primary"
+                      onClick={() => onSetujuiAbsen(r.id)}
+                    >
+                      <Icons.check /> Setujui
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn--pink"
+                      onClick={() => onTolakAbsen(r.id)}
+                    >
+                      <Icons.x /> Tolak
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </>
       )}
 
       {isAdmin && karyawanNonaktif.length > 0 && (

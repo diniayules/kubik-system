@@ -1,5 +1,12 @@
 import { useEffect, useState } from 'react'
-import type { AbsenEvent, AbsenHari, AppData, EventTipe, Shift } from '../types'
+import type {
+  AbsenEvent,
+  AbsenHari,
+  AbsenStatus,
+  AppData,
+  EventTipe,
+  Shift,
+} from '../types'
 import { todayKey, uid } from '../storage'
 import {
   EVENT_IKON,
@@ -31,6 +38,7 @@ type Props = {
   data: AppData
   setData: (d: AppData) => void
   employeeId: string
+  isAdmin: boolean
   onBack: () => void
   onLihatRiwayat: () => void
 }
@@ -39,15 +47,24 @@ export function Absen({
   data,
   setData,
   employeeId,
+  isAdmin,
   onBack,
   onLihatRiwayat,
 }: Props) {
   const toast = useToast()
   const employee = data.employees.find((e) => e.id === employeeId)
-  const tanggal = todayKey()
+  const today = todayKey()
+  const [tanggal, setTanggal] = useState(today)
+  // Mode manual = mengisi absensi untuk tanggal selain hari ini (mis. lupa
+  // absen kemarin). Untuk karyawan, entri manual berstatus 'menunggu' sampai
+  // di-ACC admin; absensi real-time hari ini & entri admin langsung disetujui.
+  const isManual = tanggal !== today
+  const recordStatus: AbsenStatus =
+    isManual && !isAdmin ? 'menunggu' : 'disetujui'
   const record = data.records.find(
     (r) => r.employeeId === employeeId && r.tanggal === tanggal,
   )
+  const menunggu = record?.status === 'menunggu'
   const takeover = record ? cariTakeover(record, data.records) : undefined
   const ringkasan = hitungRingkasan(record, takeover)
   const overlapNama = record
@@ -83,6 +100,7 @@ export function Absen({
       tanggal,
       shift,
       events: [],
+      status: recordStatus,
     }
     setData({ ...data, records: [...data.records, baru] })
     toast('ok', `Shift ${SHIFT_LABEL[shift].toLowerCase()} dipilih`)
@@ -102,7 +120,9 @@ export function Absen({
     setData({
       ...data,
       records: data.records.map((r) =>
-        r.id === record.id ? { ...r, shift, events: [] } : r,
+        r.id === record.id
+          ? { ...r, shift, events: [], status: recordStatus }
+          : r,
       ),
     })
     toast('info', `Diganti ke ${SHIFT_LABEL[shift].toLowerCase()}`)
@@ -131,6 +151,7 @@ export function Absen({
         }))
         const updated: AbsenHari = {
           ...record,
+          status: recordStatus,
           events: [...record.events, ...skipped, { tipe, waktu }],
         }
         setData({
@@ -154,10 +175,15 @@ export function Absen({
       }
       updated = {
         ...record,
+        status: recordStatus,
         events: record.events.map((e) => (e.tipe === tipe ? { tipe, waktu } : e)),
       }
     } else {
-      updated = { ...record, events: [...record.events, { tipe, waktu }] }
+      updated = {
+        ...record,
+        status: recordStatus,
+        events: [...record.events, { tipe, waktu }],
+      }
     }
     setData({
       ...data,
@@ -172,14 +198,28 @@ export function Absen({
       mulaiTipe === 'istirahat-siang-mulai'
         ? 'istirahat-siang-selesai'
         : 'istirahat-sore-selesai'
-    const waktu = new Date().toISOString()
-    const mulaiEv: AbsenEvent = { tipe: mulaiTipe, waktu, dilewati: true }
-    const selesaiEv: AbsenEvent = { tipe: selesaiTipe, waktu, dilewati: true }
+    // Untuk entri manual (tanggal lampau), stempel pakai jam jadwal supaya tidak
+    // ter-cap waktu hari ini; untuk hari ini pakai waktu sekarang.
+    const stempel = (tipe: EventTipe) =>
+      isManual
+        ? jadwalISO(tanggal, SHIFT_JADWAL[record.shift][tipe] ?? '00:00')
+        : new Date().toISOString()
+    const mulaiEv: AbsenEvent = {
+      tipe: mulaiTipe,
+      waktu: stempel(mulaiTipe),
+      dilewati: true,
+    }
+    const selesaiEv: AbsenEvent = {
+      tipe: selesaiTipe,
+      waktu: stempel(selesaiTipe),
+      dilewati: true,
+    }
     const bersih = record.events.filter(
       (e) => e.tipe !== mulaiTipe && e.tipe !== selesaiTipe,
     )
     const updated: AbsenHari = {
       ...record,
+      status: recordStatus,
       events: [...bersih, mulaiEv, selesaiEv],
     }
     setData({
@@ -233,6 +273,7 @@ export function Absen({
     }
     const updated: AbsenHari = {
       ...record,
+      status: recordStatus,
       events: adaSekarang
         ? record.events.map((e) => (e.tipe === editingTipe ? baru : e))
         : [...record.events, baru],
@@ -249,7 +290,7 @@ export function Absen({
     if (!record) return
     if (
       !confirm(
-        'Hapus semua catatan absensi hari ini? Aksi ini tidak bisa dibatalkan.',
+        `Hapus semua catatan absensi ${formatTanggalPanjang(tanggal)}? Aksi ini tidak bisa dibatalkan.`,
       )
     ) {
       return
@@ -258,7 +299,7 @@ export function Absen({
       ...data,
       records: data.records.filter((r) => r.id !== record.id),
     })
-    toast('warn', 'Catatan hari ini dihapus')
+    toast('warn', 'Catatan absensi dihapus')
   }
 
   return (
@@ -278,6 +319,31 @@ export function Absen({
           <div className="role">{employee.jabatan || '—'}</div>
           <div className="tanggal">{formatTanggalPanjang(tanggal)}</div>
         </div>
+        <div className="absen-tanggal-pick">
+          <label className="absen-tanggal-label" htmlFor="absen-tanggal">
+            Tanggal absensi
+          </label>
+          <input
+            id="absen-tanggal"
+            type="date"
+            className="edit-time"
+            value={tanggal}
+            max={today}
+            onChange={(e) => {
+              setTanggal(e.target.value || today)
+              batalEdit()
+            }}
+          />
+          {isManual && (
+            <button
+              type="button"
+              className="btn-mini btn-mini-ghost"
+              onClick={() => setTanggal(today)}
+            >
+              Hari ini
+            </button>
+          )}
+        </div>
         <div className="detail-clock">
           <div className="jam">
             {String(now.getHours()).padStart(2, '0')}:
@@ -288,13 +354,50 @@ export function Absen({
         </div>
       </section>
 
+      {isManual && (
+        <div className="overlap-banner manual-banner">
+          📅 <strong>Absensi manual untuk {formatTanggalPanjang(tanggal)}</strong>
+          {recordStatus === 'menunggu' ? (
+            <div className="overlap-sub">
+              Isi jam dengan tombol <strong>Edit</strong> pada tiap baris. Setelah
+              disimpan, entri ini berstatus <strong>menunggu persetujuan admin</strong>{' '}
+              dan belum dihitung sebagai kehadiran resmi sampai disetujui.
+            </div>
+          ) : (
+            <div className="overlap-sub">
+              Entri admin untuk tanggal lampau langsung tercatat sebagai
+              kehadiran resmi (tidak perlu persetujuan).
+            </div>
+          )}
+        </div>
+      )}
+
+      {menunggu && (
+        <div className="overlap-banner pending-banner">
+          ⏳ <strong>Menunggu persetujuan admin</strong>
+          <div className="overlap-sub">
+            Catatan ini belum dihitung sebagai kehadiran resmi. Admin dapat
+            menyetujui atau menolaknya dari halaman Absensi.
+          </div>
+        </div>
+      )}
+
       {!record ? (
         <ShiftPicker onPick={pilihShift} />
       ) : (
         <>
           <section className="detail-card">
             <ShiftBadge shift={record.shift} onChange={gantiShift} />
-            {next ? (
+            {isManual ? (
+              <div className="next-action">
+                <div className="next-label">Isi jam manual</div>
+                <div className="next-value">
+                  Gunakan tombol <strong>Edit</strong> pada tiap baris di bawah
+                  untuk mengisi jam {EVENT_LABEL.masuk.toLowerCase()}, istirahat,
+                  dan pulang.
+                </div>
+              </div>
+            ) : next ? (
               <div className="next-action">
                 <div className="next-label">Berikutnya</div>
                 <div className="next-value">
@@ -458,7 +561,7 @@ export function Absen({
                       </div>
                     </div>
                     <div className="timeline-actions">
-                      {!ev && (
+                      {!ev && !isManual && (
                         <button
                           type="button"
                           className="btn-mini"

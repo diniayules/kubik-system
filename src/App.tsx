@@ -299,17 +299,11 @@ function Inner() {
             {screen.name === 'riwayat' && (
               <Riwayat
                 data={data}
+                setData={setData}
                 employeeId={screen.employeeId}
                 isAdmin={isAdmin}
                 currentUserId={currentUserId}
                 onBack={() => setScreen({ name: 'absensi' })}
-                onEdit={(tanggal) =>
-                  setScreen({
-                    name: 'absen',
-                    employeeId: screen.employeeId,
-                    tanggal,
-                  })
-                }
               />
             )}
 

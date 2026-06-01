@@ -1,8 +1,20 @@
-import { useMemo } from 'react'
-import type { AppData } from '../types'
+import { Fragment, useMemo, useState } from 'react'
+import type {
+  AbsenEvent,
+  AbsenHari,
+  AbsenStatus,
+  AppData,
+  EventTipe,
+  Shift,
+} from '../types'
+import { todayKey } from '../storage'
 import {
+  EVENT_LABEL,
   SHIFT_IKON,
+  SHIFT_JADWAL,
   SHIFT_LABEL,
+  SHIFT_LIST,
+  SHIFT_URUTAN,
   absenDisetujui,
   cariOperatorOverlap,
   cariTakeover,
@@ -12,27 +24,39 @@ import {
   getEvent,
   hitungRingkasan,
   istirahatDilewatiCount,
+  jadwalISO,
 } from '../attendance'
 import { Avatar, colorIndexForName } from '../components/Avatar'
 import { Icons } from '../components/Icons'
+import { useToast } from '../components/Toast'
+
+type Draft = {
+  tanggal: string
+  shift: Shift
+  jam: Partial<Record<EventTipe, string>>
+}
 
 type Props = {
   data: AppData
+  setData: (d: AppData) => void
   employeeId: string
   isAdmin: boolean
   currentUserId: string
   onBack: () => void
-  onEdit: (tanggal: string) => void
 }
 
 export function Riwayat({
   data,
+  setData,
   employeeId,
   isAdmin,
   currentUserId,
   onBack,
-  onEdit,
 }: Props) {
+  const toast = useToast()
+  const today = todayKey()
+  const [editId, setEditId] = useState<string | null>(null)
+  const [draft, setDraft] = useState<Draft | null>(null)
   const employee = data.employees.find((e) => e.id === employeeId)
   // Pemilik kartu & admin boleh mengedit absensi langsung dari riwayat;
   // karyawan lain hanya melihat riwayat resmi (read-only).
@@ -70,6 +94,107 @@ export function Riwayat({
     }
     return { kerja, terlambat, lembur, hari, perShift, overlap }
   }, [records, data.records])
+
+  function bukaEdit(r: AbsenHari) {
+    const jam: Partial<Record<EventTipe, string>> = {}
+    for (const e of r.events) jam[e.tipe] = formatJam(e.waktu)
+    setEditId(r.id)
+    setDraft({ tanggal: r.tanggal, shift: r.shift, jam })
+  }
+
+  function batalEdit() {
+    setEditId(null)
+    setDraft(null)
+  }
+
+  // Simpan hasil edit inline langsung dari riwayat (tanpa pindah ke editor
+  // absensi). Jam di-stempel ulang ke tanggal draft; untuk karyawan, mengubah
+  // catatan lampau mengembalikan status ke 'menunggu' (persetujuan ulang admin).
+  function simpanEdit(r: AbsenHari) {
+    if (!draft) return
+    const tgl = draft.tanggal
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(tgl) || Number.isNaN(Date.parse(tgl))) {
+      alert('Tanggal tidak valid (gunakan format kalender).')
+      return
+    }
+    if (tgl > today) {
+      alert('Tidak bisa memindahkan ke tanggal di masa depan.')
+      return
+    }
+    if (
+      tgl !== r.tanggal &&
+      data.records.some(
+        (x) =>
+          x.employeeId === employeeId && x.tanggal === tgl && x.id !== r.id,
+      )
+    ) {
+      alert(
+        'Sudah ada catatan absensi di tanggal itu. Hapus dulu salah satu sebelum memindahkan.',
+      )
+      return
+    }
+    const sekarang = new Date().toISOString()
+    const events: AbsenEvent[] = []
+    for (const tipe of SHIFT_URUTAN[draft.shift]) {
+      const val = (draft.jam[tipe] ?? '').trim()
+      if (!val) continue
+      if (!/^\d{2}:\d{2}$/.test(val)) {
+        alert(`Format jam ${EVENT_LABEL[tipe]} tidak valid (HH:MM).`)
+        return
+      }
+      const old = r.events.find((e) => e.tipe === tipe)
+      const waktu = jadwalISO(tgl, val)
+      if (old && formatJam(old.waktu) === val) {
+        // Jam tidak berubah: pertahankan flag audit, stempel ulang ke tanggal.
+        events.push({
+          ...old,
+          waktu,
+          waktuAsli: old.waktuAsli
+            ? jadwalISO(tgl, formatJam(old.waktuAsli))
+            : old.waktuAsli,
+        })
+      } else {
+        events.push({
+          tipe,
+          waktu,
+          manual: true,
+          diubahPada: sekarang,
+          waktuAsli: old ? old.waktuAsli ?? old.waktu : undefined,
+        })
+      }
+    }
+    const targetStatus: AbsenStatus =
+      tgl !== today && !isAdmin ? 'menunggu' : 'disetujui'
+    const updated: AbsenHari = {
+      ...r,
+      tanggal: tgl,
+      shift: draft.shift,
+      events,
+      status: targetStatus,
+    }
+    setData({
+      ...data,
+      records: data.records.map((x) => (x.id === r.id ? updated : x)),
+    })
+    toast('ok', 'Absensi diperbarui')
+    if (r.status === 'disetujui' && targetStatus === 'menunggu') {
+      toast('warn', 'Perubahan perlu persetujuan ulang admin')
+    }
+    batalEdit()
+  }
+
+  function hapusRecord(r: AbsenHari) {
+    if (
+      !confirm(
+        `Hapus catatan absensi ${formatTanggalPanjang(r.tanggal)}? Aksi ini tidak bisa dibatalkan.`,
+      )
+    ) {
+      return
+    }
+    setData({ ...data, records: data.records.filter((x) => x.id !== r.id) })
+    toast('warn', 'Catatan absensi dihapus')
+    batalEdit()
+  }
 
   function exportCSV() {
     const header = [
@@ -210,8 +335,9 @@ export function Riwayat({
         <section className="detail-card">
           {canEdit && (
             <p className="timeline-help">
-              💡 Klik <strong>Edit</strong> pada baris tanggal untuk mengubah jam
-              atau memindahkan tanggal absensi langsung dari sini.
+              💡 Klik <strong>Edit</strong> pada baris tanggal untuk mengubah jam,
+              shift, atau tanggal absensi <strong>langsung di sini</strong> tanpa
+              pindah halaman.
             </p>
           )}
           <div className="riwayat-table">
@@ -228,10 +354,11 @@ export function Riwayat({
               const ring = hitungRingkasan(r, cariTakeover(r, data.records))
               const shiftCls = r.shift === 'full' ? 'penuh' : r.shift
               const pending = !absenDisetujui(r)
+              const editing = editId === r.id
               return (
+                <Fragment key={r.id}>
                 <div
-                  key={r.id}
-                  className={`riwayat-row${pending ? ' riwayat-pending' : ''}`}
+                  className={`riwayat-row${pending ? ' riwayat-pending' : ''}${editing ? ' riwayat-editing' : ''}`}
                 >
                   <div className="riwayat-tanggal">
                     {formatTanggalPanjang(r.tanggal)}
@@ -247,10 +374,10 @@ export function Riwayat({
                       <button
                         type="button"
                         className="btn-mini btn-mini-edit riwayat-edit-btn"
-                        onClick={() => onEdit(r.tanggal)}
-                        title="Ubah jam atau tanggal absensi ini"
+                        onClick={() => (editing ? batalEdit() : bukaEdit(r))}
+                        title="Ubah jam, shift, atau tanggal absensi ini"
                       >
-                        <Icons.pencil /> Edit
+                        <Icons.pencil /> {editing ? 'Tutup' : 'Edit'}
                       </button>
                     )}
                   </div>
@@ -297,6 +424,97 @@ export function Riwayat({
                     {ring.sudahPulang ? formatDurasi(ring.kerjaBersihMenit) : '—'}
                   </div>
                 </div>
+                {editing && draft && (
+                  <div className="riwayat-edit-panel">
+                    <div className="edit-grid">
+                      <label className="edit-field">
+                        <span>Tanggal</span>
+                        <input
+                          type="date"
+                          className="edit-time"
+                          max={today}
+                          value={draft.tanggal}
+                          onChange={(e) =>
+                            setDraft({
+                              ...draft,
+                              tanggal: e.target.value || draft.tanggal,
+                            })
+                          }
+                        />
+                      </label>
+                      <label className="edit-field">
+                        <span>Shift</span>
+                        <select
+                          className="edit-time"
+                          value={draft.shift}
+                          onChange={(e) =>
+                            setDraft({ ...draft, shift: e.target.value as Shift })
+                          }
+                        >
+                          {SHIFT_LIST.map((s) => (
+                            <option key={s} value={s}>
+                              {SHIFT_LABEL[s]}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
+                    <div className="edit-jam-grid">
+                      {SHIFT_URUTAN[draft.shift].map((tipe) => (
+                        <label key={tipe} className="edit-field">
+                          <span>
+                            {EVENT_LABEL[tipe]}{' '}
+                            <em className="edit-jadwal">
+                              (jadwal {SHIFT_JADWAL[draft.shift][tipe] ?? '—'})
+                            </em>
+                          </span>
+                          <input
+                            type="time"
+                            className="edit-time"
+                            value={draft.jam[tipe] ?? ''}
+                            onChange={(e) =>
+                              setDraft({
+                                ...draft,
+                                jam: { ...draft.jam, [tipe]: e.target.value },
+                              })
+                            }
+                          />
+                        </label>
+                      ))}
+                    </div>
+                    <div className="edit-hint">
+                      Kosongkan jam untuk menghapus catatan event itu. Mengubah
+                      tanggal akan memindahkan catatan ini.
+                      {!isAdmin &&
+                        ' Untuk tanggal lampau, perubahanmu perlu disetujui ulang admin.'}
+                    </div>
+                    <div className="edit-row">
+                      <button
+                        type="button"
+                        className="btn btn--primary btn-mini"
+                        onClick={() => simpanEdit(r)}
+                      >
+                        <Icons.check /> Simpan
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn--ghost btn-mini"
+                        onClick={batalEdit}
+                      >
+                        Batal
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn--pink btn-mini"
+                        onClick={() => hapusRecord(r)}
+                        style={{ marginLeft: 'auto' }}
+                      >
+                        <Icons.trash /> Hapus
+                      </button>
+                    </div>
+                  </div>
+                )}
+                </Fragment>
               )
             })}
           </div>

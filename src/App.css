@@ -1588,6 +1588,30 @@
 }
 .riwayat-tanggal { font-weight: 700; color: var(--ink); }
 .riwayat-edit-btn { display: inline-flex; margin-top: 6px; }
+.riwayat-row.riwayat-editing {
+  outline: 2px solid color-mix(in srgb, var(--primary-2) 55%, transparent);
+}
+.riwayat-edit-panel {
+  padding: 14px; background: var(--surface-2);
+  border-radius: var(--radius-sm); margin-top: -2px;
+  border: 1.5px dashed color-mix(in srgb, var(--primary-2) 40%, transparent);
+}
+.riwayat-edit-panel .edit-grid,
+.riwayat-edit-panel .edit-jam-grid {
+  display: grid; gap: 10px 14px;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+.riwayat-edit-panel .edit-jam-grid { margin-top: 12px; }
+.riwayat-edit-panel .edit-field {
+  display: flex; flex-direction: column; gap: 4px;
+  font-size: 12px; font-weight: 600; color: var(--ink-soft);
+}
+.riwayat-edit-panel .edit-field .edit-time { width: 100%; }
+.riwayat-edit-panel .edit-jadwal { font-weight: 500; color: var(--muted); font-style: italic; }
+.riwayat-edit-panel .edit-hint {
+  margin: 12px 0 10px; font-size: 12px; color: var(--ink-soft); line-height: 1.5;
+}
+.riwayat-edit-panel .edit-row { display: flex; gap: 8px; align-items: center; }
 .tone-danger { color: #C2410C; font-weight: 700; }
 .tone-success { color: var(--mint-deep); font-weight: 700; }
 .tone-muted { color: var(--muted); }

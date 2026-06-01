@@ -3,7 +3,7 @@
 //
 // Model (lihat keputusan produk di GajiKaryawan):
 //  - Gaji pokok dibayar PENUH sebulan, lalu disesuaikan:
-//      + bonus penjualan (Rp 1.000 / item: tiket, cetak, upgrade, produk)
+//      + bonus penjualan (Rp 1.000 / item: tiket, cetak, produk — upgrade TIDAK)
 //      + upah lembur          (menit lembur × tarif/menit)
 //      + upah shift penuh     (menit coverage × tarif/menit)
 //      − potongan keterlambatan (menit telat × tarif/menit)
@@ -19,7 +19,7 @@ import type { AbsenHari, Employee, LaporanIncome } from './types'
 import { hitungRingkasan } from './attendance'
 import { ringkasanPerKaryawan } from './income'
 
-/** Bonus per item terjual (tiket / cetak / upgrade / produk). */
+/** Bonus per item terjual (tiket / cetak / produk — upgrade tidak dihitung). */
 export const BONUS_PER_ITEM = 1000
 /** Basis pembagi gaji pokok: 30 hari kerja sebulan. */
 export const HARI_KERJA_SEBULAN = 30
@@ -150,7 +150,10 @@ export function hitungSlipGaji(
     upgrade += s.upgrade
     produk += s.produk
   }
-  const jumlahItem = tiket + cetak + upgrade + produk
+  // Upgrade TIDAK menghasilkan bonus Rp 1.000/item — hanya tiket, cetak, &
+  // produk yang dihitung. Upgrade tetap masuk sebagai tambahan income rupiah
+  // di laporan income (hitungIncome), bukan sebagai item bonus penjualan.
+  const jumlahItem = tiket + cetak + produk
 
   const bonusPenjualan = jumlahItem * BONUS_PER_ITEM
   const upahLembur = lemburMenit * tarif

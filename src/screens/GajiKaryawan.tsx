@@ -410,7 +410,7 @@ function SlipCard({
           label={`Bonus penjualan · ${slip.jumlahItem} item`}
           val={slip.bonusPenjualan}
           plus
-          sub={`${slip.tiket} tiket · ${slip.cetak} cetak · ${slip.upgrade} upgrade · ${slip.produk} produk`}
+          sub={`${slip.tiket} tiket · ${slip.cetak} cetak · ${slip.produk} produk${slip.upgrade > 0 ? ` · ${slip.upgrade} upgrade (tanpa bonus)` : ''}`}
         />
         {slip.upahLembur > 0 && (
           <Line

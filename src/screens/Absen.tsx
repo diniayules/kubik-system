@@ -39,6 +39,8 @@ type Props = {
   setData: (d: AppData) => void
   employeeId: string
   isAdmin: boolean
+  /** Tanggal awal yang dibuka (mis. dari tombol Edit di Riwayat). Default hari ini. */
+  initialTanggal?: string
   onBack: () => void
   onLihatRiwayat: () => void
 }
@@ -48,13 +50,16 @@ export function Absen({
   setData,
   employeeId,
   isAdmin,
+  initialTanggal,
   onBack,
   onLihatRiwayat,
 }: Props) {
   const toast = useToast()
   const employee = data.employees.find((e) => e.id === employeeId)
   const today = todayKey()
-  const [tanggal, setTanggal] = useState(today)
+  const [tanggal, setTanggal] = useState(
+    initialTanggal && initialTanggal <= today ? initialTanggal : today,
+  )
   // Mode manual = mengisi absensi untuk tanggal selain hari ini (mis. lupa
   // absen kemarin). Untuk karyawan, entri manual berstatus 'menunggu' sampai
   // di-ACC admin; absensi real-time hari ini & entri admin langsung disetujui.

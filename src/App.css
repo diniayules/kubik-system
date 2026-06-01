@@ -1587,6 +1587,7 @@
   text-transform: uppercase; color: var(--muted); letter-spacing: 0.06em; padding: 8px 12px;
 }
 .riwayat-tanggal { font-weight: 700; color: var(--ink); }
+.riwayat-edit-btn { display: inline-flex; margin-top: 6px; }
 .tone-danger { color: #C2410C; font-weight: 700; }
 .tone-success { color: var(--mint-deep); font-weight: 700; }
 .tone-muted { color: var(--muted); }

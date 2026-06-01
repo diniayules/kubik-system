@@ -22,6 +22,7 @@ type Props = {
   isAdmin: boolean
   currentUserId: string
   onBack: () => void
+  onEdit: (tanggal: string) => void
 }
 
 export function Riwayat({
@@ -30,11 +31,13 @@ export function Riwayat({
   isAdmin,
   currentUserId,
   onBack,
+  onEdit,
 }: Props) {
   const employee = data.employees.find((e) => e.id === employeeId)
-  // Entri manual yang masih 'menunggu' hanya terlihat oleh pemiliknya & admin;
-  // karyawan lain melihat riwayat resmi (yang sudah disetujui) saja.
+  // Pemilik kartu & admin boleh mengedit absensi langsung dari riwayat;
+  // karyawan lain hanya melihat riwayat resmi (read-only).
   const bolehLihatMenunggu = isAdmin || employeeId === currentUserId
+  const canEdit = isAdmin || employeeId === currentUserId
   const records = useMemo(
     () =>
       data.records
@@ -205,6 +208,12 @@ export function Riwayat({
         </div>
       ) : (
         <section className="detail-card">
+          {canEdit && (
+            <p className="timeline-help">
+              💡 Klik <strong>Edit</strong> pada baris tanggal untuk mengubah jam
+              atau memindahkan tanggal absensi langsung dari sini.
+            </p>
+          )}
           <div className="riwayat-table">
             <div className="riwayat-row riwayat-head">
               <div>Tanggal</div>
@@ -233,6 +242,16 @@ export function Riwayat({
                       >
                         ⏳ Menunggu persetujuan
                       </span>
+                    )}
+                    {canEdit && (
+                      <button
+                        type="button"
+                        className="btn-mini btn-mini-edit riwayat-edit-btn"
+                        onClick={() => onEdit(r.tanggal)}
+                        title="Ubah jam atau tanggal absensi ini"
+                      >
+                        <Icons.pencil /> Edit
+                      </button>
                     )}
                   </div>
                   <div>

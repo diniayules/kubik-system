@@ -26,7 +26,7 @@ import './App.css'
 type Screen =
   | { name: 'landing' }
   | { name: 'absensi' }
-  | { name: 'absen'; employeeId: string }
+  | { name: 'absen'; employeeId: string; tanggal?: string }
   | { name: 'riwayat'; employeeId: string }
   | { name: 'laporan' }
   | { name: 'event-photobooth' }
@@ -288,6 +288,7 @@ function Inner() {
                 setData={setData}
                 employeeId={screen.employeeId}
                 isAdmin={isAdmin}
+                initialTanggal={screen.tanggal}
                 onBack={() => setScreen({ name: 'absensi' })}
                 onLihatRiwayat={() =>
                   setScreen({ name: 'riwayat', employeeId: screen.employeeId })
@@ -302,6 +303,13 @@ function Inner() {
                 isAdmin={isAdmin}
                 currentUserId={currentUserId}
                 onBack={() => setScreen({ name: 'absensi' })}
+                onEdit={(tanggal) =>
+                  setScreen({
+                    name: 'absen',
+                    employeeId: screen.employeeId,
+                    tanggal,
+                  })
+                }
               />
             )}
 

@@ -40,9 +40,10 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
   const toast = useToast()
   // Karyawan boleh input & edit laporan, tapi nominal Rupiah disembunyikan.
   const showMoney = isAdmin
-  // Admin (pengelola) tidak mengisi laporan income — entri penjualan adalah
-  // tugas karyawan. Admin tetap bisa edit/hapus/atur harga & ekspor.
-  const canTambahLaporan = !isAdmin
+  // Admin & karyawan sama-sama boleh menambah laporan income. Admin mengisi
+  // atas nama karyawan (semua kolom karyawan bisa diedit lewat form), selain
+  // tetap bisa edit/hapus/atur harga & ekspor.
+  const canTambahLaporan = true
   // Admin tidak diatribusikan sebagai operator penjualan, jadi tidak masuk
   // kolom per-karyawan di ekspor CSV.
   const karyawan = data.employees.filter((e) => e.role !== 'admin')
@@ -732,26 +733,17 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
         <div className="emp-empty">
           <div className="ee-emoji">💸</div>
           <h3>Belum ada laporan income</h3>
-          {canTambahLaporan ? (
-            <>
-              <p>Klik "Tambah Laporan" untuk mulai mencatat penjualan harian.</p>
-              <button
-                type="button"
-                className="btn btn--pink btn--lg"
-                onClick={() => {
-                  setEditing(null)
-                  setShowForm(true)
-                }}
-              >
-                <Icons.plus /> Tambah Laporan
-              </button>
-            </>
-          ) : (
-            <p>
-              Laporan penjualan diisi oleh karyawan. Setelah ada, Anda bisa
-              mengedit, menghapus, mengatur harga, dan mengekspornya di sini.
-            </p>
-          )}
+          <p>Klik "Tambah Laporan" untuk mulai mencatat penjualan harian.</p>
+          <button
+            type="button"
+            className="btn btn--pink btn--lg"
+            onClick={() => {
+              setEditing(null)
+              setShowForm(true)
+            }}
+          >
+            <Icons.plus /> Tambah Laporan
+          </button>
         </div>
       ) : tampilan === 'kalender' ? (
         <KalenderIncome

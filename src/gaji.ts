@@ -9,7 +9,11 @@
 //      − potongan keterlambatan (menit telat × tarif/menit)
 //      − potongan cuti berlebih (hari di atas jatah × 1 hari × tarif/menit)
 //  - Tarif/menit = gaji pokok ÷ 30 hari ÷ 300 menit (800.000 → Rp 88,8).
-//  - Jatah cuti 2 hari/bulan; hari tidak hadir ke-3 dst memotong 1 hari penuh.
+//  - CUTI dicatat EKSPLISIT (tombol "Cuti" di pemilih shift), bukan ditebak dari
+//    ketiadaan absensi. Jatah cuti 2 hari/bulan; cuti ke-3 dst memotong 1 hari
+//    penuh. Hari "Libur Studio" (studio tutup) tidak pernah memotong gaji dan
+//    tidak memakai jatah. Hari tanpa catatan apa pun TIDAK lagi otomatis
+//    dipotong — hanya ditampilkan sebagai info "tidak hadir".
 // =============================================================
 import type { AbsenHari, Employee, LaporanIncome } from './types'
 import { hitungRingkasan } from './attendance'
@@ -36,6 +40,8 @@ export type SlipGaji = {
   hariHadir: number
   hariSeharusnya: number
   hariTidakHadir: number
+  hariCuti: number
+  hariLibur: number
   cutiTerpakai: number
   hariCutiBerlebih: number
   terlambatMenit: number
@@ -96,8 +102,19 @@ export function hitungSlipGaji(
   let coverageMenit = 0
   let kerjaBersihMenit = 0
   let hariHadir = 0
+  let hariCuti = 0
+  let hariLibur = 0
   for (const r of records) {
     if (r.employeeId !== emp.id) continue
+    // Hari tidak bekerja dicatat eksplisit, dihitung terpisah dari kehadiran.
+    if (r.shift === 'cuti') {
+      hariCuti += 1
+      continue
+    }
+    if (r.shift === 'libur') {
+      hariLibur += 1
+      continue
+    }
     const ring = hitungRingkasan(r)
     hariHadir += 1
     terlambatMenit += ring.terlambatMenit
@@ -111,9 +128,15 @@ export function hitungSlipGaji(
     }
   }
 
-  const hariTidakHadir = Math.max(0, hariSeharusnya - hariHadir)
-  const cutiTerpakai = Math.min(hariTidakHadir, JATAH_CUTI_SEBULAN)
-  const hariCutiBerlebih = Math.max(0, hariTidakHadir - JATAH_CUTI_SEBULAN)
+  // Hari tanpa catatan apa pun (bukan kerja, cuti, maupun libur). Hanya info —
+  // TIDAK memotong gaji (cuti sekarang harus ditandai eksplisit).
+  const hariTidakHadir = Math.max(
+    0,
+    hariSeharusnya - hariHadir - hariCuti - hariLibur,
+  )
+  // Potongan hanya dari cuti EKSPLISIT yang melebihi jatah 2 hari/bulan.
+  const cutiTerpakai = Math.min(hariCuti, JATAH_CUTI_SEBULAN)
+  const hariCutiBerlebih = Math.max(0, hariCuti - JATAH_CUTI_SEBULAN)
 
   let tiket = 0
   let cetak = 0
@@ -149,6 +172,8 @@ export function hitungSlipGaji(
     hariHadir,
     hariSeharusnya,
     hariTidakHadir,
+    hariCuti,
+    hariLibur,
     cutiTerpakai,
     hariCutiBerlebih,
     terlambatMenit,

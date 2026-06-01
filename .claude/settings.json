@@ -74,7 +74,10 @@
       "Bash(echo \"BUILD_EXIT:$?\")",
       "Bash(echo \"GREP_BUILD_DONE_$?\")",
       "Bash(git --no-pager diff .claude/settings.json)",
-      "Bash(git --no-pager diff --stat)"
+      "Bash(git --no-pager diff --stat)",
+      "Bash(awk 'NR>=394 && NR<=402' /Users/diniayulest/Codes/absensi-karyawan/src/App.css)",
+      "Bash(awk 'NR>=393 && NR<=402' /Users/diniayulest/Codes/absensi-karyawan/src/App.css)",
+      "Bash(echo \"BUILD3_EXIT:$?\")"
     ],
     "additionalDirectories": [
       "/tmp"

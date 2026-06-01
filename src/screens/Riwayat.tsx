@@ -4,18 +4,19 @@ import type {
   AbsenHari,
   AbsenStatus,
   AppData,
+  DayType,
   EventTipe,
-  Shift,
 } from '../types'
 import { todayKey } from '../storage'
 import {
+  DAY_TYPE_LIST,
   EVENT_LABEL,
   SHIFT_IKON,
   SHIFT_JADWAL,
   SHIFT_LABEL,
-  SHIFT_LIST,
   SHIFT_URUTAN,
   absenDisetujui,
+  isHariKerja,
   cariOperatorOverlap,
   cariTakeover,
   formatDurasi,
@@ -32,7 +33,7 @@ import { useToast } from '../components/Toast'
 
 type Draft = {
   tanggal: string
-  shift: Shift
+  shift: DayType
   jam: Partial<Record<EventTipe, string>>
 }
 
@@ -78,10 +79,20 @@ export function Riwayat({
     let lembur = 0
     let hari = 0
     let overlap = 0
+    let cuti = 0
+    let libur = 0
     const perShift = { pagi: 0, sore: 0, full: 0 } as Record<string, number>
     for (const r of records) {
       // Hanya absensi yang sudah disetujui dihitung sebagai kehadiran resmi.
       if (!absenDisetujui(r)) continue
+      if (r.shift === 'cuti') {
+        cuti += 1
+        continue
+      }
+      if (r.shift === 'libur') {
+        libur += 1
+        continue
+      }
       const ring = hitungRingkasan(r, cariTakeover(r, data.records))
       kerja += ring.kerjaBersihMenit
       terlambat += ring.terlambatMenit
@@ -92,7 +103,7 @@ export function Riwayat({
         perShift[r.shift] = (perShift[r.shift] ?? 0) + 1
       }
     }
-    return { kerja, terlambat, lembur, hari, perShift, overlap }
+    return { kerja, terlambat, lembur, hari, perShift, overlap, cuti, libur }
   }, [records, data.records])
 
   function bukaEdit(r: AbsenHari) {
@@ -135,7 +146,9 @@ export function Riwayat({
     }
     const sekarang = new Date().toISOString()
     const events: AbsenEvent[] = []
-    for (const tipe of SHIFT_URUTAN[draft.shift]) {
+    // Hari cuti / libur tidak punya jam kerja → events tetap kosong.
+    const slots = isHariKerja(draft.shift) ? SHIFT_URUTAN[draft.shift] : []
+    for (const tipe of slots) {
       const val = (draft.jam[tipe] ?? '').trim()
       if (!val) continue
       if (!/^\d{2}:\d{2}$/.test(val)) {
@@ -318,6 +331,16 @@ export function Riwayat({
             <div className="ringkasan-label">Total lembur</div>
             <div className="ringkasan-value">{formatDurasi(total.lembur)}</div>
           </div>
+          {(total.cuti > 0 || total.libur > 0) && (
+            <div className="ringkasan-item tone-muted">
+              <div className="ringkasan-label">Cuti &amp; Libur</div>
+              <div className="ringkasan-value">
+                {SHIFT_IKON.cuti} {total.cuti} cuti · {SHIFT_IKON.libur}{' '}
+                {total.libur} libur
+              </div>
+              <div className="ringkasan-hint">tidak dihitung sebagai absen</div>
+            </div>
+          )}
           {total.overlap > 0 && (
             <div className="ringkasan-item tone-warning">
               <div className="ringkasan-label">Total overlap</div>
@@ -448,10 +471,13 @@ export function Riwayat({
                           className="edit-time"
                           value={draft.shift}
                           onChange={(e) =>
-                            setDraft({ ...draft, shift: e.target.value as Shift })
+                            setDraft({
+                              ...draft,
+                              shift: e.target.value as DayType,
+                            })
                           }
                         >
-                          {SHIFT_LIST.map((s) => (
+                          {DAY_TYPE_LIST.map((s) => (
                             <option key={s} value={s}>
                               {SHIFT_LABEL[s]}
                             </option>
@@ -460,12 +486,19 @@ export function Riwayat({
                       </label>
                     </div>
                     <div className="edit-jam-grid">
-                      {SHIFT_URUTAN[draft.shift].map((tipe) => (
+                      {(isHariKerja(draft.shift)
+                        ? SHIFT_URUTAN[draft.shift]
+                        : []
+                      ).map((tipe) => (
                         <label key={tipe} className="edit-field">
                           <span>
                             {EVENT_LABEL[tipe]}{' '}
                             <em className="edit-jadwal">
-                              (jadwal {SHIFT_JADWAL[draft.shift][tipe] ?? '—'})
+                              (jadwal{' '}
+                              {(isHariKerja(draft.shift)
+                                ? SHIFT_JADWAL[draft.shift][tipe]
+                                : undefined) ?? '—'}
+                              )
                             </em>
                           </span>
                           <input

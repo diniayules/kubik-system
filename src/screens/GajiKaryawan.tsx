@@ -398,6 +398,9 @@ function SlipCard({
           val={`${slip.cutiTerpakai}/${JATAH_CUTI_SEBULAN}${slip.hariCutiBerlebih > 0 ? ` (+${slip.hariCutiBerlebih} lebih)` : ''}`}
           warn={slip.hariCutiBerlebih > 0}
         />
+        {slip.hariLibur > 0 && (
+          <Chip label="Libur studio" val={`${slip.hariLibur} hr`} />
+        )}
       </div>
 
       {/* Rincian gaji */}
@@ -453,24 +456,32 @@ function SlipCard({
         </div>
       </div>
 
-      {onToggleDibayar ? (
-        <button
-          type="button"
-          className={dibayar ? 'btn btn--ghost' : 'btn'}
-          style={{ width: '100%', marginTop: 4 }}
-          onClick={() => onToggleDibayar(!dibayar)}
-        >
-          {dibayar ? '↩ Tandai belum dibayar' : '✓ Tandai sudah dibayar'}
-        </button>
-      ) : (
-        dibayar && (
-          <div
-            className="gaji-pokok-tarif"
-            style={{ textAlign: 'center', color: 'var(--mint-deep)' }}
-          >
-            ✓ Sudah dibayar
-          </div>
-        )
+      {/* Kontrol status pembayaran — pakai kelas .gaji-card-actions supaya ikut
+          tersembunyi saat slip di-print (lihat @media print di App.css). */}
+      {(onToggleDibayar || dibayar) && (
+        <div className="gaji-card-actions">
+          {onToggleDibayar ? (
+            <button
+              type="button"
+              className={dibayar ? 'btn btn--ghost' : 'btn'}
+              style={{ width: '100%' }}
+              onClick={() => onToggleDibayar(!dibayar)}
+            >
+              {dibayar ? '↩ Tandai belum dibayar' : '✓ Tandai sudah dibayar'}
+            </button>
+          ) : (
+            <span
+              className="gaji-pokok-tarif"
+              style={{
+                width: '100%',
+                textAlign: 'center',
+                color: 'var(--mint-deep)',
+              }}
+            >
+              ✓ Sudah dibayar
+            </span>
+          )}
+        </div>
       )}
 
       <div className="gaji-card-actions">

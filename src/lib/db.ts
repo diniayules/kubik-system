@@ -25,8 +25,8 @@ import type {
   LayananDef,
   Pengeluaran,
   ProdukDef,
+  DayType,
   SalahCetak,
-  Shift,
   SewaTipe,
   Tinta,
   UpgradeDef,
@@ -83,7 +83,7 @@ type AbsenRow = {
   id: string
   employee_id: string
   tanggal: string
-  shift: Shift
+  shift: DayType
   events: AbsenHari['events']
   status: AbsenHari['status']
 }

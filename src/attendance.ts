@@ -1,4 +1,4 @@
-import type { AbsenEvent, AbsenHari, EventTipe, Shift } from './types'
+import type { AbsenEvent, AbsenHari, DayType, EventTipe, Shift } from './types'
 
 export const EVENT_LABEL: Record<EventTipe, string> = {
   masuk: 'Jam Masuk',
@@ -18,28 +18,47 @@ export const EVENT_IKON: Record<EventTipe, string> = {
   pulang: '🏠',
 }
 
-export const SHIFT_LABEL: Record<Shift, string> = {
+export const SHIFT_LABEL: Record<DayType, string> = {
   pagi: 'Shift Pagi',
   sore: 'Shift Sore',
   full: 'Shift Penuh',
+  cuti: 'Cuti',
+  libur: 'Libur Studio',
 }
 
-export const SHIFT_IKON: Record<Shift, string> = {
+export const SHIFT_IKON: Record<DayType, string> = {
   pagi: '🌅',
   sore: '🌇',
   full: '🌞',
+  cuti: '🌴',
+  libur: '🏖️',
 }
 
-export const SHIFT_RENTANG: Record<Shift, string> = {
+export const SHIFT_RENTANG: Record<DayType, string> = {
   pagi: '09:00 – 15:00 WIB',
   sore: '15:00 – 21:00 WIB',
   full: '09:00 – 21:00 WIB',
+  cuti: 'Tidak masuk',
+  libur: 'Studio tutup',
 }
 
-export const SHIFT_DESKRIPSI: Record<Shift, string> = {
+export const SHIFT_DESKRIPSI: Record<DayType, string> = {
   pagi: 'Istirahat 12:00–13:00 (kerja bersih 5 jam)',
   sore: 'Istirahat 18:00–19:00 (kerja bersih 5 jam)',
   full: 'Istirahat 12:00–13:00 & 18:00–19:00 (kerja bersih 10 jam)',
+  cuti: 'Cuti pribadi · jatah 2 hari/bln (lebih dari itu dipotong)',
+  libur: 'Studio tutup / libur bersama · gaji tetap penuh',
+}
+
+/** Penanda hari tidak bekerja yang dipilih lewat tombol (bukan shift kerja). */
+export const TIDAK_KERJA_LIST: ('cuti' | 'libur')[] = ['cuti', 'libur']
+
+/** Daftar lengkap jenis hari (3 shift kerja + cuti + libur). */
+export const DAY_TYPE_LIST: DayType[] = ['pagi', 'sore', 'full', 'cuti', 'libur']
+
+/** Apakah `s` adalah shift kerja (punya jadwal & event), bukan cuti/libur. */
+export function isHariKerja(s: DayType): s is Shift {
+  return s === 'pagi' || s === 'sore' || s === 'full'
 }
 
 export const SHIFT_URUTAN: Record<Shift, EventTipe[]> = {
@@ -161,6 +180,7 @@ export function cariTakeover(
   record: AbsenHari,
   semuaRecord: AbsenHari[],
 ): string | undefined {
+  if (!isHariKerja(record.shift)) return undefined
   const shiftBerikutnya = SHIFT_SETELAH[record.shift]
   if (!shiftBerikutnya) return undefined
   let paling: number | undefined
@@ -181,6 +201,7 @@ export function cariOperatorOverlap(
   record: AbsenHari,
   semuaRecord: AbsenHari[],
 ): string[] {
+  if (!isHariKerja(record.shift)) return []
   const shiftBerikutnya = SHIFT_SETELAH[record.shift]
   if (!shiftBerikutnya) return []
   const pulang = record.events.find((e) => e.tipe === 'pulang')
@@ -205,7 +226,9 @@ export function hitungRingkasan(
   record: AbsenHari | undefined,
   takeoverPada?: string,
 ): Ringkasan {
-  if (!record) {
+  // Hari cuti / libur tidak punya jam kerja → ringkasan kosong (tidak dihitung
+  // sebagai kehadiran, terlambat, maupun lembur).
+  if (!record || !isHariKerja(record.shift)) {
     return {
       shift: null,
       terlambatMenit: 0,
@@ -313,7 +336,7 @@ export function hitungRingkasan(
 }
 
 export function istirahatDilewatiCount(record: AbsenHari | undefined): number {
-  if (!record) return 0
+  if (!record || !isHariKerja(record.shift)) return 0
   let n = 0
   for (const [m] of ISTIRAHAT_PAIRS) {
     if (!SHIFT_URUTAN[record.shift]?.includes(m)) continue
@@ -324,7 +347,7 @@ export function istirahatDilewatiCount(record: AbsenHari | undefined): number {
 }
 
 export function eventBerikutnya(record: AbsenHari | undefined): EventTipe | null {
-  if (!record) return null
+  if (!record || !isHariKerja(record.shift)) return null
   const slots = SHIFT_URUTAN[record.shift] ?? SHIFT_URUTAN.full
   for (const tipe of slots) {
     if (!getEvent(record, tipe)) return tipe

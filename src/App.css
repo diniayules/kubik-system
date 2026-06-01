@@ -1260,6 +1260,8 @@
 .badge--sore { background: var(--pink-bg); color: var(--pink-deep); }
 .badge--penuh { background: color-mix(in srgb,var(--primary-2) 16%, transparent); color: var(--primary); }
 .badge--none { background: var(--surface-2); color: var(--muted); }
+.badge--cuti { background: var(--mint-bg); color: var(--mint-deep); }
+.badge--libur { background: var(--surface-2); color: var(--ink-soft); border: 1px dashed var(--line); }
 .badge--working { background: var(--mint-bg); color: var(--mint-deep); }
 .badge--done { background: color-mix(in srgb,var(--primary-2) 14%, transparent); color: var(--primary); }
 .badge--idle { background: var(--surface-2); color: var(--ink-soft); }
@@ -1387,6 +1389,16 @@
 .shift-opt .so-name { font-weight: 800; font-size: 12.5px; margin-top: 4px; color: var(--ink); }
 .shift-opt .so-time { font-size: 11px; color: var(--ink-soft); margin-top: 2px; }
 .shift-opt.sel { border-color: var(--primary-2); background: color-mix(in srgb,var(--primary-2) 10%, var(--surface)); box-shadow: var(--ring); }
+.shift-opt:hover { border-color: var(--primary-2); }
+.shift-opt--cuti:hover { border-color: var(--mint); }
+.shift-opt--libur:hover { border-color: var(--ink-soft); }
+
+/* Pemisah antara shift kerja & opsi cuti/libur di pemilih shift. */
+.shift-pick-sep {
+  margin: 14px 0 8px; text-align: center; font-size: 11px; font-weight: 700;
+  letter-spacing: .04em; text-transform: uppercase; color: var(--muted);
+}
+.shift-pick--off { grid-template-columns: repeat(2,1fr); }
 
 .role-pick { display: flex; gap: 8px; flex-wrap: wrap; }
 .role-opt { padding: 9px 15px; border-radius: var(--radius-pill); border: 1.8px solid var(--line); background: var(--surface-2); font-weight: 700; font-size: 13px; color: var(--ink-soft); transition: all .15s; }

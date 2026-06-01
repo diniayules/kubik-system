@@ -11,7 +11,18 @@ export type Employee = {
   role?: 'admin' | 'karyawan'
 }
 
+/** Shift kerja (karyawan benar-benar bertugas hari itu). */
 export type Shift = 'pagi' | 'sore' | 'full'
+
+/**
+ * Jenis hari pada satu kartu absensi. Selain 3 shift kerja, ada 2 hari "tidak
+ * bekerja" yang dicatat eksplisit lewat tombol di pemilih shift:
+ *  - 'cuti'  : cuti pribadi karyawan. Jatah 2 hari/bulan tidak memotong gaji;
+ *              cuti ke-3 dst memotong 1 hari penuh.
+ *  - 'libur' : studio tutup / libur bersama (karyawan terpaksa ikut libur).
+ *              Tidak pernah memotong gaji dan tidak memakai jatah cuti.
+ */
+export type DayType = Shift | 'cuti' | 'libur'
 
 export type EventTipe =
   | 'masuk'
@@ -44,7 +55,8 @@ export type AbsenHari = {
   id: string
   employeeId: string
   tanggal: string
-  shift: Shift
+  /** Shift kerja, atau penanda hari tidak bekerja ('cuti' / 'libur'). */
+  shift: DayType
   events: AbsenEvent[]
   status?: AbsenStatus
 }

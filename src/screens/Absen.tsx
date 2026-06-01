@@ -4,11 +4,12 @@ import type {
   AbsenHari,
   AbsenStatus,
   AppData,
+  DayType,
   EventTipe,
-  Shift,
 } from '../types'
 import { todayKey, uid } from '../storage'
 import {
+  DAY_TYPE_LIST,
   EVENT_IKON,
   EVENT_LABEL,
   SHIFT_DESKRIPSI,
@@ -18,6 +19,7 @@ import {
   SHIFT_LIST,
   SHIFT_RENTANG,
   SHIFT_URUTAN,
+  TIDAK_KERJA_LIST,
   cariOperatorOverlap,
   cariTakeover,
   diffMenit,
@@ -27,6 +29,7 @@ import {
   formatTanggalPanjang,
   getEvent,
   hitungRingkasan,
+  isHariKerja,
   istirahatDilewatiCount,
   jadwalISO,
 } from '../attendance'
@@ -102,7 +105,15 @@ export function Absen({
     )
   }
 
-  function pilihShift(shift: Shift) {
+  // Pesan toast: untuk shift kerja "Shift pagi dipilih", untuk cuti/libur cukup
+  // "Cuti dipilih" tanpa kata "shift".
+  function labelPilih(shift: DayType): string {
+    return isHariKerja(shift)
+      ? `Shift ${SHIFT_LABEL[shift].toLowerCase()}`
+      : SHIFT_LABEL[shift]
+  }
+
+  function pilihShift(shift: DayType) {
     const baru: AbsenHari = {
       id: uid(),
       employeeId,
@@ -112,15 +123,15 @@ export function Absen({
       status: recordStatus,
     }
     setData({ ...data, records: [...data.records, baru] })
-    toast('ok', `Shift ${SHIFT_LABEL[shift].toLowerCase()} dipilih`)
+    toast('ok', `${labelPilih(shift)} dipilih`)
   }
 
-  function gantiShift(shift: Shift) {
+  function gantiShift(shift: DayType) {
     if (!record) return
     if (record.events.length > 0) {
       if (
         !confirm(
-          'Sudah ada catatan event. Ganti shift akan menghapus semua catatan hari ini. Lanjutkan?',
+          'Sudah ada catatan event. Mengganti akan menghapus semua catatan hari ini. Lanjutkan?',
         )
       ) {
         return
@@ -134,14 +145,14 @@ export function Absen({
           : r,
       ),
     })
-    toast('info', `Diganti ke ${SHIFT_LABEL[shift].toLowerCase()}`)
+    toast('info', `Diganti ke ${labelPilih(shift).toLowerCase()}`)
     if (perluPersetujuanUlang) {
       toast('warn', 'Catatan diubah — perlu persetujuan ulang admin')
     }
   }
 
   function catatEvent(tipe: EventTipe) {
-    if (!record) return
+    if (!record || !isHariKerja(record.shift)) return
     const waktu = new Date().toISOString()
 
     // Auto-prompt: kalau klik pulang tapi belum ada catatan istirahat sama sekali
@@ -205,7 +216,8 @@ export function Absen({
   }
 
   function lewatiIstirahat(mulaiTipe: EventTipe) {
-    if (!record) return
+    if (!record || !isHariKerja(record.shift)) return
+    const shift = record.shift
     const selesaiTipe: EventTipe =
       mulaiTipe === 'istirahat-siang-mulai'
         ? 'istirahat-siang-selesai'
@@ -214,7 +226,7 @@ export function Absen({
     // ter-cap waktu hari ini; untuk hari ini pakai waktu sekarang.
     const stempel = (tipe: EventTipe) =>
       isManual
-        ? jadwalISO(tanggal, SHIFT_JADWAL[record.shift][tipe] ?? '00:00')
+        ? jadwalISO(tanggal, SHIFT_JADWAL[shift][tipe] ?? '00:00')
         : new Date().toISOString()
     const mulaiEv: AbsenEvent = {
       tipe: mulaiTipe,
@@ -248,7 +260,7 @@ export function Absen({
   }
 
   function bukaEdit(tipe: EventTipe) {
-    if (!record) return
+    if (!record || !isHariKerja(record.shift)) return
     const ev = getEvent(record, tipe)
     const jamDefault = ev
       ? formatJam(ev.waktu)
@@ -467,6 +479,11 @@ export function Absen({
 
       {!record ? (
         <ShiftPicker onPick={pilihShift} />
+      ) : !isHariKerja(record.shift) ? (
+        <section className="detail-card">
+          <ShiftBadge shift={record.shift} onChange={gantiShift} />
+          <CutiLiburInfo shift={record.shift} />
+        </section>
       ) : (
         <>
           <section className="detail-card">
@@ -600,7 +617,9 @@ export function Absen({
             <ol className="timeline-list">
               {SHIFT_URUTAN[record.shift].map((tipe) => {
                 const ev = getEvent(record, tipe)
-                const jadwal = SHIFT_JADWAL[record.shift][tipe] ?? ''
+                const jadwal = isHariKerja(record.shift)
+                  ? SHIFT_JADWAL[record.shift][tipe] ?? ''
+                  : ''
                 let info: {
                   label: string
                   tone: 'success' | 'danger' | 'warning' | 'muted'
@@ -731,12 +750,12 @@ export function Absen({
   )
 }
 
-function ShiftPicker({ onPick }: { onPick: (s: Shift) => void }) {
+function ShiftPicker({ onPick }: { onPick: (s: DayType) => void }) {
   return (
     <section className="detail-card">
       <h2>Pilih Shift Hari Ini</h2>
       <p className="timeline-help">
-        Pilih shift apa yang akan dijalani karyawan ini hari ini.
+        Pilih shift kerja, atau tandai hari ini sebagai cuti / libur studio.
       </p>
       <div className="shift-pick" style={{ marginTop: 12 }}>
         {SHIFT_LIST.map((s) => (
@@ -762,7 +781,51 @@ function ShiftPicker({ onPick }: { onPick: (s: Shift) => void }) {
           </button>
         ))}
       </div>
+
+      <div className="shift-pick-sep">atau tandai tidak bekerja</div>
+      <div className="shift-pick shift-pick--off">
+        {TIDAK_KERJA_LIST.map((s) => (
+          <button
+            key={s}
+            type="button"
+            className={`shift-opt shift-opt--${s}`}
+            onClick={() => onPick(s)}
+          >
+            <div className="so-emoji">{SHIFT_IKON[s]}</div>
+            <div className="so-name">{SHIFT_LABEL[s]}</div>
+            <div className="so-time">{SHIFT_RENTANG[s]}</div>
+            <div
+              style={{
+                fontSize: 11,
+                color: 'var(--ink-soft)',
+                marginTop: 6,
+                lineHeight: 1.4,
+              }}
+            >
+              {SHIFT_DESKRIPSI[s]}
+            </div>
+          </button>
+        ))}
+      </div>
     </section>
+  )
+}
+
+function CutiLiburInfo({ shift }: { shift: 'cuti' | 'libur' }) {
+  return (
+    <div className="next-action selesai">
+      <div className="next-label">
+        {SHIFT_IKON[shift]} Hari ini ditandai{' '}
+        <strong>{SHIFT_LABEL[shift]}</strong>
+      </div>
+      <div className="next-value">
+        {shift === 'cuti'
+          ? 'Cuti pribadi — jatah 2 hari/bulan tidak memotong gaji. Cuti ke-3 dan seterusnya memotong 1 hari kerja.'
+          : 'Studio tutup / libur bersama — gaji tetap penuh dan tidak memakai jatah cuti.'}{' '}
+        Tidak ada jam kerja yang perlu dicatat. Gunakan{' '}
+        <strong>Ganti shift</strong> di atas bila ingin mengubahnya.
+      </div>
+    </div>
   )
 }
 
@@ -770,8 +833,8 @@ function ShiftBadge({
   shift,
   onChange,
 }: {
-  shift: Shift
-  onChange: (s: Shift) => void
+  shift: DayType
+  onChange: (s: DayType) => void
 }) {
   const [showOpsi, setShowOpsi] = useState(false)
   const shiftCls = shift === 'full' ? 'penuh' : shift
@@ -792,7 +855,7 @@ function ShiftBadge({
       </button>
       {showOpsi && (
         <div className="shift-bar-opsi">
-          {SHIFT_LIST.filter((s) => s !== shift).map((s) => (
+          {DAY_TYPE_LIST.filter((s) => s !== shift).map((s) => (
             <button
               key={s}
               type="button"

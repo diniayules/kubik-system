@@ -1,6 +1,7 @@
 import type {
   AbsenHari,
   AppData,
+  DayType,
   Employee,
   HargaProduk,
   HargaTiket,
@@ -13,7 +14,6 @@ import type {
   ProdukDef,
   ProdukItem,
   SalahCetak,
-  Shift,
   Tinta,
   UpgradeDef,
   UpgradeItem,
@@ -236,12 +236,12 @@ function migrasiLaporan(l: Partial<LaporanIncome>): LaporanIncome {
   }
 }
 
-const VALID_SHIFTS: Shift[] = ['pagi', 'sore', 'full']
+const VALID_SHIFTS: DayType[] = ['pagi', 'sore', 'full', 'cuti', 'libur']
 
 function migrasiRecord(r: Partial<AbsenHari> & { shift?: unknown }): AbsenHari {
   const shift =
     typeof r.shift === 'string' && (VALID_SHIFTS as string[]).includes(r.shift)
-      ? (r.shift as Shift)
+      ? (r.shift as DayType)
       : 'full'
   return {
     id: r.id ?? Math.random().toString(36).slice(2),

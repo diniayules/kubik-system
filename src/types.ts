@@ -139,6 +139,13 @@ export type LaporanIncome = {
    * fitur ini (tidak memotong stok amplop).
    */
   amplopTerpakai?: number
+  /**
+   * Potongan harga (diskon) dalam Rupiah untuk laporan ini. Dikurangkan dari
+   * total income kotor (tiket + cetak + upgrade + produk). `undefined`/0 = tanpa
+   * potongan. Tidak memengaruhi bonus penjualan karyawan (yang dihitung per
+   * item, bukan dari nilai rupiah).
+   */
+  potonganHarga?: number
 }
 
 // ---------- Event (Photobooth & Photo Game) ----------
@@ -259,14 +266,9 @@ export type AppData = {
   headerSub?: string
   incomeJudul?: string
   incomeSub?: string
-  fontPair?: FontPair
-  fontSize?: FontSize
   brandKicker?: string
   brandName?: string
   dashJudul?: string
   dashSub?: string
-  tampilanAbsensi?: TampilanMode
-  tampilanInventaris?: TampilanMode
-  tampilanTinta?: TampilanMode
-  tampilanIncome?: TampilanMode
+  // Preferensi tampilan (fontPair, fontSize, tampilan*) per-perangkat — lihat lib/prefs.tsx.
 }

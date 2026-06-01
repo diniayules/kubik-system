@@ -28,6 +28,7 @@ import { Icons } from '../components/Icons'
 import { IncomeEntryModal } from './IncomeEntryModal'
 import { Modal } from '../components/Modal'
 import { useToast } from '../components/Toast'
+import { usePrefs } from '../lib/prefs'
 
 type Props = {
   data: AppData
@@ -125,7 +126,7 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
   const hariIni = todayKey()
   const judul = data.incomeJudul ?? DEFAULTS.incomeJudul
   const sub = data.incomeSub ?? DEFAULTS.incomeSub
-  const tampilan = data.tampilanIncome ?? 'card'
+  const tampilan = usePrefs().tampilanIncome
 
   const sorted = useMemo(
     () =>
@@ -357,6 +358,7 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
       // Total penjualan per karyawan (sudah termasuk tiket, cetak, upgrade &
       // produk/frame) — supaya kontribusi frame ikut terlihat di total tiap orang.
       ...karyawan.map((e) => `Total Penjualan ${e.nama}`),
+      'Potongan Harga',
       'Total Income',
       'Keterangan',
     ]
@@ -405,6 +407,7 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
       const perKar = ringkasanPerKaryawan(l)
       for (const emp of karyawan)
         cells.push(String(perKar[emp.id]?.total ?? 0))
+      cells.push(String(inc.potonganHarga))
       cells.push(String(inc.total), l.keterangan)
       return cells
     })
@@ -960,6 +963,15 @@ function IncomeRow({
             </div>
           ) : null,
         )}
+        {showMoney && inc.potonganHarga > 0 && (
+          <div className="income-breakdown-row">
+            <span>🏷️ Potongan harga</span>
+            <span className="income-breakdown-qty">diskon</span>
+            <span className="income-breakdown-val">
+              −{formatRupiah(inc.potonganHarga)}
+            </span>
+          </div>
+        )}
       </div>
 
       <div className="income-perkar">
@@ -1188,6 +1200,10 @@ function KalenderIncome({
 
     const vals = channelValues(lap)
     const segs = channels.filter((c) => (vals[c.key] ?? 0) > 0)
+    // Segmen warna mewakili income KOTOR per channel, jadi proporsinya dibagi
+    // jumlah kotor (bukan `total` yang sudah dipotong diskon) agar pas mengisi
+    // batang.
+    const grossSegTotal = segs.reduce((s, c) => s + (vals[c.key] ?? 0), 0) || 1
     const barH = total > 0 ? Math.max(18, Math.round((total / maxBulan) * 100)) : 0
 
     cells.push(
@@ -1219,7 +1235,7 @@ function KalenderIncome({
                 key={c.key}
                 className="kal-seg"
                 style={{
-                  height: `${((vals[c.key] ?? 0) / total) * 100}%`,
+                  height: `${((vals[c.key] ?? 0) / grossSegTotal) * 100}%`,
                   background: c.color,
                 }}
               />
@@ -1241,6 +1257,15 @@ function KalenderIncome({
               <span className="kal-tip-val">{formatRupiah(vals[c.key] ?? 0)}</span>
             </div>
           ))}
+          {(lap.potonganHarga ?? 0) > 0 && (
+            <div className="kal-tip-row">
+              <span className="kal-tip-sw" style={{ background: 'transparent' }} />
+              <span className="kal-tip-lbl">🏷️ Potongan harga</span>
+              <span className="kal-tip-val">
+                −{formatRupiah(lap.potonganHarga ?? 0)}
+              </span>
+            </div>
+          )}
           <div className="kal-tip-hint">
             {bisaHover ? 'Klik untuk laporan lengkap →' : 'Tap lagi untuk laporan lengkap →'}
           </div>

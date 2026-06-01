@@ -167,6 +167,11 @@ export type IncomeBreakdown = {
   incomeUpgradePerTipe: Record<string, number>
   incomeProduk: number
   incomeProdukPerTipe: Record<string, number>
+  /** Total income KOTOR sebelum potongan harga. */
+  subtotal: number
+  /** Potongan harga (diskon) dalam Rupiah. */
+  potonganHarga: number
+  /** Total income BERSIH = subtotal − potonganHarga. */
   total: number
 }
 
@@ -200,6 +205,13 @@ export function hitungIncome(laporan: LaporanIncome): IncomeBreakdown {
     incomeProduk += val
   }
 
+  const subtotal = incomeTiket + incomeCetak + incomeUpgrade + incomeProduk
+  // Potongan dibatasi agar tidak melebihi subtotal (total tidak pernah negatif).
+  const potonganHarga = Math.min(
+    Math.max(0, laporan.potonganHarga ?? 0),
+    subtotal,
+  )
+
   return {
     incomeTiket,
     incomeTiketPerLayanan,
@@ -208,7 +220,9 @@ export function hitungIncome(laporan: LaporanIncome): IncomeBreakdown {
     incomeUpgradePerTipe,
     incomeProduk,
     incomeProdukPerTipe,
-    total: incomeTiket + incomeCetak + incomeUpgrade + incomeProduk,
+    subtotal,
+    potonganHarga,
+    total: subtotal - potonganHarga,
   }
 }
 

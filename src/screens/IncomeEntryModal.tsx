@@ -205,6 +205,10 @@ export function IncomeEntryModal({
   const [amplopInput, setAmplopInput] = useState<number>(
     existing?.amplopTerpakai ?? 0,
   )
+  // Potongan harga (diskon) dalam Rupiah — dikurangkan dari total income.
+  const [potonganHarga, setPotonganHarga] = useState<number>(
+    existing?.potonganHarga ?? 0,
+  )
 
   // Price snapshot. Keep the laporan's historic prices for items it already
   // had, but fall back to the current catalog price for any item without a
@@ -242,6 +246,7 @@ export function IncomeEntryModal({
     hargaProduk,
     pemakaianKertas,
     amplopTerpakai,
+    potonganHarga,
   }
   const inc = hitungIncome(previewLaporan)
   const tiketPerLayanan = totalTiketPerLayanan(items)
@@ -365,6 +370,7 @@ export function IncomeEntryModal({
       hargaProduk,
       pemakaianKertas,
       amplopTerpakai,
+      potonganHarga: Math.max(0, Math.floor(potonganHarga || 0)),
     }
     onSave(laporan)
   }
@@ -480,6 +486,42 @@ export function IncomeEntryModal({
               </div>
             )}
           </>
+        )}
+
+        {showMoney && (
+          <div className="field">
+            <label>
+              Potongan harga (Rp){' '}
+              <span className="form-hint" style={{ fontWeight: 500 }}>
+                — diskon, dikurangkan dari total income
+              </span>
+            </label>
+            <input
+              type="number"
+              inputMode="numeric"
+              min={0}
+              step={1000}
+              value={potonganHarga === 0 ? '' : String(potonganHarga)}
+              placeholder="0"
+              onChange={(e) =>
+                setPotonganHarga(Math.max(0, parseInt(e.target.value, 10) || 0))
+              }
+              style={{
+                width: '100%',
+                padding: '13px 15px',
+                borderRadius: 'var(--radius-sm)',
+                border: '1.8px solid var(--line)',
+                background: 'var(--surface-2)',
+                color: 'var(--ink)',
+                fontSize: 15,
+                fontWeight: 600,
+              }}
+            />
+            <div className="form-hint">
+              Mis. diskon promo atau potongan khusus customer. Tidak memengaruhi
+              bonus penjualan karyawan.
+            </div>
+          </div>
         )}
 
         <div className="upgrade-section">
@@ -753,6 +795,14 @@ export function IncomeEntryModal({
                 </span>
               </div>
             ) : null,
+          )}
+          {inc.potonganHarga > 0 && (
+            <div className="income-total-row">
+              <span>🏷️ Potongan harga</span>
+              <span className="income-total-val">
+                −{formatRupiah(inc.potonganHarga)}
+              </span>
+            </div>
           )}
           <div className="income-total-row income-total-grand">
             <span>TOTAL INCOME</span>

@@ -233,6 +233,10 @@ function migrasiLaporan(l: Partial<LaporanIncome>): LaporanIncome {
       typeof l.hargaCetak === 'number' ? l.hargaCetak : HARGA_CETAK_DEFAULT,
     hargaUpgrade: normalizeHargaUpgrade(l.hargaUpgrade),
     hargaProduk: normalizeHargaProduk(l.hargaProduk),
+    potonganHarga:
+      typeof l.potonganHarga === 'number' && l.potonganHarga > 0
+        ? l.potonganHarga
+        : 0,
   }
 }
 
@@ -338,21 +342,6 @@ export function loadData(): AppData {
         typeof parsed.incomeJudul === 'string' ? parsed.incomeJudul : undefined,
       incomeSub:
         typeof parsed.incomeSub === 'string' ? parsed.incomeSub : undefined,
-      fontPair:
-        parsed.fontPair === 'playful' ||
-        parsed.fontPair === 'editorial' ||
-        parsed.fontPair === 'modern' ||
-        parsed.fontPair === 'minimal' ||
-        parsed.fontPair === 'oui'
-          ? parsed.fontPair
-          : undefined,
-      fontSize:
-        parsed.fontSize === 'small' ||
-        parsed.fontSize === 'normal' ||
-        parsed.fontSize === 'large' ||
-        parsed.fontSize === 'xlarge'
-          ? parsed.fontSize
-          : undefined,
       brandKicker:
         typeof parsed.brandKicker === 'string' ? parsed.brandKicker : undefined,
       brandName:
@@ -361,23 +350,6 @@ export function loadData(): AppData {
         typeof parsed.dashJudul === 'string' ? parsed.dashJudul : undefined,
       dashSub:
         typeof parsed.dashSub === 'string' ? parsed.dashSub : undefined,
-      tampilanAbsensi:
-        parsed.tampilanAbsensi === 'card' || parsed.tampilanAbsensi === 'list'
-          ? parsed.tampilanAbsensi
-          : undefined,
-      tampilanInventaris:
-        parsed.tampilanInventaris === 'card' ||
-        parsed.tampilanInventaris === 'list'
-          ? parsed.tampilanInventaris
-          : undefined,
-      tampilanTinta:
-        parsed.tampilanTinta === 'card' || parsed.tampilanTinta === 'list'
-          ? parsed.tampilanTinta
-          : undefined,
-      tampilanIncome:
-        parsed.tampilanIncome === 'card' || parsed.tampilanIncome === 'list'
-          ? parsed.tampilanIncome
-          : undefined,
     }
   } catch {
     return structuredClone(EMPTY)

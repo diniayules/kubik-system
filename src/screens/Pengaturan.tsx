@@ -11,6 +11,7 @@ import { ThemeSwitcher, type Theme } from '../components/ThemeSwitcher'
 import { Icons } from '../components/Icons'
 import { useToast } from '../components/Toast'
 import { useLang, type Lang } from '../i18n'
+import { usePrefs, setPref, resetPrefs } from '../lib/prefs'
 
 type Props = {
   data: AppData
@@ -29,14 +30,16 @@ export function Pengaturan({
 }: Props) {
   const toast = useToast()
   const { lang, setLang, t } = useLang()
+  const prefs = usePrefs()
 
   function changeLang(l: Lang) {
     setLang(l)
     toast('ok', l === 'id' ? 'Bahasa diubah ke Indonesia' : 'Language changed to English')
   }
 
-  const fontPair: FontPair = data.fontPair ?? 'playful'
-  const fontSize: FontSize = data.fontSize ?? 'normal'
+  // Preferensi tampilan disimpan per-perangkat (localStorage), tidak ikut data bersama.
+  const fontPair: FontPair = prefs.fontPair
+  const fontSize: FontSize = prefs.fontSize
 
   // Local draft for text fields so user can edit + simpan
   const [brandKicker, setBrandKicker] = useState(
@@ -63,12 +66,12 @@ export function Pengaturan({
   )
 
   function setFontPair(p: FontPair) {
-    setData({ ...data, fontPair: p })
+    setPref('fontPair', p)
     toast('ok', `Font diubah ke ${FONT_PAIRS[p].label}`)
   }
 
   function setFontSize(s: FontSize) {
-    setData({ ...data, fontSize: s })
+    setPref('fontSize', s)
     toast('ok', `Ukuran teks ${FONT_SIZE_META[s].label}`)
   }
 
@@ -111,41 +114,33 @@ export function Pengaturan({
   }
 
   function resetTampilan() {
-    setData({
-      ...data,
-      fontPair: undefined,
-      fontSize: undefined,
-      tampilanAbsensi: undefined,
-      tampilanInventaris: undefined,
-      tampilanTinta: undefined,
-      tampilanIncome: undefined,
-    })
+    resetPrefs()
     onChangeTheme('pop')
     toast('info', 'Tampilan dikembalikan ke default')
   }
 
   function setTampilanAbsensi(m: TampilanMode) {
-    setData({ ...data, tampilanAbsensi: m })
+    setPref('tampilanAbsensi', m)
     toast('ok', `Absensi: tampilan ${m === 'card' ? 'kartu' : 'list'}`)
   }
   function setTampilanInventaris(m: TampilanMode) {
-    setData({ ...data, tampilanInventaris: m })
+    setPref('tampilanInventaris', m)
     toast('ok', `Inventaris: tampilan ${m === 'card' ? 'kartu' : 'list'}`)
   }
   function setTampilanTinta(m: TampilanMode) {
-    setData({ ...data, tampilanTinta: m })
+    setPref('tampilanTinta', m)
     toast('ok', `Stok tinta: tampilan ${m === 'card' ? 'kartu' : 'list'}`)
   }
   function setTampilanIncome(m: TampilanMode) {
-    setData({ ...data, tampilanIncome: m })
+    setPref('tampilanIncome', m)
     const nama =
       m === 'card' ? 'kartu' : m === 'kalender' ? 'kalender' : 'list'
     toast('ok', `Laporan income: tampilan ${nama}`)
   }
-  const tampilanAbsensi = data.tampilanAbsensi ?? 'card'
-  const tampilanInventaris = data.tampilanInventaris ?? 'card'
-  const tampilanTinta = data.tampilanTinta ?? 'card'
-  const tampilanIncome = data.tampilanIncome ?? 'card'
+  const tampilanAbsensi = prefs.tampilanAbsensi
+  const tampilanInventaris = prefs.tampilanInventaris
+  const tampilanTinta = prefs.tampilanTinta
+  const tampilanIncome = prefs.tampilanIncome
 
   return (
     <>

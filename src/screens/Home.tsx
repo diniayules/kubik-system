@@ -20,6 +20,7 @@ import {
 import { Avatar, colorIndexForName } from '../components/Avatar'
 import { Icons } from '../components/Icons'
 import { DEFAULTS } from '../appearance'
+import { usePrefs } from '../lib/prefs'
 
 type Props = {
   data: AppData
@@ -50,7 +51,7 @@ export function Home({
 }: Props) {
   const hariIni = todayKey()
   const tanggalLabel = formatTanggalPanjang(hariIni)
-  const tampilan = data.tampilanAbsensi ?? 'card'
+  const tampilan = usePrefs().tampilanAbsensi
 
   const judul = data.headerJudul ?? DEFAULTS.headerJudul
   const sub = data.headerSub ?? DEFAULTS.headerSub

@@ -2,12 +2,12 @@
 // db.ts · Supabase data layer for the AppData model.
 //
 // fetchAppData()    -> assemble the full AppData object from Supabase
-//                      (DB-backed slices) + device-local UI prefs.
+//                      (DB-backed slices).
 // persistChanges()  -> diff prev vs next AppData and write only the
 //                      slices that changed (write-through `setData`).
 //
-// Device-local UI prefs (font, size, tampilan*) stay in localStorage —
-// they are per-device, not per-account. Theme is handled in App.tsx.
+// Device-local UI prefs (font, size, tampilan*) and theme are per-device,
+// not per-account — handled separately in lib/prefs.tsx + App.tsx.
 // =============================================================
 import { supabase } from './supabase'
 import type {
@@ -45,32 +45,6 @@ import {
 } from '../income'
 import { WARNA_TINTA_LIST } from '../inventory'
 
-// ---------- device-local UI prefs ----------
-const PREFS_KEY = 'kubik-ui-prefs:v1'
-
-export type UiPrefs = Pick<
-  AppData,
-  | 'fontPair'
-  | 'fontSize'
-  | 'tampilanAbsensi'
-  | 'tampilanInventaris'
-  | 'tampilanTinta'
->
-
-export function loadPrefs(): UiPrefs {
-  try {
-    const raw = localStorage.getItem(PREFS_KEY)
-    if (!raw) return {}
-    return JSON.parse(raw) as UiPrefs
-  } catch {
-    return {}
-  }
-}
-
-export function savePrefs(p: UiPrefs): void {
-  localStorage.setItem(PREFS_KEY, JSON.stringify(p))
-}
-
 // ---------- row types (snake_case, as stored) ----------
 type ProfileRow = {
   id: string
@@ -101,6 +75,7 @@ type LaporanRow = {
   kertas_id: string | null
   amplop_terpakai: number | null
   pemakaian_kertas: { kertasId: string; jumlah: number }[] | null
+  potongan_harga: number | null
 }
 type EventRow = {
   id: string
@@ -190,7 +165,7 @@ export async function fetchAppData(): Promise<AppData> {
     supabase
       .from('laporan_income')
       .select(
-        'id, tanggal, items, upgrades, produk, keterangan, harga_tiket, harga_cetak, harga_upgrade, harga_produk, kertas_id, amplop_terpakai, pemakaian_kertas',
+        'id, tanggal, items, upgrades, produk, keterangan, harga_tiket, harga_cetak, harga_upgrade, harga_produk, kertas_id, amplop_terpakai, pemakaian_kertas, potongan_harga',
       ),
     supabase
       .from('laporan_event')
@@ -271,6 +246,7 @@ export async function fetchAppData(): Promise<AppData> {
       hargaProduk: l.harga_produk ?? {},
       pemakaianKertas,
       amplopTerpakai: l.amplop_terpakai ?? undefined,
+      potonganHarga: l.potongan_harga ?? 0,
     }
   })
 
@@ -326,8 +302,6 @@ export async function fetchAppData(): Promise<AppData> {
     alasan: s.alasan ?? '',
   }))
 
-  const prefs = loadPrefs()
-
   return {
     employees,
     inactiveEmployees,
@@ -365,7 +339,6 @@ export async function fetchAppData(): Promise<AppData> {
     headerSub: config?.header_sub ?? undefined,
     incomeJudul: config?.income_judul ?? undefined,
     incomeSub: config?.income_sub ?? undefined,
-    ...prefs,
   }
 }
 
@@ -380,23 +353,6 @@ export async function persistChanges(
   userId: string,
 ): Promise<void> {
   const jobs: Promise<unknown>[] = []
-
-  // ---- device-local UI prefs ----
-  const prevPrefs: UiPrefs = {
-    fontPair: prev.fontPair,
-    fontSize: prev.fontSize,
-    tampilanAbsensi: prev.tampilanAbsensi,
-    tampilanInventaris: prev.tampilanInventaris,
-    tampilanTinta: prev.tampilanTinta,
-  }
-  const nextPrefs: UiPrefs = {
-    fontPair: next.fontPair,
-    fontSize: next.fontSize,
-    tampilanAbsensi: next.tampilanAbsensi,
-    tampilanInventaris: next.tampilanInventaris,
-    tampilanTinta: next.tampilanTinta,
-  }
-  if (!eq(prevPrefs, nextPrefs)) savePrefs(nextPrefs)
 
   // ---- absen_records (own rows for karyawan; all for admin via RLS) ----
   syncRows(
@@ -438,6 +394,7 @@ export async function persistChanges(
       kertas_id: null,
       pemakaian_kertas: l.pemakaianKertas ?? [],
       amplop_terpakai: l.amplopTerpakai ?? null,
+      potongan_harga: l.potonganHarga ?? 0,
     }),
     userId,
   )

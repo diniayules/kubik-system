@@ -34,7 +34,8 @@ const NAV_ITEMS: Item[] = [
   // Event: tiap kategori jadi menu sendiri (halaman penuh, tanpa sub-tab).
   { id: 'event-photobooth', label: 'Photobooth', icon: Icons.camera, group: 'Event' },
   { id: 'event-game', label: 'Photo Game', icon: Icons.camera, group: 'Event' },
-  { id: 'pengaturan', label: 'Pengaturan', icon: Icons.lock, group: 'Sistem', adminOnly: true },
+  // Karyawan juga boleh buka Pengaturan — bagian Teks & Branding tetap admin-only (difilter di layar).
+  { id: 'pengaturan', label: 'Pengaturan', icon: Icons.lock, group: 'Sistem' },
 ]
 
 type Props = {

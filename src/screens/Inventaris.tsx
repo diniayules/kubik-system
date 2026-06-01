@@ -17,6 +17,7 @@ import { Icons } from '../components/Icons'
 import { Modal, ModalHead } from '../components/Modal'
 import { useToast } from '../components/Toast'
 import { catatSalahCetakRpc, hapusSalahCetakRpc } from '../lib/db'
+import { usePrefs } from '../lib/prefs'
 
 void KATEGORI_PENGELUARAN_SUGGEST
 
@@ -39,8 +40,9 @@ type DialogState =
 export function Inventaris({ data, setData, reload, canEdit }: Props) {
   const toast = useToast()
   const [dialog, setDialog] = useState<DialogState>(null)
-  const tampilan = data.tampilanInventaris ?? 'card'
-  const tampilanTinta = data.tampilanTinta ?? 'card'
+  const prefs = usePrefs()
+  const tampilan = prefs.tampilanInventaris
+  const tampilanTinta = prefs.tampilanTinta
 
   const salahCetakBulan = jumlahSalahCetakBulanIni(data.salahCetak)
   const salahCetakSorted = useMemo(

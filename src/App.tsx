@@ -19,6 +19,7 @@ import { DEFAULTS, applyAppearance } from './appearance'
 import { AuthProvider, useAuth } from './lib/auth'
 import { LangProvider, useLang } from './i18n'
 import { useAppData } from './lib/useAppData'
+import { usePrefs } from './lib/prefs'
 import { setEmployeeActive } from './lib/db'
 import { supabaseConfigured } from './lib/supabase'
 import './App.css'
@@ -59,6 +60,7 @@ function Inner() {
   const [screen, setScreen] = useState<Screen>({ name: 'landing' })
   const [theme, setTheme] = useState<Theme>(() => loadTheme())
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const prefs = usePrefs()
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme
@@ -66,14 +68,15 @@ function Inner() {
   }, [theme])
 
   useEffect(() => {
-    applyAppearance(data?.fontPair, data?.fontSize)
-  }, [data?.fontPair, data?.fontSize])
+    applyAppearance(prefs.fontPair, prefs.fontSize)
+  }, [prefs.fontPair, prefs.fontSize])
 
-  // Restrict karyawan dari screen yang tidak diizinkan
+  // Restrict karyawan dari screen yang tidak diizinkan.
+  // Pengaturan kini terbuka untuk karyawan (bagian sensitif difilter di dalam layar).
   useEffect(() => {
     if (!auth.profile) return
     if (auth.isAdmin) return
-    const forbidden = ['pengaturan']
+    const forbidden: Screen['name'][] = []
     if (forbidden.includes(screen.name)) {
       setScreen({ name: 'landing' })
     }

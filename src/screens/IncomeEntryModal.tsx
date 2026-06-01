@@ -488,8 +488,10 @@ export function IncomeEntryModal({
           </>
         )}
 
-        {showMoney && (
-          <div className="field">
+        {/* Potongan harga bisa diisi siapa pun yang menginput laporan (termasuk
+            karyawan), karena diskon adalah bagian dari transaksi penjualan —
+            bukan nominal income yang disembunyikan dari karyawan. */}
+        <div className="field">
             <label>
               Potongan harga (Rp){' '}
               <span className="form-hint" style={{ fontWeight: 500 }}>
@@ -521,8 +523,7 @@ export function IncomeEntryModal({
               Mis. diskon promo atau potongan khusus customer. Tidak memengaruhi
               bonus penjualan karyawan.
             </div>
-          </div>
-        )}
+        </div>
 
         <div className="upgrade-section">
           <div className="upgrade-section-head">

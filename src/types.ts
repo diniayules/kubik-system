@@ -204,6 +204,18 @@ export type JenisKertas = {
   stok: number
 }
 
+/**
+ * Stok frame foto. Persis seperti `JenisKertas`: beberapa jenis bernama, tiap
+ * jenis punya stok sendiri. Berkurang otomatis saat produk dengan NAMA yang
+ * sama terjual di laporan income (pencocokan lewat nama, sama seperti upgrade →
+ * kertas), lihat `hitungPemakaianStok`.
+ */
+export type JenisFrame = {
+  id: string
+  nama: string
+  stok: number
+}
+
 export type Tinta = {
   warna: WarnaTinta
   stok: number
@@ -266,6 +278,11 @@ export type AppData = {
    */
   gajiDibayar: Record<string, boolean>
   stokKertas: JenisKertas[]
+  /**
+   * Stok frame foto (berbagai jenis). Berkurang otomatis saat produk dengan nama
+   * yang sama terjual di laporan income. Lihat [JenisFrame].
+   */
+  stokFrame: JenisFrame[]
   stokTinta: Tinta[]
   stokAmplop: number
   salahCetak: SalahCetak[]

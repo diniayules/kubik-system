@@ -290,9 +290,6 @@ export function GajiKaryawan({ data, setData, isAdmin, currentUserId }: Props) {
   )
 }
 
-// Lebar kertas printer thermal (roll). Ganti ke 80 bila pakai printer 80mm.
-const THERMAL_WIDTH_MM = 58
-
 function SlipCard({
   empId,
   nama,
@@ -328,27 +325,11 @@ function SlipCard({
     if (v !== slip.gajiPokok) onGajiPokok(v)
   }
 
-  function handlePrint(mode: 'a4' | 'thermal' = 'a4') {
+  function handlePrint() {
     const node = document.querySelector(`[data-slip-id="${empId}"]`)
     if (!node) return
     node.classList.add('is-printing')
-    if (mode === 'thermal') node.classList.add('is-printing-thermal')
-
-    // `@page { size }` tidak bisa di-scope lewat selector/class, jadi untuk
-    // mode thermal kita suntik aturan @page dinamis (lebar roll) saat print
-    // lalu cabut lagi setelah selesai. A4 tetap pakai aturan default di CSS.
-    let pageStyle: HTMLStyleElement | null = null
-    if (mode === 'thermal') {
-      pageStyle = document.createElement('style')
-      pageStyle.textContent = `@page { size: ${THERMAL_WIDTH_MM}mm auto; margin: 3mm; }`
-      document.head.appendChild(pageStyle)
-    }
-
-    const cleanup = () => {
-      node.classList.remove('is-printing', 'is-printing-thermal')
-      pageStyle?.remove()
-      pageStyle = null
-    }
+    const cleanup = () => node.classList.remove('is-printing')
     window.addEventListener('afterprint', cleanup, { once: true })
     setTimeout(() => window.print(), 40)
     setTimeout(cleanup, 4000)
@@ -366,6 +347,14 @@ function SlipCard({
       <div className="gaji-print-head">
         <img className="gaji-print-logo" src={`${import.meta.env.BASE_URL}kubik-logo.png`} alt="Kubik" />
         <div className="gaji-print-title">{printTitle}</div>
+      </div>
+
+      {/* Watermark status pembayaran — transparan, hanya muncul saat di-print */}
+      <div
+        className={`gaji-print-watermark ${dibayar ? 'is-paid' : 'is-unpaid'}`}
+        aria-hidden="true"
+      >
+        {dibayar ? 'TELAH DIBAYAR' : 'BELUM DIBAYAR'}
       </div>
 
       <div className="gaji-card-head">
@@ -513,20 +502,9 @@ function SlipCard({
         </div>
       )}
 
-      <div className="gaji-card-actions gaji-print-actions">
-        <button
-          type="button"
-          className="btn btn--ghost"
-          onClick={() => handlePrint('a4')}
-        >
-          <Icons.printer /> Print A4
-        </button>
-        <button
-          type="button"
-          className="btn btn--ghost"
-          onClick={() => handlePrint('thermal')}
-        >
-          <Icons.printer /> Print thermal
+      <div className="gaji-card-actions">
+        <button type="button" className="btn btn--ghost" onClick={handlePrint}>
+          <Icons.printer /> Print slip
         </button>
       </div>
     </div>

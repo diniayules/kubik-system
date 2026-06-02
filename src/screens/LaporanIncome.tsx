@@ -181,19 +181,33 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
       }
     }
 
-    // Sesuaikan stok kertas & amplop: potong pemakaian baru, kembalikan lama.
-    const pakaiBaru = hitungPemakaianStok(l, data.stokKertas, data.upgradeCatalog)
+    // Sesuaikan stok kertas, amplop & frame: potong pemakaian baru, kembalikan
+    // lama (frame ikut terpotong dari produk yang namanya cocok).
+    const pakaiBaru = hitungPemakaianStok(
+      l,
+      data.stokKertas,
+      data.upgradeCatalog,
+      data.produkCatalog,
+      data.stokFrame,
+    )
     const pakaiLama = lama
-      ? hitungPemakaianStok(lama, data.stokKertas, data.upgradeCatalog)
+      ? hitungPemakaianStok(
+          lama,
+          data.stokKertas,
+          data.upgradeCatalog,
+          data.produkCatalog,
+          data.stokFrame,
+        )
       : null
-    const { stokKertas, stokAmplop, kurang } = terapkanPemakaianStok(
+    const { stokKertas, stokAmplop, stokFrame, kurang } = terapkanPemakaianStok(
       data.stokKertas,
       data.stokAmplop,
+      data.stokFrame,
       pakaiBaru,
       pakaiLama,
     )
 
-    setData({ ...data, laporanIncome: baru, stokKertas, stokAmplop })
+    setData({ ...data, laporanIncome: baru, stokKertas, stokAmplop, stokFrame })
     toast('ok', `Laporan ${l.tanggal} disimpan`)
     if (kurang) {
       toast('warn', 'Stok tidak cukup — sebagian dipotong sampai 0')
@@ -204,11 +218,18 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
 
   function hapusLaporan(l: Laporan) {
     if (!confirm(`Hapus laporan tanggal ${l.tanggal}? Stok dikembalikan.`)) return
-    // Kembalikan stok yang dulu dipotong laporan ini.
-    const pakai = hitungPemakaianStok(l, data.stokKertas, data.upgradeCatalog)
-    const { stokKertas, stokAmplop } = terapkanPemakaianStok(
+    // Kembalikan stok yang dulu dipotong laporan ini (kertas, amplop & frame).
+    const pakai = hitungPemakaianStok(
+      l,
+      data.stokKertas,
+      data.upgradeCatalog,
+      data.produkCatalog,
+      data.stokFrame,
+    )
+    const { stokKertas, stokAmplop, stokFrame } = terapkanPemakaianStok(
       data.stokKertas,
       data.stokAmplop,
+      data.stokFrame,
       null,
       pakai,
     )
@@ -217,6 +238,7 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
       laporanIncome: data.laporanIncome.filter((x) => x.id !== l.id),
       stokKertas,
       stokAmplop,
+      stokFrame,
     })
     toast('warn', `Laporan ${l.tanggal} dihapus`)
   }

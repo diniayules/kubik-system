@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import type { CSSProperties } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 import type {
   AppData,
   IncomeItem,
@@ -259,10 +259,51 @@ export function IncomeEntryModal({
     previewLaporan,
     data.stokKertas,
     data.upgradeCatalog,
+    data.produkCatalog,
+    data.stokFrame,
   )
   const kertasTerpotong = data.stokKertas
     .map((k) => ({ k, jumlah: pemakaian.kertas[k.id] ?? 0 }))
     .filter((x) => x.jumlah > 0)
+  const frameTerpotong = data.stokFrame
+    .map((f) => ({ f, jumlah: pemakaian.frame[f.id] ?? 0 }))
+    .filter((x) => x.jumlah > 0)
+
+  // --- Ringkasan 1-baris untuk header section saat terlipat (accordion) ---
+  const totalUpgradeQty = Object.values(upgradePerTipe).reduce((s, n) => s + n, 0)
+  const totalProdukQty = Object.values(produkPerTipe).reduce((s, n) => s + n, 0)
+  const totalKertasPotong = kertasTerpotong.reduce((s, x) => s + x.jumlah, 0)
+  const totalFramePotong = frameTerpotong.reduce((s, x) => s + x.jumlah, 0)
+  const upgradeSummary =
+    totalUpgradeQty > 0 ? `${totalUpgradeQty} item` : 'Ketuk untuk isi'
+  const produkSummary =
+    totalProdukQty > 0 ? `${totalProdukQty} item` : 'Ketuk untuk isi'
+  const stokSummary =
+    [
+      totalKertasPotong > 0 ? `${totalKertasPotong} lembar kertas` : null,
+      amplopTerpakai > 0 ? `${amplopTerpakai} amplop` : null,
+      totalFramePotong > 0 ? `${totalFramePotong} frame` : null,
+    ]
+      .filter(Boolean)
+      .join(' · ') || 'Otomatis dari tiket & produk'
+  const lainSummary =
+    [
+      potonganHarga > 0 ? `diskon ${formatRupiah(potonganHarga)}` : null,
+      keterangan.trim() ? 'ada catatan' : null,
+    ]
+      .filter(Boolean)
+      .join(' · ') || 'Opsional'
+
+  // Section yang dibuka otomatis saat edit kalau laporannya sudah punya isi,
+  // supaya data lama tidak tersembunyi. Dihitung sekali dari `existing`.
+  const upgradeDefaultOpen = !!existing?.upgrades?.some((u) => u.jumlah > 0)
+  const produkDefaultOpen = !!existing?.produk?.some((p) => p.jumlah > 0)
+  const stokDefaultOpen =
+    !!existing &&
+    (existing.amplopTerpakai != null ||
+      (existing.pemakaianKertas?.length ?? 0) > 1)
+  const lainDefaultOpen =
+    (existing?.potonganHarga ?? 0) > 0 || !!existing?.keterangan?.trim()
 
   function setItem(
     layanan: string,
@@ -418,31 +459,33 @@ export function IncomeEntryModal({
           </div>
         ) : (
           <>
-            {layananList.map((def) => (
-              <ItemGroup
-                key={def.id}
-                title={def.label}
-                ikon={def.ikon}
-                hargaTiket={hargaTiket[def.id] ?? 0}
-                hargaCetak={hargaCetak}
-                showMoney={showMoney}
-                employees={employees}
-                isLocked={isLocked}
-                getValue={(empId, k) => get(def.id, empId)?.[k] ?? 0}
-                onChange={(empId, k, v) => setItem(def.id, empId, k, v)}
-              />
-            ))}
+            <Section
+              ikon="📸"
+              title="Layanan (tiket & cetak)"
+              defaultOpen
+            >
+              {layananList.map((def) => (
+                <ItemGroup
+                  key={def.id}
+                  title={def.label}
+                  ikon={def.ikon}
+                  hargaTiket={hargaTiket[def.id] ?? 0}
+                  hargaCetak={hargaCetak}
+                  showMoney={showMoney}
+                  employees={employees}
+                  isLocked={isLocked}
+                  getValue={(empId, k) => get(def.id, empId)?.[k] ?? 0}
+                  onChange={(empId, k, v) => setItem(def.id, empId, k, v)}
+                />
+              ))}
+            </Section>
 
-            <div className="upgrade-section">
-              <div className="upgrade-section-head">
-                <span className="upgrade-section-ikon">🎨</span>
-                <div>
-                  <div className="upgrade-section-judul">Upgrade Cetak</div>
-                  <div className="upgrade-section-sub">
-                    Tambahan cetak premium per karyawan
-                  </div>
-                </div>
-              </div>
+            <Section
+              ikon="🎨"
+              title="Upgrade Cetak"
+              summary={upgradeSummary}
+              defaultOpen={upgradeDefaultOpen}
+            >
               {upgradeList.map((def) => (
                 <UpgradeGroup
                   key={def.id}
@@ -456,20 +499,15 @@ export function IncomeEntryModal({
                   onChange={(empId, v) => setUpgrade(def.id, empId, v)}
                 />
               ))}
-            </div>
+            </Section>
 
             {produkList.length > 0 && (
-              <div className="upgrade-section">
-                <div className="upgrade-section-head">
-                  <span className="upgrade-section-ikon">🛍️</span>
-                  <div>
-                    <div className="upgrade-section-judul">Produk</div>
-                    <div className="upgrade-section-sub">
-                      Merchandise &amp; produk lain (frame foto, t-shirt, …) per
-                      karyawan
-                    </div>
-                  </div>
-                </div>
+              <Section
+                ikon="🛍️"
+                title="Produk / Frame"
+                summary={produkSummary}
+                defaultOpen={produkDefaultOpen}
+              >
                 {produkList.map((def) => (
                   <UpgradeGroup
                     key={def.id}
@@ -483,59 +521,22 @@ export function IncomeEntryModal({
                     onChange={(empId, v) => setProdukJumlah(def.id, empId, v)}
                   />
                 ))}
-              </div>
+              </Section>
             )}
           </>
         )}
 
-        {/* Potongan harga bisa diisi siapa pun yang menginput laporan (termasuk
-            karyawan), karena diskon adalah bagian dari transaksi penjualan —
-            bukan nominal income yang disembunyikan dari karyawan. */}
-        <div className="field">
-            <label>
-              Potongan harga (Rp){' '}
-              <span className="form-hint" style={{ fontWeight: 500 }}>
-                — diskon, dikurangkan dari total income
-              </span>
-            </label>
-            <input
-              type="number"
-              inputMode="numeric"
-              min={0}
-              step={1000}
-              value={potonganHarga === 0 ? '' : String(potonganHarga)}
-              placeholder="0"
-              onChange={(e) =>
-                setPotonganHarga(Math.max(0, parseInt(e.target.value, 10) || 0))
-              }
-              style={{
-                width: '100%',
-                padding: '13px 15px',
-                borderRadius: 'var(--radius-sm)',
-                border: '1.8px solid var(--line)',
-                background: 'var(--surface-2)',
-                color: 'var(--ink)',
-                fontSize: 15,
-                fontWeight: 600,
-              }}
-            />
-            <div className="form-hint">
-              Mis. diskon promo atau potongan khusus customer. Tidak memengaruhi
-              bonus penjualan karyawan.
-            </div>
-        </div>
-
-        <div className="upgrade-section">
-          <div className="upgrade-section-head">
-            <span className="upgrade-section-ikon">📦</span>
-            <div>
-              <div className="upgrade-section-judul">Pemakaian Stok</div>
-              <div className="upgrade-section-sub">
-                Tiket &amp; tambahan cetak memotong kertas; tiap tiket dapat 1
-                amplop. Upgrade (Poster / Crack n Share) tidak pakai amplop. Stok
-                berkurang otomatis saat laporan disimpan.
-              </div>
-            </div>
+        <Section
+          ikon="📦"
+          title="Pemakaian Stok"
+          summary={stokSummary}
+          defaultOpen={stokDefaultOpen}
+        >
+          <div className="form-hint" style={{ marginTop: -2, marginBottom: 10 }}>
+            Tiket &amp; tambahan cetak memotong kertas; tiap tiket dapat 1 amplop.
+            Upgrade (Poster / Crack n Share) tidak pakai amplop. Produk yang
+            namanya sama dengan jenis frame memotong stok frame. Stok berkurang
+            otomatis saat laporan disimpan.
           </div>
 
           {kertasPilihan.length === 0 ? (
@@ -711,7 +712,9 @@ export function IncomeEntryModal({
             </div>
           </div>
 
-          {(kertasTerpotong.length > 0 || amplopTerpakai > 0) && (
+          {(kertasTerpotong.length > 0 ||
+            frameTerpotong.length > 0 ||
+            amplopTerpakai > 0) && (
             <div className="income-total" style={{ marginTop: 4 }}>
               {kertasTerpotong.map(({ k, jumlah }) => (
                 <div key={k.id} className="income-total-row">
@@ -719,6 +722,15 @@ export function IncomeEntryModal({
                   <span className="income-total-val">
                     −{jumlah} lembar
                     {jumlah > k.stok ? ' ⚠️ stok kurang' : ''}
+                  </span>
+                </div>
+              ))}
+              {frameTerpotong.map(({ f, jumlah }) => (
+                <div key={f.id} className="income-total-row">
+                  <span>🖼️ {f.nama}</span>
+                  <span className="income-total-val">
+                    −{jumlah} buah
+                    {jumlah > f.stok ? ' ⚠️ stok kurang' : ''}
                   </span>
                 </div>
               ))}
@@ -733,18 +745,53 @@ export function IncomeEntryModal({
               )}
             </div>
           )}
-        </div>
+        </Section>
 
-        <div className="field">
-          <label>Keterangan (opsional)</label>
-          <textarea
-            value={keterangan}
-            onChange={(e) => setKeterangan(e.target.value)}
-            rows={2}
-            placeholder="cth: rame banget, ada event sekolah"
-            style={{ minHeight: 60, resize: 'vertical' }}
-          />
-        </div>
+        <Section
+          ikon="🏷️"
+          title="Potongan harga & catatan"
+          summary={lainSummary}
+          defaultOpen={lainDefaultOpen}
+        >
+          {/* Potongan harga bisa diisi siapa pun yang menginput laporan
+              (termasuk karyawan), karena diskon bagian dari transaksi penjualan
+              — bukan nominal income yang disembunyikan dari karyawan. */}
+          <div className="field">
+            <label>
+              Potongan harga (Rp){' '}
+              <span className="form-hint" style={{ fontWeight: 500 }}>
+                — diskon, dikurangkan dari total income
+              </span>
+            </label>
+            <input
+              type="number"
+              inputMode="numeric"
+              min={0}
+              step={1000}
+              value={potonganHarga === 0 ? '' : String(potonganHarga)}
+              placeholder="0"
+              onChange={(e) =>
+                setPotonganHarga(Math.max(0, parseInt(e.target.value, 10) || 0))
+              }
+              style={selStyle}
+            />
+            <div className="form-hint">
+              Mis. diskon promo atau potongan khusus customer. Tidak memengaruhi
+              bonus penjualan karyawan.
+            </div>
+          </div>
+
+          <div className="field">
+            <label>Keterangan (opsional)</label>
+            <textarea
+              value={keterangan}
+              onChange={(e) => setKeterangan(e.target.value)}
+              rows={2}
+              placeholder="cth: rame banget, ada event sekolah"
+              style={{ minHeight: 60, resize: 'vertical' }}
+            />
+          </div>
+        </Section>
 
         {showMoney && (
         <div className="income-total">
@@ -822,6 +869,48 @@ export function IncomeEntryModal({
         </button>
       </div>
     </Modal>
+  )
+}
+
+/**
+ * Section yang bisa dilipat (accordion) untuk merapikan form input laporan.
+ * Saat terlipat, header menampilkan ringkasan 1-baris (`summary`) supaya isinya
+ * tetap kebaca sekilas tanpa harus membuka. State buka/tutup lokal; data input
+ * hidup di komponen induk jadi tidak hilang saat section ditutup.
+ */
+function Section({
+  ikon,
+  title,
+  summary,
+  defaultOpen = false,
+  children,
+}: {
+  ikon: string
+  title: string
+  summary?: string
+  defaultOpen?: boolean
+  children: ReactNode
+}) {
+  const [open, setOpen] = useState(defaultOpen)
+  return (
+    <div className={'acc' + (open ? ' is-open' : '')}>
+      <button
+        type="button"
+        className="acc-head"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+      >
+        <span className="acc-ikon">{ikon}</span>
+        <span className="acc-titles">
+          <span className="acc-judul">{title}</span>
+          {!open && summary && <span className="acc-summary">{summary}</span>}
+        </span>
+        <span className={'acc-chev' + (open ? ' is-open' : '')}>
+          <Icons.chevron />
+        </span>
+      </button>
+      {open && <div className="acc-body">{children}</div>}
+    </div>
   )
 }
 

@@ -1,5 +1,12 @@
 import { useMemo, useState } from 'react'
-import type { AppData, JenisKertas, SalahCetak, Tinta, WarnaTinta } from '../types'
+import type {
+  AppData,
+  JenisFrame,
+  JenisKertas,
+  SalahCetak,
+  Tinta,
+  WarnaTinta,
+} from '../types'
 import { todayKey } from '../storage'
 import { formatTanggalPanjang } from '../attendance'
 import {
@@ -9,6 +16,7 @@ import {
   WARNA_TINTA_LIST,
   findKertas,
   jumlahSalahCetakBulanIni,
+  totalStokFrame,
   totalStokKertas,
   totalStokTinta,
   uidShort,
@@ -32,6 +40,9 @@ type DialogState =
   | { type: 'tambahKertas' }
   | { type: 'editKertas'; kertas: JenisKertas }
   | { type: 'restockKertas'; kertas: JenisKertas }
+  | { type: 'tambahFrame' }
+  | { type: 'editFrame'; frame: JenisFrame }
+  | { type: 'restockFrame'; frame: JenisFrame }
   | { type: 'restockTinta'; tinta: Tinta }
   | { type: 'restockAmplop' }
   | { type: 'salahCetak' }
@@ -98,6 +109,42 @@ export function Inventaris({ data, setData, reload, canEdit }: Props) {
       ),
     })
     toast('ok', delta >= 0 ? `+${delta} lembar` : `${delta} lembar`)
+    setDialog(null)
+  }
+
+  function tambahFrame(nama: string, stokAwal: number) {
+    const baru: JenisFrame = { id: uidShort(), nama, stok: stokAwal }
+    setData({ ...data, stokFrame: [...data.stokFrame, baru] })
+    toast('ok', `Jenis frame "${nama}" ditambahkan`)
+    setDialog(null)
+  }
+
+  function editFrame(id: string, nama: string) {
+    setData({
+      ...data,
+      stokFrame: data.stokFrame.map((f) => (f.id === id ? { ...f, nama } : f)),
+    })
+    toast('ok', 'Nama frame diperbarui')
+    setDialog(null)
+  }
+
+  function hapusFrame(f: JenisFrame) {
+    if (!confirm(`Hapus jenis frame "${f.nama}"?`)) return
+    setData({
+      ...data,
+      stokFrame: data.stokFrame.filter((x) => x.id !== f.id),
+    })
+    toast('warn', `Frame "${f.nama}" dihapus`)
+  }
+
+  function restockFrame(id: string, delta: number) {
+    setData({
+      ...data,
+      stokFrame: data.stokFrame.map((f) =>
+        f.id === id ? { ...f, stok: Math.max(0, f.stok + delta) } : f,
+      ),
+    })
+    toast('ok', delta >= 0 ? `+${delta} buah` : `${delta} buah`)
     setDialog(null)
   }
 
@@ -179,8 +226,8 @@ export function Inventaris({ data, setData, reload, canEdit }: Props) {
         </div>
         <h1>Inventaris & Stok 📦</h1>
         <p className="sub">
-          Kelola stok kertas (berbagai jenis), tinta 6 warna, dan amplop. Catat
-          salah cetak yang otomatis mengurangi stok kertas.
+          Kelola stok kertas (berbagai jenis), frame foto, tinta 6 warna, dan
+          amplop. Catat salah cetak yang otomatis mengurangi stok kertas.
         </p>
 
         <div className="hero-stats">
@@ -188,6 +235,11 @@ export function Inventaris({ data, setData, reload, canEdit }: Props) {
             <span className="dot" style={{ background: 'var(--primary-2)' }} />
             <span className="num">{totalStokKertas(data.stokKertas)}</span>
             <span className="lbl">Total kertas</span>
+          </div>
+          <div className="stat">
+            <span className="dot" style={{ background: 'var(--purple, #7C5CFC)' }} />
+            <span className="num">{totalStokFrame(data.stokFrame)}</span>
+            <span className="lbl">Total frame</span>
           </div>
           <div className="stat">
             <span className="dot" style={{ background: 'var(--mint)' }} />
@@ -309,6 +361,124 @@ export function Inventaris({ data, setData, reload, canEdit }: Props) {
                     type="button"
                     className="btn btn--ghost"
                     onClick={() => setDialog({ type: 'editKertas', kertas: k })}
+                  >
+                    <Icons.pencil /> Edit
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Stok frame */}
+      <div className="section-head">
+        <h2>
+          Stok Frame <span className="count-badge">{data.stokFrame.length}</span>
+        </h2>
+        {canEdit && (
+          <button
+            type="button"
+            className="btn btn--add"
+            onClick={() => setDialog({ type: 'tambahFrame' })}
+          >
+            <Icons.plus /> Tambah Jenis Frame
+          </button>
+        )}
+      </div>
+      <p className="form-hint" style={{ marginTop: -4, marginBottom: 12 }}>
+        Stok frame berkurang otomatis saat produk dengan nama yang sama terjual
+        di Laporan Income (mis. produk “Frame Foto” → frame “Frame Foto”).
+      </p>
+
+      {data.stokFrame.length === 0 ? (
+        <div className="emp-empty">
+          <div className="ee-emoji">🖼️</div>
+          <h3>Belum ada jenis frame</h3>
+          <p>
+            Tambahkan jenis frame. Beri nama yang sama dengan produk di Laporan
+            Income supaya stoknya otomatis berkurang saat terjual.
+          </p>
+        </div>
+      ) : tampilan === 'list' ? (
+        <div className="kertas-list">
+          {data.stokFrame.map((f) => (
+            <div key={f.id} className="kertas-row">
+              <div className="kertas-row-info">
+                <div className="kertas-row-nama">{f.nama}</div>
+                <div className="kertas-row-sub">Stok frame</div>
+              </div>
+              <div
+                className={`kertas-row-stok ${f.stok === 0 ? 'kosong' : f.stok < 10 ? 'tipis' : ''}`}
+              >
+                {f.stok} <span className="kertas-row-unit">buah</span>
+              </div>
+              {canEdit && (
+                <div className="kertas-row-actions">
+                  <button
+                    type="button"
+                    className="btn btn--primary"
+                    onClick={() => setDialog({ type: 'restockFrame', frame: f })}
+                  >
+                    <Icons.plus /> Atur Stok
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn--ghost"
+                    onClick={() => setDialog({ type: 'editFrame', frame: f })}
+                  >
+                    <Icons.pencil /> Edit
+                  </button>
+                  <button
+                    type="button"
+                    className="emp-row-icon emp-row-danger"
+                    onClick={() => hapusFrame(f)}
+                    title="Hapus"
+                  >
+                    <Icons.trash />
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="inv-grid">
+          {data.stokFrame.map((f) => (
+            <div key={f.id} className="inv-card">
+              <div className="inv-card-head">
+                <div>
+                  <div className="inv-card-nama">{f.nama}</div>
+                  <div className="inv-card-sub">Stok frame</div>
+                </div>
+                {canEdit && (
+                  <button
+                    type="button"
+                    className="emp-x"
+                    title="Hapus"
+                    onClick={() => hapusFrame(f)}
+                  >
+                    <Icons.x />
+                  </button>
+                )}
+              </div>
+              <div className={`inv-stok ${f.stok === 0 ? 'kosong' : f.stok < 10 ? 'tipis' : ''}`}>
+                {f.stok}
+                <span className="inv-stok-unit">buah</span>
+              </div>
+              {canEdit && (
+                <div className="inv-actions">
+                  <button
+                    type="button"
+                    className="btn btn--primary"
+                    onClick={() => setDialog({ type: 'restockFrame', frame: f })}
+                  >
+                    <Icons.plus /> Atur Stok
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn--ghost"
+                    onClick={() => setDialog({ type: 'editFrame', frame: f })}
                   >
                     <Icons.pencil /> Edit
                   </button>
@@ -499,6 +669,34 @@ export function Inventaris({ data, setData, reload, canEdit }: Props) {
           onClose={() => setDialog(null)}
         />
       )}
+      {dialog?.type === 'tambahFrame' && (
+        <KertasModal
+          noun="Frame"
+          unit="buah"
+          placeholder="cth. Frame Foto 4R"
+          onSave={(nama, stok) => tambahFrame(nama, stok)}
+          onClose={() => setDialog(null)}
+        />
+      )}
+      {dialog?.type === 'editFrame' && (
+        <KertasModal
+          noun="Frame"
+          unit="buah"
+          placeholder="cth. Frame Foto 4R"
+          existing={dialog.frame}
+          onSave={(nama) => editFrame(dialog.frame.id, nama)}
+          onClose={() => setDialog(null)}
+        />
+      )}
+      {dialog?.type === 'restockFrame' && (
+        <AdjustModal
+          title={`Adjust stok ${dialog.frame.nama}`}
+          currentStok={dialog.frame.stok}
+          unit="buah"
+          onSave={(delta) => restockFrame(dialog.frame.id, delta)}
+          onClose={() => setDialog(null)}
+        />
+      )}
       {dialog?.type === 'restockTinta' && (
         <AdjustModal
           title={`Atur tinta ${WARNA_TINTA_LABEL[dialog.tinta.warna]}`}
@@ -534,10 +732,16 @@ export function Inventaris({ data, setData, reload, canEdit }: Props) {
 
 function KertasModal({
   existing,
+  noun = 'Kertas',
+  unit = 'lembar',
+  placeholder = 'cth. Doff Kasar',
   onSave,
   onClose,
 }: {
-  existing?: JenisKertas
+  existing?: { nama: string }
+  noun?: string
+  unit?: string
+  placeholder?: string
   onSave: (nama: string, stokAwal: number) => void
   onClose: () => void
 }) {
@@ -549,23 +753,23 @@ function KertasModal({
       <ModalHead
         icon={<Icons.plus />}
         color="var(--primary)"
-        title={existing ? 'Edit Jenis Kertas' : 'Tambah Jenis Kertas'}
+        title={existing ? `Edit Jenis ${noun}` : `Tambah Jenis ${noun}`}
         onClose={onClose}
       />
       <div className="modal-body">
         <div className="field">
-          <label>Nama jenis kertas</label>
+          <label>Nama jenis {noun.toLowerCase()}</label>
           <input
             type="text"
             autoFocus
             value={nama}
             onChange={(e) => setNama(e.target.value)}
-            placeholder="cth. Doff Kasar"
+            placeholder={placeholder}
           />
         </div>
         {!existing && (
           <div className="field">
-            <label>Stok awal (lembar)</label>
+            <label>Stok awal ({unit})</label>
             <input
               type="number"
               inputMode="numeric"

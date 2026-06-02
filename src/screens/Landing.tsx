@@ -6,6 +6,7 @@ import {
   bulanIni,
   jumlahSalahCetakBulanIni,
   totalPengeluaran,
+  totalStokFrame,
   totalStokKertas,
   totalStokTinta,
 } from '../inventory'
@@ -58,6 +59,7 @@ export function Landing({
 
   // Inventaris stats
   const totalKertas = totalStokKertas(data.stokKertas)
+  const totalFrame = totalStokFrame(data.stokFrame)
   const totalTinta = totalStokTinta(data.stokTinta)
   const stokTipis = data.stokKertas.filter((k) => k.stok < 10).length
   const salahBulan = jumlahSalahCetakBulanIni(data.salahCetak)
@@ -128,7 +130,7 @@ export function Landing({
           tone="yellow"
           label="Inventaris"
           value={`${totalKertas} kertas`}
-          sub={`${totalTinta} btl tinta · ${data.stokAmplop} amplop${stokTipis > 0 ? ` · ${stokTipis} jenis tipis` : ''}`}
+          sub={`${totalFrame} frame · ${totalTinta} btl tinta · ${data.stokAmplop} amplop${stokTipis > 0 ? ` · ${stokTipis} jenis tipis` : ''}`}
           icon={<Icons.box />}
         />
       </div>
@@ -156,7 +158,7 @@ export function Landing({
           tone="inventaris"
           emoji="📦"
           title="Inventaris & Stok"
-          sub="Kertas, tinta 6 warna, amplop"
+          sub="Kertas, frame, tinta 6 warna, amplop"
           onClick={onInventaris}
           badge={salahBulan > 0 ? `${salahBulan} salah cetak` : undefined}
         />

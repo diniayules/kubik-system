@@ -19,6 +19,7 @@ import type {
   HargaProduk,
   HargaTiket,
   HargaUpgrade,
+  JenisFrame,
   JenisKertas,
   LaporanEvent,
   LaporanIncome,
@@ -105,6 +106,7 @@ type PengeluaranRow = {
   catatan: string
 }
 type KertasRow = { id: string; nama: string; stok: number }
+type FrameRow = { id: string; nama: string; stok: number }
 type TintaRow = { warna: WarnaTinta; stok: number; catatan: string | null }
 type AmplopRow = { id: number; stok: number }
 type SalahCetakRow = {
@@ -152,6 +154,7 @@ export async function fetchAppData(): Promise<AppData> {
     eventRes,
     pengRes,
     kertasRes,
+    frameRes,
     tintaRes,
     amplopRes,
     salahRes,
@@ -177,6 +180,7 @@ export async function fetchAppData(): Promise<AppData> {
     // pengeluaran: semua user login (admin & karyawan) boleh lihat via RLS.
     supabase.from('pengeluaran').select('id, tanggal, kategori, deskripsi, jumlah, catatan'),
     supabase.from('stok_kertas').select('id, nama, stok').order('nama', { ascending: true }),
+    supabase.from('stok_frame').select('id, nama, stok').order('nama', { ascending: true }),
     supabase.from('stok_tinta').select('warna, stok, catatan'),
     supabase.from('stok_amplop').select('id, stok').eq('id', 1).maybeSingle(),
     supabase.from('salah_cetak').select('id, tanggal, kertas_id, jumlah, alasan'),
@@ -195,6 +199,7 @@ export async function fetchAppData(): Promise<AppData> {
   const event = orErr(eventRes) as EventRow[]
   const peng = orErr(pengRes) as PengeluaranRow[]
   const kertas = orErr(kertasRes) as KertasRow[]
+  const frame = orErr(frameRes) as FrameRow[]
   const tinta = orErr(tintaRes) as TintaRow[]
   const amplop = orErr(amplopRes) as AmplopRow | null
   const salah = orErr(salahRes) as SalahCetakRow[]
@@ -287,6 +292,12 @@ export async function fetchAppData(): Promise<AppData> {
     stok: k.stok,
   }))
 
+  const stokFrame: JenisFrame[] = frame.map((f) => ({
+    id: f.id,
+    nama: f.nama,
+    stok: f.stok,
+  }))
+
   // Keep tinta in the canonical 6-warna order regardless of row order.
   const tintaByWarna = new Map(tinta.map((t) => [t.warna, t]))
   const stokTinta: Tinta[] = WARNA_TINTA_LIST.map((w) => {
@@ -331,6 +342,7 @@ export async function fetchAppData(): Promise<AppData> {
     gajiPokok: config?.gaji_pokok ?? {},
     gajiDibayar: config?.gaji_dibayar ?? {},
     stokKertas,
+    stokFrame,
     stokTinta,
     stokAmplop: amplop?.stok ?? 0,
     salahCetak,
@@ -458,6 +470,16 @@ export async function persistChanges(
     next.stokKertas,
     (k) => k.id,
     (k) => ({ id: k.id, nama: k.nama, stok: k.stok }),
+  )
+
+  // ---- stok_frame ----
+  syncRows(
+    jobs,
+    'stok_frame',
+    prev.stokFrame,
+    next.stokFrame,
+    (f) => f.id,
+    (f) => ({ id: f.id, nama: f.nama, stok: f.stok }),
   )
 
   // ---- salah_cetak (created_by stamped on insert) ----

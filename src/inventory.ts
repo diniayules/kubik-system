@@ -1,4 +1,11 @@
-import type { JenisKertas, Pengeluaran, SalahCetak, Tinta, WarnaTinta } from './types'
+import type {
+  JenisFrame,
+  JenisKertas,
+  Pengeluaran,
+  SalahCetak,
+  Tinta,
+  WarnaTinta,
+} from './types'
 
 export const WARNA_TINTA_LIST: WarnaTinta[] = ['BK', 'LC', 'M', 'C', 'Y', 'LM']
 
@@ -45,6 +52,10 @@ export function totalStokKertas(kertas: JenisKertas[]): number {
 
 export function totalStokTinta(tinta: Tinta[]): number {
   return tinta.reduce((s, t) => s + (t.stok || 0), 0)
+}
+
+export function totalStokFrame(frame: JenisFrame[]): number {
+  return frame.reduce((s, f) => s + (f.stok || 0), 0)
 }
 
 export function findKertas(

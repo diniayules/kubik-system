@@ -1,5 +1,6 @@
 import type {
   IncomeItem,
+  JenisFrame,
   JenisKertas,
   LaporanIncome,
   Layanan,
@@ -226,16 +227,23 @@ export function hitungIncome(laporan: LaporanIncome): IncomeBreakdown {
   }
 }
 
-// ---------- pemakaian stok (kertas + amplop) ----------
+// ---------- pemakaian stok (kertas + amplop + frame) ----------
 // Menghubungkan laporan income dengan inventaris: tiap tiket & tambahan cetak
 // memotong 1 lembar kertas (jenis yang dipilih di laporan), tiap upgrade
-// (Poster / Crack n Share) memotong 1 lembar kertas dengan NAMA yang sama, dan
-// amplop berkurang sesuai `amplopTerpakai` (default = jumlah tiket).
+// (Poster / Crack n Share) memotong 1 lembar kertas dengan NAMA yang sama,
+// amplop berkurang sesuai `amplopTerpakai` (default = jumlah tiket), dan tiap
+// produk yang terjual memotong 1 frame dengan NAMA yang sama (mis. produk
+// "Frame Foto" → frame "Frame Foto"). Produk yang tidak punya frame senama
+// (mis. T-shirt) tidak memotong stok frame.
 
-/** Pemakaian stok satu laporan: { id kertas → jumlah lembar }, plus amplop. */
+/**
+ * Pemakaian stok satu laporan: { id kertas → jumlah lembar }, amplop, dan
+ * { id frame → jumlah buah }.
+ */
 export type PemakaianStok = {
   kertas: Record<string, number>
   amplop: number
+  frame: Record<string, number>
 }
 
 function normalNama(s: string): string {
@@ -253,10 +261,12 @@ function normalNama(s: string): string {
 export function hitungPemakaianStok(
   laporan: Pick<
     LaporanIncome,
-    'items' | 'upgrades' | 'pemakaianKertas' | 'amplopTerpakai'
+    'items' | 'upgrades' | 'produk' | 'pemakaianKertas' | 'amplopTerpakai'
   >,
   stokKertas: JenisKertas[],
   upgradeCatalog: UpgradeDef[],
+  produkCatalog: ProdukDef[],
+  stokFrame: JenisFrame[],
 ): PemakaianStok {
   const kertas: Record<string, number> = {}
   const add = (id: string, n: number) => {
@@ -280,7 +290,18 @@ export function hitungPemakaianStok(
     if (k) add(k.id, u.jumlah)
   }
 
-  return { kertas, amplop: laporan.amplopTerpakai ?? 0 }
+  // Produk terjual → frame dengan nama yang sama (produk "Frame Foto" → frame
+  // "Frame Foto"). Dicocokkan lewat nama, sama seperti upgrade → kertas. Produk
+  // tanpa frame senama (mis. T-shirt) tidak memotong stok frame.
+  const frame: Record<string, number> = {}
+  for (const p of laporan.produk ?? []) {
+    if (!(p.jumlah > 0)) continue
+    const label = labelProduk(produkCatalog, p.produkId)
+    const f = stokFrame.find((x) => normalNama(x.nama) === normalNama(label))
+    if (f) frame[f.id] = (frame[f.id] ?? 0) + p.jumlah
+  }
+
+  return { kertas, amplop: laporan.amplopTerpakai ?? 0, frame }
 }
 
 /**
@@ -292,9 +313,15 @@ export function hitungPemakaianStok(
 export function terapkanPemakaianStok(
   stokKertas: JenisKertas[],
   stokAmplop: number,
+  stokFrame: JenisFrame[],
   tambah: PemakaianStok | null,
   hapus: PemakaianStok | null,
-): { stokKertas: JenisKertas[]; stokAmplop: number; kurang: boolean } {
+): {
+  stokKertas: JenisKertas[]
+  stokAmplop: number
+  stokFrame: JenisFrame[]
+  kurang: boolean
+} {
   let kurang = false
   const clamp0 = (n: number) => {
     if (n < 0) {
@@ -313,7 +340,17 @@ export function terapkanPemakaianStok(
   const nextAmplop =
     amplopDelta === 0 ? stokAmplop : clamp0(stokAmplop - amplopDelta)
 
-  return { stokKertas: nextKertas, stokAmplop: nextAmplop, kurang }
+  const nextFrame = stokFrame.map((f) => {
+    const delta = (tambah?.frame[f.id] ?? 0) - (hapus?.frame[f.id] ?? 0)
+    return delta === 0 ? f : { ...f, stok: clamp0(f.stok - delta) }
+  })
+
+  return {
+    stokKertas: nextKertas,
+    stokAmplop: nextAmplop,
+    stokFrame: nextFrame,
+    kurang,
+  }
 }
 
 export function ringkasanPerKaryawan(

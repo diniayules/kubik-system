@@ -290,6 +290,9 @@ export function GajiKaryawan({ data, setData, isAdmin, currentUserId }: Props) {
   )
 }
 
+// Lebar kertas printer thermal (roll). Ganti ke 80 bila pakai printer 80mm.
+const THERMAL_WIDTH_MM = 58
+
 function SlipCard({
   empId,
   nama,
@@ -325,11 +328,27 @@ function SlipCard({
     if (v !== slip.gajiPokok) onGajiPokok(v)
   }
 
-  function handlePrint() {
+  function handlePrint(mode: 'a4' | 'thermal' = 'a4') {
     const node = document.querySelector(`[data-slip-id="${empId}"]`)
     if (!node) return
     node.classList.add('is-printing')
-    const cleanup = () => node.classList.remove('is-printing')
+    if (mode === 'thermal') node.classList.add('is-printing-thermal')
+
+    // `@page { size }` tidak bisa di-scope lewat selector/class, jadi untuk
+    // mode thermal kita suntik aturan @page dinamis (lebar roll) saat print
+    // lalu cabut lagi setelah selesai. A4 tetap pakai aturan default di CSS.
+    let pageStyle: HTMLStyleElement | null = null
+    if (mode === 'thermal') {
+      pageStyle = document.createElement('style')
+      pageStyle.textContent = `@page { size: ${THERMAL_WIDTH_MM}mm auto; margin: 3mm; }`
+      document.head.appendChild(pageStyle)
+    }
+
+    const cleanup = () => {
+      node.classList.remove('is-printing', 'is-printing-thermal')
+      pageStyle?.remove()
+      pageStyle = null
+    }
     window.addEventListener('afterprint', cleanup, { once: true })
     setTimeout(() => window.print(), 40)
     setTimeout(cleanup, 4000)
@@ -393,6 +412,9 @@ function SlipCard({
         <Chip label="Telat" val={formatDurasi(slip.terlambatMenit)} warn={slip.terlambatMenit > 0} />
         <Chip label="Lembur" val={formatDurasi(slip.lemburMenit)} />
         <Chip label="Shift penuh" val={formatDurasi(slip.coverageMenit)} />
+        {slip.extraMenit > 0 && (
+          <Chip label="Extra time" val={formatDurasi(slip.extraMenit)} />
+        )}
         <Chip
           label="Cuti"
           val={`${slip.cutiTerpakai}/${JATAH_CUTI_SEBULAN}${slip.hariCutiBerlebih > 0 ? ` (+${slip.hariCutiBerlebih} lebih)` : ''}`}
@@ -416,6 +438,13 @@ function SlipCard({
           <Line
             label={`Lembur · ${formatDurasi(slip.lemburMenit)}`}
             val={slip.upahLembur}
+            plus
+          />
+        )}
+        {slip.upahExtra > 0 && (
+          <Line
+            label={`Extra time · ${formatDurasi(slip.extraMenit)}`}
+            val={slip.upahExtra}
             plus
           />
         )}
@@ -484,9 +513,20 @@ function SlipCard({
         </div>
       )}
 
-      <div className="gaji-card-actions">
-        <button type="button" className="btn btn--ghost" onClick={handlePrint}>
-          <Icons.printer /> Print slip
+      <div className="gaji-card-actions gaji-print-actions">
+        <button
+          type="button"
+          className="btn btn--ghost"
+          onClick={() => handlePrint('a4')}
+        >
+          <Icons.printer /> Print A4
+        </button>
+        <button
+          type="button"
+          className="btn btn--ghost"
+          onClick={() => handlePrint('thermal')}
+        >
+          <Icons.printer /> Print thermal
         </button>
       </div>
     </div>

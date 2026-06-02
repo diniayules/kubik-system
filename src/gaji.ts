@@ -6,6 +6,7 @@
 //      + bonus penjualan (Rp 1.000 / item: tiket, cetak, produk — upgrade TIDAK)
 //      + upah lembur          (menit lembur × tarif/menit)
 //      + upah shift penuh     (menit coverage × tarif/menit)
+//      + upah waktu ekstra    (menit extra manual × tarif/menit — backup/meeting)
 //      − potongan keterlambatan (menit telat × tarif/menit)
 //      − potongan cuti berlebih (hari di atas jatah × 1 hari × tarif/menit)
 //  - Tarif/menit = gaji pokok ÷ 30 hari ÷ 300 menit (800.000 → Rp 88,8).
@@ -47,6 +48,7 @@ export type SlipGaji = {
   terlambatMenit: number
   lemburMenit: number
   coverageMenit: number
+  extraMenit: number
   kerjaBersihMenit: number
   // --- penjualan ---
   tiket: number
@@ -58,6 +60,7 @@ export type SlipGaji = {
   bonusPenjualan: number
   upahLembur: number
   upahCoverage: number
+  upahExtra: number
   potonganTerlambat: number
   potonganCuti: number
   total: number
@@ -100,12 +103,16 @@ export function hitungSlipGaji(
   let terlambatMenit = 0
   let lemburMenit = 0
   let coverageMenit = 0
+  let extraMenit = 0
   let kerjaBersihMenit = 0
   let hariHadir = 0
   let hariCuti = 0
   let hariLibur = 0
   for (const r of records) {
     if (r.employeeId !== emp.id) continue
+    // Waktu ekstra manual (backup datang cepat / meeting) dibayar di hari apa
+    // pun — termasuk saat hari itu ditandai libur/cuti (mis. meeting bulanan).
+    extraMenit += Math.max(0, r.extraMenit ?? 0)
     // Hari tidak bekerja dicatat eksplisit, dihitung terpisah dari kehadiran.
     if (r.shift === 'cuti') {
       hariCuti += 1
@@ -158,6 +165,7 @@ export function hitungSlipGaji(
   const bonusPenjualan = jumlahItem * BONUS_PER_ITEM
   const upahLembur = lemburMenit * tarif
   const upahCoverage = coverageMenit * tarif
+  const upahExtra = extraMenit * tarif
   const potonganTerlambat = terlambatMenit * tarif
   const potonganCuti = hariCutiBerlebih * MENIT_KERJA_HARIAN * tarif
 
@@ -165,7 +173,8 @@ export function hitungSlipGaji(
     gajiPokok +
     bonusPenjualan +
     upahLembur +
-    upahCoverage -
+    upahCoverage +
+    upahExtra -
     potonganTerlambat -
     potonganCuti
 
@@ -182,6 +191,7 @@ export function hitungSlipGaji(
     terlambatMenit,
     lemburMenit,
     coverageMenit,
+    extraMenit,
     kerjaBersihMenit,
     tiket,
     cetak,
@@ -191,6 +201,7 @@ export function hitungSlipGaji(
     bonusPenjualan,
     upahLembur,
     upahCoverage,
+    upahExtra,
     potonganTerlambat,
     potonganCuti,
     total,

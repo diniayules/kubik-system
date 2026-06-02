@@ -59,6 +59,14 @@ export type AbsenHari = {
   shift: DayType
   events: AbsenEvent[]
   status?: AbsenStatus
+  /**
+   * Waktu ekstra berbayar yang diisi MANUAL (tidak bisa diturunkan otomatis dari
+   * jadwal): mis. datang lebih cepat untuk backup rekan, atau meeting/evaluasi
+   * di luar jam kerja. Dibayar `extraMenit × tarif/menit` di slip gaji, terpisah
+   * dari lembur. `undefined`/0 = tidak ada. `extraCatatan` = alasan bebas.
+   */
+  extraMenit?: number
+  extraCatatan?: string
 }
 
 // Layanan & Upgrade are dynamic now: ids are admin-defined (see layananCatalog /

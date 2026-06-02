@@ -374,6 +374,46 @@ export function Absen({
     }
   }
 
+  // Atur waktu ekstra berbayar (manual): datang lebih cepat untuk backup rekan,
+  // atau meeting/evaluasi di luar jam kerja. Dibayar terpisah di slip gaji.
+  function aturExtra() {
+    if (!record) return
+    const menitStr = prompt(
+      'Extra time (menit) — datang lebih cepat untuk backup rekan, atau meeting/evaluasi di luar jam kerja:',
+      String(record.extraMenit ?? 0),
+    )
+    if (menitStr == null) return
+    const menit = Math.max(0, Math.round(Number(menitStr) || 0))
+    let catatan = record.extraCatatan ?? ''
+    if (menit > 0) {
+      const c = prompt(
+        'Catatan extra time (mis. backup shift sore, meeting bulanan):',
+        catatan,
+      )
+      if (c == null) return
+      catatan = c.trim()
+    } else {
+      catatan = ''
+    }
+    const updated: AbsenHari = {
+      ...record,
+      extraMenit: menit,
+      extraCatatan: catatan || undefined,
+      status: recordStatus,
+    }
+    setData({
+      ...data,
+      records: data.records.map((r) => (r.id === record.id ? updated : r)),
+    })
+    toast(
+      'ok',
+      menit > 0 ? `Extra time ${menit} menit dicatat` : 'Extra time dihapus',
+    )
+    if (record.status === 'disetujui' && recordStatus === 'menunggu') {
+      toast('warn', 'Perubahan perlu persetujuan ulang admin')
+    }
+  }
+
   function resetHariIni() {
     if (!record) return
     if (
@@ -539,6 +579,19 @@ export function Absen({
 
           <section className="detail-card">
             <h2>Ringkasan Hari Ini</h2>
+            {(record.extraMenit ?? 0) > 0 && (
+              <div className="overlap-banner extra-banner">
+                ➕{' '}
+                <strong>
+                  Extra time {formatDurasi(record.extraMenit ?? 0)}
+                </strong>
+                {record.extraCatatan ? ` · ${record.extraCatatan}` : ''}
+                <div className="overlap-sub">
+                  Dibayar terpisah di slip gaji (backup / meeting di luar jam
+                  kerja).
+                </div>
+              </div>
+            )}
             {istirahatDilewatiCount(record) > 0 && (
               <div className="overlap-banner skip-banner">
                 🚫{' '}
@@ -738,6 +791,11 @@ export function Absen({
         {record && (
           <button type="button" className="btn btn--ghost" onClick={pindahTanggal}>
             📅 Ubah Tanggal
+          </button>
+        )}
+        {record && (
+          <button type="button" className="btn btn--ghost" onClick={aturExtra}>
+            ➕ Extra Time
           </button>
         )}
         {record && (

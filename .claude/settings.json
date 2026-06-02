@@ -77,7 +77,11 @@
       "Bash(git --no-pager diff --stat)",
       "Bash(awk 'NR>=394 && NR<=402' /Users/diniayulest/Codes/absensi-karyawan/src/App.css)",
       "Bash(awk 'NR>=393 && NR<=402' /Users/diniayulest/Codes/absensi-karyawan/src/App.css)",
-      "Bash(echo \"BUILD3_EXIT:$?\")"
+      "Bash(echo \"BUILD3_EXIT:$?\")",
+      "Bash(sed -n '1,40p')",
+      "Bash(awk 'NR>=250 && NR<=345 && /function/' src/storage.ts)",
+      "Bash(git restore *)",
+      "Bash(grep -rn '\\\\b__TRACKED_VAR__\\\\b' src)"
     ],
     "additionalDirectories": [
       "/tmp"

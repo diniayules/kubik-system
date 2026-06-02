@@ -395,6 +395,8 @@
 .gaji-card-actions {
   display: flex; justify-content: flex-end; gap: 10px; margin-top: -4px;
 }
+/* Dua tombol print (A4 + thermal) berbagi lebar sama rata */
+.gaji-print-actions .btn { flex: 1; }
 
 /* Kop & tanda tangan slip — disembunyikan di layar, hanya muncul saat print */
 .gaji-print-head,
@@ -1519,6 +1521,12 @@
   color: var(--yellow-deep); background: var(--yellow-bg);
   border-color: color-mix(in srgb, var(--yellow) 55%, transparent);
 }
+.overlap-banner.extra-banner {
+  color: var(--mint-deep);
+  background: color-mix(in srgb, var(--mint) 14%, transparent);
+  border-color: color-mix(in srgb, var(--mint) 45%, transparent);
+}
+.overlap-banner.extra-banner strong { color: var(--mint-deep); }
 .absen-tanggal-pick {
   display: flex; flex-direction: column; gap: 4px; align-items: flex-start;
   margin-left: auto;
@@ -1570,6 +1578,7 @@
 .audit-edit { background: color-mix(in srgb, var(--primary-2) 15%, transparent); color: var(--primary); border: 1.5px solid color-mix(in srgb, var(--primary-2) 30%, transparent); }
 .audit-overlap { background: var(--yellow-bg); color: var(--yellow-deep); border: 1.5px solid color-mix(in srgb, var(--yellow) 40%, transparent); }
 .audit-skip { background: var(--pink-bg); color: var(--pink-deep); border: 1.5px solid color-mix(in srgb, var(--pink) 40%, transparent); }
+.audit-extra { background: var(--mint-bg, color-mix(in srgb, var(--mint) 18%, transparent)); color: var(--mint-deep); border: 1.5px solid color-mix(in srgb, var(--mint) 45%, transparent); }
 
 .edit-panel {
   grid-column: 1 / -1; margin-top: 8px; padding: 14px;
@@ -1624,6 +1633,8 @@
   margin: 12px 0 10px; font-size: 12px; color: var(--ink-soft); line-height: 1.5;
 }
 .riwayat-edit-panel .edit-row { display: flex; gap: 8px; align-items: center; }
+.riwayat-edit-panel .edit-extra-grid { margin-top: 12px; }
+.riwayat-edit-panel .edit-field-wide { grid-column: 1 / -1; }
 .tone-danger { color: #C2410C; font-weight: 700; }
 .tone-success { color: var(--mint-deep); font-weight: 700; }
 .tone-muted { color: var(--muted); }
@@ -2172,6 +2183,73 @@
     font-size: 12.5px; font-weight: 700; color: #1a1a1a;
     margin-top: 2px;
   }
+
+  /* ---- Slip gaji versi THERMAL (kertas roll 58/80mm) ----
+     Ditempatkan setelah aturan .is-printing biasa supaya menang cascade
+     (spesifisitas sama → urutan terakhir menang). Layout 1 kolom ala struk:
+     border tipis putus-putus, font kecil, tanpa kotak warna. */
+  .gaji-card.is-printing-thermal {
+    border: none !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+    font-size: 11px !important;
+    color: #000 !important;
+  }
+  .gaji-card.is-printing-thermal .gaji-print-head {
+    flex-direction: column !important;
+    align-items: center !important;
+    text-align: center;
+    gap: 4px !important;
+    margin-bottom: 8px !important;
+    padding-bottom: 6px !important;
+    border-bottom: 1px dashed #000 !important;
+  }
+  .gaji-card.is-printing-thermal .gaji-print-logo {
+    width: 36px !important; height: 36px !important;
+  }
+  .gaji-card.is-printing-thermal .gaji-print-title {
+    font-size: 11px !important; text-align: center;
+  }
+  .gaji-card.is-printing-thermal .gaji-avatar { display: none !important; }
+  .gaji-card.is-printing-thermal .gaji-card-head {
+    justify-content: center !important;
+    text-align: center;
+    margin-bottom: 6px !important;
+  }
+  .gaji-card.is-printing-thermal .gaji-nama { font-size: 12.5px !important; }
+  .gaji-card.is-printing-thermal .gaji-jabatan { font-size: 10px !important; }
+  /* Chip kehadiran jadi daftar ringkas dua kolom tanpa kotak */
+  .gaji-card.is-printing-thermal .gaji-absen {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 2px 8px !important;
+  }
+  .gaji-card.is-printing-thermal .gaji-chip {
+    background: #fff !important;
+    border: none !important;
+    padding: 0 !important;
+    flex-direction: row !important;
+    align-items: baseline !important;
+    justify-content: space-between !important;
+    gap: 4px !important;
+    font-size: 9.5px !important;
+  }
+  .gaji-card.is-printing-thermal .gaji-rincian {
+    border-top: 1px dashed #000 !important;
+    border-bottom: 1px dashed #000 !important;
+    padding: 5px 0 !important;
+    margin: 7px 0 !important;
+  }
+  .gaji-card.is-printing-thermal .gaji-line { font-size: 10.5px !important; }
+  .gaji-card.is-printing-thermal .gaji-line-sub { font-size: 8.5px !important; }
+  .gaji-card.is-printing-thermal .gaji-total { font-size: 12.5px !important; }
+  /* Tanda tangan dipusatkan & rapat untuk kertas sempit */
+  .gaji-card.is-printing-thermal .gaji-print-sign {
+    justify-content: center !important;
+    margin-top: 24px !important;
+  }
+  .gaji-card.is-printing-thermal .gaji-sign-box { width: 100% !important; }
+  .gaji-card.is-printing-thermal .gaji-sign-line { margin-top: 32px !important; }
 }
 
 /* ============================================================

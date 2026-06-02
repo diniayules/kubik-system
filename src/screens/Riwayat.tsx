@@ -35,6 +35,8 @@ type Draft = {
   tanggal: string
   shift: DayType
   jam: Partial<Record<EventTipe, string>>
+  extraMenit: string
+  extraCatatan: string
 }
 
 type Props = {
@@ -81,10 +83,12 @@ export function Riwayat({
     let overlap = 0
     let cuti = 0
     let libur = 0
+    let extra = 0
     const perShift = { pagi: 0, sore: 0, full: 0 } as Record<string, number>
     for (const r of records) {
       // Hanya absensi yang sudah disetujui dihitung sebagai kehadiran resmi.
       if (!absenDisetujui(r)) continue
+      extra += Math.max(0, r.extraMenit ?? 0)
       if (r.shift === 'cuti') {
         cuti += 1
         continue
@@ -103,14 +107,20 @@ export function Riwayat({
         perShift[r.shift] = (perShift[r.shift] ?? 0) + 1
       }
     }
-    return { kerja, terlambat, lembur, hari, perShift, overlap, cuti, libur }
+    return { kerja, terlambat, lembur, hari, perShift, overlap, cuti, libur, extra }
   }, [records, data.records])
 
   function bukaEdit(r: AbsenHari) {
     const jam: Partial<Record<EventTipe, string>> = {}
     for (const e of r.events) jam[e.tipe] = formatJam(e.waktu)
     setEditId(r.id)
-    setDraft({ tanggal: r.tanggal, shift: r.shift, jam })
+    setDraft({
+      tanggal: r.tanggal,
+      shift: r.shift,
+      jam,
+      extraMenit: r.extraMenit ? String(r.extraMenit) : '',
+      extraCatatan: r.extraCatatan ?? '',
+    })
   }
 
   function batalEdit() {
@@ -176,6 +186,7 @@ export function Riwayat({
         })
       }
     }
+    const extraMenit = Math.max(0, Math.round(Number(draft.extraMenit) || 0))
     const targetStatus: AbsenStatus =
       tgl !== today && !isAdmin ? 'menunggu' : 'disetujui'
     const updated: AbsenHari = {
@@ -184,6 +195,8 @@ export function Riwayat({
       shift: draft.shift,
       events,
       status: targetStatus,
+      extraMenit,
+      extraCatatan: draft.extraCatatan.trim() || undefined,
     }
     setData({
       ...data,
@@ -227,6 +240,8 @@ export function Riwayat({
       'Overlap Shift Berikutnya (menit)',
       'Catatan Overlap',
       'Istirahat Dilewati',
+      'Extra Time (menit)',
+      'Catatan Extra Time',
     ]
     const rows = records.map((r) => {
       const ring = hitungRingkasan(r, cariTakeover(r, data.records))
@@ -255,6 +270,8 @@ export function Riwayat({
         String(ring.overlapMenit),
         catatan,
         String(istirahatDilewatiCount(r)),
+        String(r.extraMenit ?? 0),
+        r.extraCatatan ?? '',
       ]
     })
     const csv = [header, ...rows]
@@ -345,6 +362,13 @@ export function Riwayat({
             <div className="ringkasan-item tone-warning">
               <div className="ringkasan-label">Total overlap</div>
               <div className="ringkasan-value">{formatDurasi(total.overlap)}</div>
+            </div>
+          )}
+          {total.extra > 0 && (
+            <div className="ringkasan-item tone-success">
+              <div className="ringkasan-label">Total extra time</div>
+              <div className="ringkasan-value">{formatDurasi(total.extra)}</div>
+              <div className="ringkasan-hint">backup / meeting di luar jadwal</div>
             </div>
           )}
         </div>
@@ -442,6 +466,14 @@ export function Riwayat({
                         🚫 No-break
                       </div>
                     )}
+                    {(r.extraMenit ?? 0) > 0 && (
+                      <div
+                        className="audit-badge audit-extra"
+                        title={r.extraCatatan || 'Waktu ekstra (backup / meeting)'}
+                      >
+                        ➕ Extra {formatDurasi(r.extraMenit ?? 0)}
+                      </div>
+                    )}
                   </div>
                   <div>
                     {ring.sudahPulang ? formatDurasi(ring.kerjaBersihMenit) : '—'}
@@ -515,9 +547,41 @@ export function Riwayat({
                         </label>
                       ))}
                     </div>
+                    <div className="edit-grid edit-extra-grid">
+                      <label className="edit-field">
+                        <span>
+                          ➕ Extra time (menit){' '}
+                          <em className="edit-jadwal">backup / meeting</em>
+                        </span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="5"
+                          className="edit-time"
+                          value={draft.extraMenit}
+                          onChange={(e) =>
+                            setDraft({ ...draft, extraMenit: e.target.value })
+                          }
+                        />
+                      </label>
+                      <label className="edit-field edit-field-wide">
+                        <span>Catatan extra time</span>
+                        <input
+                          type="text"
+                          className="edit-time"
+                          placeholder="mis. backup shift sore, meeting bulanan"
+                          value={draft.extraCatatan}
+                          onChange={(e) =>
+                            setDraft({ ...draft, extraCatatan: e.target.value })
+                          }
+                        />
+                      </label>
+                    </div>
                     <div className="edit-hint">
                       Kosongkan jam untuk menghapus catatan event itu. Mengubah
-                      tanggal akan memindahkan catatan ini.
+                      tanggal akan memindahkan catatan ini. Extra time dibayar
+                      terpisah di slip gaji (mis. datang cepat backup rekan, atau
+                      meeting/evaluasi di luar jam kerja).
                       {!isAdmin &&
                         ' Untuk tanggal lampau, perubahanmu perlu disetujui ulang admin.'}
                     </div>

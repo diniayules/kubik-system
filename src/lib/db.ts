@@ -60,6 +60,8 @@ type AbsenRow = {
   shift: DayType
   events: AbsenHari['events']
   status: AbsenHari['status']
+  extra_menit: number | null
+  extra_catatan: string | null
 }
 type LaporanRow = {
   id: string
@@ -161,7 +163,7 @@ export async function fetchAppData(): Promise<AppData> {
       .select('id, nama, jabatan, pin_hash, role')
       .eq('active', true)
       .order('created_at', { ascending: true }),
-    supabase.from('absen_records').select('id, employee_id, tanggal, shift, events, status'),
+    supabase.from('absen_records').select('id, employee_id, tanggal, shift, events, status, extra_menit, extra_catatan'),
     supabase
       .from('laporan_income')
       .select(
@@ -216,6 +218,8 @@ export async function fetchAppData(): Promise<AppData> {
     shift: r.shift,
     events: Array.isArray(r.events) ? r.events : [],
     status: r.status === 'menunggu' ? 'menunggu' : 'disetujui',
+    extraMenit: r.extra_menit ?? 0,
+    extraCatatan: r.extra_catatan ?? undefined,
   }))
 
   const laporanIncome: LaporanIncome[] = laporan.map((l) => {
@@ -368,6 +372,8 @@ export async function persistChanges(
       shift: r.shift,
       events: r.events,
       status: r.status ?? 'disetujui',
+      extra_menit: r.extraMenit ?? 0,
+      extra_catatan: r.extraCatatan ?? null,
     }),
   )
 

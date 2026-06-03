@@ -161,6 +161,16 @@ export type LaporanIncome = {
    */
   tunai?: number
   qris?: number
+  /**
+   * Rekonsiliasi uang tunai fisik di laci kasir (Rupiah). `uangBesar` +
+   * `uangKecil` SEHARUSNYA balance dengan `tunai` (pembayaran tunai yang
+   * diterima) — dipakai untuk mengecek isi laci. `totalUangBesar` murni catatan
+   * dan TIDAK memengaruhi nilai apa pun. Semua opsional; `undefined`/0 = laporan
+   * lama atau belum diisi.
+   */
+  uangBesar?: number
+  uangKecil?: number
+  totalUangBesar?: number
 }
 
 // ---------- Event (Photobooth & Photo Game) ----------

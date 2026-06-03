@@ -212,6 +212,13 @@ export function IncomeEntryModal({
   // Pembayaran via (Rupiah) — pecahan tunai & QRIS. Informatif saja.
   const [tunai, setTunai] = useState<number>(existing?.tunai ?? 0)
   const [qris, setQris] = useState<number>(existing?.qris ?? 0)
+  // Uang tunai di laci kasir (Rupiah). uangBesar + uangKecil seharusnya balance
+  // dengan `tunai`. totalUangBesar murni catatan (tidak memengaruhi apa pun).
+  const [uangBesar, setUangBesar] = useState<number>(existing?.uangBesar ?? 0)
+  const [uangKecil, setUangKecil] = useState<number>(existing?.uangKecil ?? 0)
+  const [totalUangBesar, setTotalUangBesar] = useState<number>(
+    existing?.totalUangBesar ?? 0,
+  )
 
   // Price snapshot. Keep the laporan's historic prices for items it already
   // had, but fall back to the current catalog price for any item without a
@@ -252,6 +259,9 @@ export function IncomeEntryModal({
     potonganHarga,
     tunai,
     qris,
+    uangBesar,
+    uangKecil,
+    totalUangBesar,
   }
   const inc = hitungIncome(previewLaporan)
   const tiketPerLayanan = totalTiketPerLayanan(items)
@@ -306,6 +316,17 @@ export function IncomeEntryModal({
       .filter(Boolean)
       .join(' · ') || 'Opsional'
 
+  // Uang di laci: uangBesar + uangKecil harus balance dengan `tunai`.
+  const uangKasir = uangBesar + uangKecil
+  const selisihKasir = uangKasir - tunai
+  const kasirBalance = selisihKasir === 0
+  const kasirTerisi = uangBesar > 0 || uangKecil > 0 || totalUangBesar > 0
+  const kasirSummary = !kasirTerisi
+    ? 'Opsional'
+    : kasirBalance
+      ? `Balance · ${formatRupiah(uangKasir)}`
+      : `⚠️ selisih ${formatRupiah(Math.abs(selisihKasir))}`
+
   // Section yang dibuka otomatis saat edit kalau laporannya sudah punya isi,
   // supaya data lama tidak tersembunyi. Dihitung sekali dari `existing`.
   const upgradeDefaultOpen = !!existing?.upgrades?.some((u) => u.jumlah > 0)
@@ -318,6 +339,10 @@ export function IncomeEntryModal({
     (existing?.potonganHarga ?? 0) > 0 || !!existing?.keterangan?.trim()
   const bayarDefaultOpen =
     (existing?.tunai ?? 0) > 0 || (existing?.qris ?? 0) > 0
+  const kasirDefaultOpen =
+    (existing?.uangBesar ?? 0) > 0 ||
+    (existing?.uangKecil ?? 0) > 0 ||
+    (existing?.totalUangBesar ?? 0) > 0
 
   function setItem(
     layanan: string,
@@ -428,6 +453,9 @@ export function IncomeEntryModal({
       potonganHarga: Math.max(0, Math.floor(potonganHarga || 0)),
       tunai: Math.max(0, Math.floor(tunai || 0)),
       qris: Math.max(0, Math.floor(qris || 0)),
+      uangBesar: Math.max(0, Math.floor(uangBesar || 0)),
+      uangKecil: Math.max(0, Math.floor(uangKecil || 0)),
+      totalUangBesar: Math.max(0, Math.floor(totalUangBesar || 0)),
     }
     onSave(laporan)
   }
@@ -851,6 +879,92 @@ export function IncomeEntryModal({
           <div className="form-hint">
             Catatan metode pembayaran yang diterima. Tidak memengaruhi total
             income.
+          </div>
+        </Section>
+
+        <Section
+          ikon="💰"
+          title="Uang Tunai di Kasir"
+          summary={kasirSummary}
+          defaultOpen={kasirDefaultOpen}
+        >
+          {/* Cek isi laci: uang besar + uang kecil harus balance dengan
+              pembayaran tunai. Total uang besar murni catatan. */}
+          <div className="field">
+            <label>💵 Uang besar (Rp)</label>
+            <input
+              type="number"
+              inputMode="numeric"
+              min={0}
+              step={1000}
+              value={uangBesar === 0 ? '' : String(uangBesar)}
+              placeholder="0"
+              onChange={(e) =>
+                setUangBesar(Math.max(0, parseInt(e.target.value, 10) || 0))
+              }
+              style={selStyle}
+            />
+          </div>
+
+          <div className="field">
+            <label>🪙 Uang kecil (Rp)</label>
+            <input
+              type="number"
+              inputMode="numeric"
+              min={0}
+              step={1000}
+              value={uangKecil === 0 ? '' : String(uangKecil)}
+              placeholder="0"
+              onChange={(e) =>
+                setUangKecil(Math.max(0, parseInt(e.target.value, 10) || 0))
+              }
+              style={selStyle}
+            />
+          </div>
+
+          {/* Indikator balance vs pembayaran tunai. */}
+          <div
+            className="form-hint"
+            style={{
+              marginTop: 2,
+              fontWeight: 700,
+              color: kasirBalance
+                ? 'var(--mint-deep, #0B8A6B)'
+                : 'var(--warn, #b26a00)',
+            }}
+          >
+            Uang besar + kecil = <strong>{formatRupiah(uangKasir)}</strong> vs
+            tunai <strong>{formatRupiah(tunai)}</strong>
+            {kasirBalance
+              ? ' ✓ balance'
+              : selisihKasir > 0
+                ? ` · lebih ${formatRupiah(selisihKasir)}`
+                : ` · kurang ${formatRupiah(Math.abs(selisihKasir))}`}
+          </div>
+
+          <div className="field" style={{ marginTop: 14 }}>
+            <label>
+              🧾 Total uang besar (Rp){' '}
+              <span className="form-hint" style={{ fontWeight: 500 }}>
+                — catatan saja, tidak memengaruhi nilai apa pun
+              </span>
+            </label>
+            <input
+              type="number"
+              inputMode="numeric"
+              min={0}
+              step={1000}
+              value={totalUangBesar === 0 ? '' : String(totalUangBesar)}
+              placeholder="0"
+              onChange={(e) =>
+                setTotalUangBesar(Math.max(0, parseInt(e.target.value, 10) || 0))
+              }
+              style={selStyle}
+            />
+          </div>
+          <div className="form-hint">
+            Untuk mengecek isi laci. Uang besar + uang kecil sebaiknya sama dengan
+            pembayaran tunai. Total uang besar hanya catatan.
           </div>
         </Section>
 

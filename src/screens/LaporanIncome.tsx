@@ -384,6 +384,9 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
       'Total Income',
       'Tunai',
       'QRIS',
+      'Uang Besar',
+      'Uang Kecil',
+      'Total Uang Besar',
       'Keterangan',
     ]
     const rows = sorted.map((l) => {
@@ -434,6 +437,11 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
       cells.push(String(inc.potonganHarga))
       cells.push(String(inc.total))
       cells.push(String(l.tunai ?? 0), String(l.qris ?? 0))
+      cells.push(
+        String(l.uangBesar ?? 0),
+        String(l.uangKecil ?? 0),
+        String(l.totalUangBesar ?? 0),
+      )
       cells.push(l.keterangan)
       return cells
     })
@@ -1046,6 +1054,47 @@ function IncomeRow({
           </div>
         </div>
       )}
+
+      {showMoney &&
+        ((laporan.uangBesar ?? 0) > 0 ||
+          (laporan.uangKecil ?? 0) > 0 ||
+          (laporan.totalUangBesar ?? 0) > 0) &&
+        (() => {
+          const besar = laporan.uangBesar ?? 0
+          const kecil = laporan.uangKecil ?? 0
+          const kasir = besar + kecil
+          const selisih = kasir - (laporan.tunai ?? 0)
+          return (
+            <div className="income-breakdown">
+              <div className="income-breakdown-row">
+                <span>💰 Uang di kasir</span>
+                <span className="income-breakdown-qty">
+                  {selisih === 0 ? 'balance' : `selisih ${formatRupiah(Math.abs(selisih))}`}
+                </span>
+                <span className="income-breakdown-val">{formatRupiah(kasir)}</span>
+              </div>
+              <div className="income-breakdown-row">
+                <span>💵 Uang besar</span>
+                <span className="income-breakdown-qty">di laci</span>
+                <span className="income-breakdown-val">{formatRupiah(besar)}</span>
+              </div>
+              <div className="income-breakdown-row">
+                <span>🪙 Uang kecil</span>
+                <span className="income-breakdown-qty">di laci</span>
+                <span className="income-breakdown-val">{formatRupiah(kecil)}</span>
+              </div>
+              {(laporan.totalUangBesar ?? 0) > 0 && (
+                <div className="income-breakdown-row">
+                  <span>🧾 Total uang besar</span>
+                  <span className="income-breakdown-qty">catatan</span>
+                  <span className="income-breakdown-val">
+                    {formatRupiah(laporan.totalUangBesar ?? 0)}
+                  </span>
+                </div>
+              )}
+            </div>
+          )
+        })()}
 
       <div className="income-card-actions">
         {canManage && (

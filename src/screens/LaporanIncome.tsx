@@ -382,6 +382,8 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
       ...karyawan.map((e) => `Total Penjualan ${e.nama}`),
       'Potongan Harga',
       'Total Income',
+      'Tunai',
+      'QRIS',
       'Keterangan',
     ]
     const rows = sorted.map((l) => {
@@ -430,7 +432,9 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
       for (const emp of karyawan)
         cells.push(String(perKar[emp.id]?.total ?? 0))
       cells.push(String(inc.potonganHarga))
-      cells.push(String(inc.total), l.keterangan)
+      cells.push(String(inc.total))
+      cells.push(String(l.tunai ?? 0), String(l.qris ?? 0))
+      cells.push(l.keterangan)
       return cells
     })
     const csv = [header, ...rows]
@@ -1021,6 +1025,25 @@ function IncomeRow({
         <div className="income-keterangan">
           <span className="income-keterangan-lbl">Catatan:</span>{' '}
           {laporan.keterangan}
+        </div>
+      )}
+
+      {showMoney && ((laporan.tunai ?? 0) > 0 || (laporan.qris ?? 0) > 0) && (
+        <div className="income-breakdown">
+          <div className="income-breakdown-row">
+            <span>💵 Tunai</span>
+            <span className="income-breakdown-qty">bayar via</span>
+            <span className="income-breakdown-val">
+              {formatRupiah(laporan.tunai ?? 0)}
+            </span>
+          </div>
+          <div className="income-breakdown-row">
+            <span>📱 QRIS</span>
+            <span className="income-breakdown-qty">bayar via</span>
+            <span className="income-breakdown-val">
+              {formatRupiah(laporan.qris ?? 0)}
+            </span>
+          </div>
         </div>
       )}
 

@@ -209,6 +209,9 @@ export function IncomeEntryModal({
   const [potonganHarga, setPotonganHarga] = useState<number>(
     existing?.potonganHarga ?? 0,
   )
+  // Pembayaran via (Rupiah) — pecahan tunai & QRIS. Informatif saja.
+  const [tunai, setTunai] = useState<number>(existing?.tunai ?? 0)
+  const [qris, setQris] = useState<number>(existing?.qris ?? 0)
 
   // Price snapshot. Keep the laporan's historic prices for items it already
   // had, but fall back to the current catalog price for any item without a
@@ -247,6 +250,8 @@ export function IncomeEntryModal({
     pemakaianKertas,
     amplopTerpakai,
     potonganHarga,
+    tunai,
+    qris,
   }
   const inc = hitungIncome(previewLaporan)
   const tiketPerLayanan = totalTiketPerLayanan(items)
@@ -293,6 +298,13 @@ export function IncomeEntryModal({
     ]
       .filter(Boolean)
       .join(' · ') || 'Opsional'
+  const bayarSummary =
+    [
+      tunai > 0 ? `tunai ${formatRupiah(tunai)}` : null,
+      qris > 0 ? `QRIS ${formatRupiah(qris)}` : null,
+    ]
+      .filter(Boolean)
+      .join(' · ') || 'Opsional'
 
   // Section yang dibuka otomatis saat edit kalau laporannya sudah punya isi,
   // supaya data lama tidak tersembunyi. Dihitung sekali dari `existing`.
@@ -304,6 +316,8 @@ export function IncomeEntryModal({
       (existing.pemakaianKertas?.length ?? 0) > 1)
   const lainDefaultOpen =
     (existing?.potonganHarga ?? 0) > 0 || !!existing?.keterangan?.trim()
+  const bayarDefaultOpen =
+    (existing?.tunai ?? 0) > 0 || (existing?.qris ?? 0) > 0
 
   function setItem(
     layanan: string,
@@ -412,6 +426,8 @@ export function IncomeEntryModal({
       pemakaianKertas,
       amplopTerpakai,
       potonganHarga: Math.max(0, Math.floor(potonganHarga || 0)),
+      tunai: Math.max(0, Math.floor(tunai || 0)),
+      qris: Math.max(0, Math.floor(qris || 0)),
     }
     onSave(laporan)
   }
@@ -790,6 +806,51 @@ export function IncomeEntryModal({
               placeholder="cth: rame banget, ada event sekolah"
               style={{ minHeight: 60, resize: 'vertical' }}
             />
+          </div>
+        </Section>
+
+        <Section
+          ikon="💳"
+          title="Pembayaran via"
+          summary={bayarSummary}
+          defaultOpen={bayarDefaultOpen}
+        >
+          {/* Pecahan pembayaran yang diterima per metode (tunai/QRIS). Murni
+              catatan — tidak memengaruhi total income maupun bonus karyawan. */}
+          <div className="field">
+            <label>💵 Tunai (Rp)</label>
+            <input
+              type="number"
+              inputMode="numeric"
+              min={0}
+              step={1000}
+              value={tunai === 0 ? '' : String(tunai)}
+              placeholder="0"
+              onChange={(e) =>
+                setTunai(Math.max(0, parseInt(e.target.value, 10) || 0))
+              }
+              style={selStyle}
+            />
+          </div>
+
+          <div className="field">
+            <label>📱 QRIS (Rp)</label>
+            <input
+              type="number"
+              inputMode="numeric"
+              min={0}
+              step={1000}
+              value={qris === 0 ? '' : String(qris)}
+              placeholder="0"
+              onChange={(e) =>
+                setQris(Math.max(0, parseInt(e.target.value, 10) || 0))
+              }
+              style={selStyle}
+            />
+          </div>
+          <div className="form-hint">
+            Catatan metode pembayaran yang diterima. Tidak memengaruhi total
+            income.
           </div>
         </Section>
 

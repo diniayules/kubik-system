@@ -79,6 +79,8 @@ type LaporanRow = {
   amplop_terpakai: number | null
   pemakaian_kertas: { kertasId: string; jumlah: number }[] | null
   potongan_harga: number | null
+  tunai: number | null
+  qris: number | null
 }
 type EventRow = {
   id: string
@@ -170,7 +172,7 @@ export async function fetchAppData(): Promise<AppData> {
     supabase
       .from('laporan_income')
       .select(
-        'id, tanggal, items, upgrades, produk, keterangan, harga_tiket, harga_cetak, harga_upgrade, harga_produk, kertas_id, amplop_terpakai, pemakaian_kertas, potongan_harga',
+        'id, tanggal, items, upgrades, produk, keterangan, harga_tiket, harga_cetak, harga_upgrade, harga_produk, kertas_id, amplop_terpakai, pemakaian_kertas, potongan_harga, tunai, qris',
       ),
     supabase
       .from('laporan_event')
@@ -256,6 +258,8 @@ export async function fetchAppData(): Promise<AppData> {
       pemakaianKertas,
       amplopTerpakai: l.amplop_terpakai ?? undefined,
       potonganHarga: l.potongan_harga ?? 0,
+      tunai: l.tunai ?? 0,
+      qris: l.qris ?? 0,
     }
   })
 
@@ -413,6 +417,8 @@ export async function persistChanges(
       pemakaian_kertas: l.pemakaianKertas ?? [],
       amplop_terpakai: l.amplopTerpakai ?? null,
       potongan_harga: l.potonganHarga ?? 0,
+      tunai: l.tunai ?? 0,
+      qris: l.qris ?? 0,
     }),
     userId,
   )

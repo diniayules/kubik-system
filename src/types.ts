@@ -154,6 +154,13 @@ export type LaporanIncome = {
    * item, bukan dari nilai rupiah).
    */
   potonganHarga?: number
+  /**
+   * Pembayaran yang diterima dipecah per metode (Rupiah). Murni informatif —
+   * tidak memengaruhi total income maupun bonus karyawan. `undefined`/0 =
+   * laporan lama atau metode itu tidak dipakai.
+   */
+  tunai?: number
+  qris?: number
 }
 
 // ---------- Event (Photobooth & Photo Game) ----------

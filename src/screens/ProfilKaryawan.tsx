@@ -65,19 +65,21 @@ export function ProfilKaryawan({ data, setData, isAdmin, currentUserId }: Props)
   )
 
   // Karyawan yang sedang ditampilkan (full-page) & yang sedang diedit.
+  // Admin mulai dari grid kartu (selectedId null); karyawan langsung ke diri sendiri.
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [editing, setEditing] = useState<Employee | null>(null)
 
-  // Profil aktif: pilihan user kalau masih valid, jika tidak ambil yang pertama.
-  const selected =
-    karyawan.find((e) => e.id === selectedId) ?? karyawan[0] ?? null
+  const selected = isAdmin
+    ? karyawan.find((e) => e.id === selectedId) ?? null
+    : karyawan[0] ?? null
 
-  // Hitung ringkasan seumur-hidup (semua bulan) untuk karyawan yang ditampilkan.
-  const profil = useMemo<Profil>(() => {
-    if (!selected) return PROFIL_KOSONG
-    const p: Profil = { ...PROFIL_KOSONG }
+  // Hitung ringkasan seumur-hidup (semua bulan) untuk SEMUA karyawan, sekali jalan.
+  const profilById = useMemo(() => {
+    const map = new Map<string, Profil>()
+    for (const e of karyawan) map.set(e.id, { ...PROFIL_KOSONG })
     for (const rec of data.records) {
-      if (rec.employeeId !== selected.id) continue
+      const p = map.get(rec.employeeId)
+      if (!p) continue
       if (rec.status === 'menunggu') continue // belum disetujui → tidak dihitung
       if (rec.shift === 'cuti') {
         p.hariCuti += 1
@@ -94,13 +96,15 @@ export function ProfilKaryawan({ data, setData, isAdmin, currentUserId }: Props)
       p.lemburMenit += ring.lemburMenit
     }
     for (const lap of data.laporanIncome) {
-      const r = ringkasanPerKaryawan(lap)[selected.id]
-      if (!r) continue
-      p.jumlahItem += r.tiket + r.cetak + r.upgrade + r.produk
-      p.totalPenjualan += r.total
+      for (const [id, r] of Object.entries(ringkasanPerKaryawan(lap))) {
+        const p = map.get(id)
+        if (!p) continue
+        p.jumlahItem += r.tiket + r.cetak + r.upgrade + r.produk
+        p.totalPenjualan += r.total
+      }
     }
-    return p
-  }, [selected, data.records, data.laporanIncome])
+    return map
+  }, [karyawan, data.records, data.laporanIncome])
 
   function simpanProfil(next: Employee) {
     setData({
@@ -110,7 +114,7 @@ export function ProfilKaryawan({ data, setData, isAdmin, currentUserId }: Props)
     setEditing(null)
   }
 
-  if (!selected) {
+  if (karyawan.length === 0) {
     return (
       <div className="gaji-empty">
         {isAdmin
@@ -120,39 +124,100 @@ export function ProfilKaryawan({ data, setData, isAdmin, currentUserId }: Props)
     )
   }
 
-  const gajiPokok = data.gajiPokok[selected.id] ?? 0
-  const canEdit = isAdmin || selected.id === currentUserId
-  const role = selected.role ?? 'karyawan'
+  // ----- Admin tanpa pilihan → grid kartu profil -----
+  if (isAdmin && !selected) {
+    return (
+      <>
+        <div className="section-head">
+          <h2 style={{ fontSize: 20 }}>
+            Profil Karyawan <span className="count-badge">{karyawan.length}</span>
+          </h2>
+        </div>
+        <div className="profil-cards">
+          {karyawan.map((e) => (
+            <ProfilKartu
+              key={e.id}
+              employee={e}
+              profil={profilById.get(e.id) ?? PROFIL_KOSONG}
+              onOpen={() => setSelectedId(e.id)}
+            />
+          ))}
+        </div>
+
+        {editing && (
+          <EditProfilModal
+            employee={editing}
+            isAdmin={isAdmin}
+            onSave={simpanProfil}
+            onClose={() => setEditing(null)}
+          />
+        )}
+      </>
+    )
+  }
+
+  // ----- Detail lembar profil (karyawan: dirinya; admin: kartu yang dipilih) -----
+  const profil = profilById.get(selected!.id) ?? PROFIL_KOSONG
+  const gajiPokok = data.gajiPokok[selected!.id] ?? 0
+  const canEdit = isAdmin || selected!.id === currentUserId
+  const role = selected!.role ?? 'karyawan'
 
   return (
     <>
-      {/* Pemilih karyawan — hanya admin & jika lebih dari satu */}
-      {isAdmin && karyawan.length > 1 && (
-        <div className="profil-switcher">
-          {karyawan.map((e) => (
-            <button
-              key={e.id}
-              type="button"
-              className={
-                'profil-switcher-btn' +
-                (e.id === selected.id ? ' is-active' : '')
-              }
-              onClick={() => setSelectedId(e.id)}
-            >
-              <Avatar
-                name={e.nama}
-                colorIndex={colorIndexForName(e.id)}
-                size="sm"
-                foto={e.foto}
-              />
-              <span>{e.nama}</span>
-            </button>
-          ))}
-        </div>
+      {/* Kembali ke daftar kartu (admin) */}
+      {isAdmin && (
+        <button
+          type="button"
+          className="btn btn--ghost"
+          style={{ marginBottom: 16 }}
+          onClick={() => setSelectedId(null)}
+        >
+          <Icons.back /> Semua karyawan
+        </button>
       )}
 
-      {/* Lembar profil */}
-      <div className="profil-sheet">
+      {/* Lembar profil — bagian Penjualan & Gaji hanya untuk admin */}
+      <ProfilSheet
+        selected={selected!}
+        profil={profil}
+        gajiPokok={gajiPokok}
+        canEdit={canEdit}
+        role={role}
+        showPenjualanGaji={isAdmin}
+        onEdit={() => setEditing(selected!)}
+      />
+
+      {editing && (
+        <EditProfilModal
+          employee={editing}
+          isAdmin={isAdmin}
+          onSave={simpanProfil}
+          onClose={() => setEditing(null)}
+        />
+      )}
+    </>
+  )
+}
+
+function ProfilSheet({
+  selected,
+  profil,
+  gajiPokok,
+  canEdit,
+  role,
+  showPenjualanGaji,
+  onEdit,
+}: {
+  selected: Employee
+  profil: Profil
+  gajiPokok: number
+  canEdit: boolean
+  role: 'admin' | 'karyawan'
+  showPenjualanGaji: boolean
+  onEdit: () => void
+}) {
+  return (
+    <div className="profil-sheet">
         <div className="profil-sheet-head">
           <Avatar
             name={selected.nama}
@@ -174,7 +239,7 @@ export function ProfilKaryawan({ data, setData, isAdmin, currentUserId }: Props)
             <button
               type="button"
               className="btn btn--ghost"
-              onClick={() => setEditing(selected)}
+              onClick={onEdit}
             >
               <Icons.pencil /> Edit
             </button>
@@ -188,6 +253,13 @@ export function ProfilKaryawan({ data, setData, isAdmin, currentUserId }: Props)
           <Row label="Jabatan" val={selected.jabatan || '—'} />
           <Row label="Tempat lahir" val={selected.tempatLahir || '—'} />
           <Row label="Tanggal lahir" val={formatTanggalID(selected.tanggalLahir)} />
+          {selected.noHp && selected.noHp.length > 0 ? (
+            selected.noHp.map((hp, i) => (
+              <Row key={i} label={i === 0 ? 'No. HP' : ''} val={hp} />
+            ))
+          ) : (
+            <Row label="No. HP" val="—" />
+          )}
           <Row label="Pendidikan terakhir" val={selected.pendidikan || '—'} />
           <Row label="Mulai kerja" val={formatTanggalID(selected.tanggalDiterima)} />
         </section>
@@ -202,26 +274,70 @@ export function ProfilKaryawan({ data, setData, isAdmin, currentUserId }: Props)
           <Row label="Libur studio" val={`${profil.hariLibur} hari`} />
         </section>
 
-        <section className="profil-sheet-sect">
-          <h3>Penjualan &amp; Gaji</h3>
-          <Row label="Item terjual" val={`${profil.jumlahItem} item`} />
-          <Row label="Total penjualan" val={formatRupiah(profil.totalPenjualan)} />
-          <Row
-            label="Gaji pokok / bulan"
-            val={gajiPokok > 0 ? formatRupiah(gajiPokok) : 'Belum diatur'}
-          />
-        </section>
+        {showPenjualanGaji && (
+          <section className="profil-sheet-sect">
+            <h3>Penjualan &amp; Gaji</h3>
+            <Row label="Item terjual" val={`${profil.jumlahItem} item`} />
+            <Row label="Total penjualan" val={formatRupiah(profil.totalPenjualan)} />
+            <Row
+              label="Gaji pokok / bulan"
+              val={gajiPokok > 0 ? formatRupiah(gajiPokok) : 'Belum diatur'}
+            />
+          </section>
+        )}
+    </div>
+  )
+}
+
+function ProfilKartu({
+  employee,
+  profil,
+  onOpen,
+}: {
+  employee: Employee
+  profil: Profil
+  onOpen: () => void
+}) {
+  const role = employee.role ?? 'karyawan'
+  return (
+    <button type="button" className="profil-card" onClick={onOpen}>
+      <div className="profil-card-top">
+        <Avatar
+          name={employee.nama}
+          colorIndex={colorIndexForName(employee.id)}
+          size="lg"
+          foto={employee.foto}
+        />
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div className="nm">{employee.nama}</div>
+          <div className="role">{employee.jabatan || 'Karyawan'}</div>
+          <span
+            className={`role-pill role-${role}`}
+            style={{ marginTop: 5, display: 'inline-flex' }}
+          >
+            {role === 'admin' ? '🛡️ Admin' : '👤 Karyawan'}
+          </span>
+        </div>
       </div>
 
-      {editing && (
-        <EditProfilModal
-          employee={editing}
-          isAdmin={isAdmin}
-          onSave={simpanProfil}
-          onClose={() => setEditing(null)}
-        />
-      )}
-    </>
+      <div className="profil-card-meta">
+        <span className="profil-card-nik">NIK · {employee.nomorInduk || '—'}</span>
+        {employee.noHp && employee.noHp.length > 0 && (
+          <span className="profil-card-hp">📱 {employee.noHp[0]}</span>
+        )}
+      </div>
+
+      <div className="profil-card-foot">
+        <div className="profil-card-stat">
+          <span className="k">Hadir</span>
+          <span className="v">{profil.hariHadir} hr</span>
+        </div>
+        <div className="profil-card-stat">
+          <span className="k">Item</span>
+          <span className="v">{profil.jumlahItem}</span>
+        </div>
+      </div>
+    </button>
   )
 }
 
@@ -280,6 +396,9 @@ function EditProfilModal({
 }) {
   const [nama, setNama] = useState(employee.nama)
   const [nomorInduk, setNomorInduk] = useState(employee.nomorInduk ?? '')
+  const [noHp, setNoHp] = useState<string[]>(
+    employee.noHp && employee.noHp.length > 0 ? employee.noHp : [''],
+  )
   const [foto, setFoto] = useState<string | undefined>(employee.foto)
   const [namaLengkap, setNamaLengkap] = useState(employee.namaLengkap ?? '')
   const [jabatan, setJabatan] = useState(employee.jabatan ?? '')
@@ -310,6 +429,7 @@ function EditProfilModal({
       nama: nama.trim() || employee.nama,
       // Nomor Induk Karyawan hanya admin yang boleh mengubah.
       nomorInduk: isAdmin ? nomorInduk.trim() : employee.nomorInduk,
+      noHp: noHp.map((h) => h.trim()).filter(Boolean),
       foto,
       namaLengkap: namaLengkap.trim(),
       // Jabatan hanya admin yang boleh mengubah (tampil di slip gaji).
@@ -411,6 +531,45 @@ function EditProfilModal({
             onChange={(e) => setNamaLengkap(e.target.value)}
             placeholder="cth: Dini Ayu Lestari"
           />
+        </div>
+
+        <div className="field">
+          <label>No. HP</label>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {noHp.map((hp, i) => (
+              <div key={i} style={{ display: 'flex', gap: 8 }}>
+                <input
+                  type="tel"
+                  inputMode="tel"
+                  value={hp}
+                  onChange={(e) =>
+                    setNoHp(noHp.map((v, j) => (j === i ? e.target.value : v)))
+                  }
+                  placeholder="cth: 0812-3456-7890"
+                  style={{ flex: 1 }}
+                />
+                {noHp.length > 1 && (
+                  <button
+                    type="button"
+                    className="btn btn--ghost"
+                    onClick={() => setNoHp(noHp.filter((_, j) => j !== i))}
+                    title="Hapus nomor"
+                    aria-label="Hapus nomor"
+                  >
+                    <Icons.x />
+                  </button>
+                )}
+              </div>
+            ))}
+            <button
+              type="button"
+              className="btn btn--ghost"
+              style={{ alignSelf: 'flex-start' }}
+              onClick={() => setNoHp([...noHp, ''])}
+            >
+              <Icons.plus /> Tambah nomor
+            </button>
+          </div>
         </div>
 
         <div className="field">

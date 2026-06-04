@@ -5,6 +5,7 @@ import { useLang } from '../i18n'
 export type NavId =
   | 'landing'
   | 'absensi'
+  | 'profil'
   | 'laporan'
   | 'event-photobooth'
   | 'event-game'
@@ -25,6 +26,7 @@ type Item = {
 
 const NAV_ITEMS: Item[] = [
   { id: 'landing', label: 'Dashboard', icon: Icons.home, group: 'Utama' },
+  { id: 'profil', label: 'Profil Karyawan', icon: Icons.user, group: 'Operasional' },
   { id: 'absensi', label: 'Presensi Karyawan', icon: Icons.clock, group: 'Operasional' },
   { id: 'inventaris', label: 'Inventaris & Stok', icon: Icons.box, group: 'Operasional' },
   { id: 'laporan', label: 'Studio', icon: Icons.wallet, group: 'Keuangan' },

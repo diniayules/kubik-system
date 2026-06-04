@@ -9,6 +9,27 @@ export type Employee = {
    * tetap kompatibel; anggap `undefined` sebagai karyawan.
    */
   role?: 'admin' | 'karyawan'
+  /**
+   * Nomor Induk Karyawan (internal Kubik). HANYA admin yang boleh mengisi/
+   * mengubah; karyawan melihat read-only. Migration 0026.
+   */
+  nomorInduk?: string
+  /**
+   * Data profil kepegawaian (migration 0025). Semua opsional agar data lama
+   * tetap kompatibel; bisa diisi/diedit karyawan sendiri maupun admin.
+   *  - foto            : avatar foto (data URL JPEG, di-resize kecil di client)
+   *  - namaLengkap     : nama lengkap resmi (vs `nama` panggilan)
+   *  - tempatLahir     : tempat lahir
+   *  - tanggalLahir    : tanggal lahir (YYYY-MM-DD)
+   *  - pendidikan      : pendidikan terakhir
+   *  - tanggalDiterima : tanggal mulai bekerja di Kubik (YYYY-MM-DD)
+   */
+  foto?: string
+  namaLengkap?: string
+  tempatLahir?: string
+  tanggalLahir?: string
+  pendidikan?: string
+  tanggalDiterima?: string
 }
 
 /** Shift kerja (karyawan benar-benar bertugas hari itu). */

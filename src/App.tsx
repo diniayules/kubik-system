@@ -3,6 +3,7 @@ import { Landing } from './screens/Landing'
 import { Home } from './screens/Home'
 import { Absen } from './screens/Absen'
 import { Riwayat } from './screens/Riwayat'
+import { ProfilKaryawan } from './screens/ProfilKaryawan'
 import { LaporanIncome } from './screens/LaporanIncome'
 import { Event } from './screens/Event'
 import { Inventaris } from './screens/Inventaris'
@@ -29,6 +30,7 @@ type Screen =
   | { name: 'absensi' }
   | { name: 'absen'; employeeId: string; tanggal?: string }
   | { name: 'riwayat'; employeeId: string }
+  | { name: 'profil' }
   | { name: 'laporan' }
   | { name: 'event-photobooth' }
   | { name: 'event-game' }
@@ -307,6 +309,15 @@ function Inner() {
                 isAdmin={isAdmin}
                 currentUserId={currentUserId}
                 onBack={() => setScreen({ name: 'absensi' })}
+              />
+            )}
+
+            {screen.name === 'profil' && (
+              <ProfilKaryawan
+                data={data}
+                setData={setData}
+                isAdmin={isAdmin}
+                currentUserId={currentUserId}
               />
             )}
 

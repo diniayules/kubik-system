@@ -17,9 +17,11 @@ type Props = {
   name: string
   colorIndex?: number
   size?: 'sm' | 'md' | 'lg'
+  /** Foto avatar (data URL / URL). Bila ada, menggantikan inisial. */
+  foto?: string
 }
 
-export function Avatar({ name, colorIndex, size = 'md' }: Props) {
+export function Avatar({ name, colorIndex, size = 'md', foto }: Props) {
   const init =
     name
       .split(/\s+/)
@@ -32,7 +34,7 @@ export function Avatar({ name, colorIndex, size = 'md' }: Props) {
   const cls = size === 'lg' ? 'avatar avatar-lg' : 'avatar'
   return (
     <div className={cls} style={{ background: `linear-gradient(135deg, ${c1}, ${c2})` }}>
-      {init}
+      {foto ? <img src={foto} alt={name} /> : init}
     </div>
   )
 }

@@ -24,6 +24,7 @@ const ID: Dict = {
   // Sidebar items
   'side.landing': 'Dashboard',
   'side.absensi': 'Presensi Karyawan',
+  'side.profil': 'Profil Karyawan',
   'side.inventaris': 'Inventaris & Stok',
   'side.laporan': 'Pemasukan',
   'side.event-photobooth': 'Photobooth',
@@ -43,6 +44,8 @@ const ID: Dict = {
   'page.absen.sub': 'Catat event harian & ringkasan jam kerja',
   'page.riwayat.title': 'Riwayat Absensi',
   'page.riwayat.sub': 'Histori catatan absen per karyawan',
+  'page.profil.title': 'Profil Karyawan',
+  'page.profil.sub': 'Ringkasan kehadiran, jam kerja & penjualan tiap karyawan',
   'page.laporan.title': 'Laporan Pemasukan Harian',
   'page.laporan.sub': 'Penjualan Photobooth, Photobox, Photo Game & upgrade',
   'page.event-photobooth.title': 'Event · Photobooth',
@@ -84,6 +87,7 @@ const EN: Dict = {
   // Sidebar items
   'side.landing': 'Dashboard',
   'side.absensi': 'Employee Attendance',
+  'side.profil': 'Employee Profile',
   'side.inventaris': 'Inventory & Stock',
   'side.laporan': 'Income',
   'side.event-photobooth': 'Photobooth',
@@ -103,6 +107,8 @@ const EN: Dict = {
   'page.absen.sub': 'Record daily events & work-hour summary',
   'page.riwayat.title': 'Attendance History',
   'page.riwayat.sub': 'Attendance record history per employee',
+  'page.profil.title': 'Employee Profile',
+  'page.profil.sub': 'Attendance, work hours & sales summary per employee',
   'page.laporan.title': 'Daily Income Report',
   'page.laporan.sub': 'Photobooth, Photobox, Photo Game sales & upgrades',
   'page.event-photobooth.title': 'Event · Photobooth',

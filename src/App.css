@@ -1643,6 +1643,61 @@
 .bottom-actions .btn { flex: 1; min-width: 160px; }
 
 /* Detail header for Absen screen */
+/* Pemilih karyawan di halaman Profil (admin) */
+.profil-switcher {
+  display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 18px;
+}
+.profil-switcher-btn {
+  display: inline-flex; align-items: center; gap: 9px;
+  padding: 6px 14px 6px 6px; border-radius: 999px;
+  background: var(--surface); border: 1.8px solid var(--line);
+  font-weight: 700; font-size: 14px; color: var(--ink-soft);
+  transition: border-color .15s, color .15s, background .15s;
+}
+.profil-switcher-btn .avatar { width: 32px; height: 32px; font-size: 13px; border-radius: 50%; }
+.profil-switcher-btn:hover { border-color: var(--primary-2); color: var(--ink); }
+.profil-switcher-btn.is-active {
+  border-color: var(--primary); color: var(--primary);
+  background: color-mix(in srgb, var(--primary-2) 12%, var(--surface));
+}
+
+/* Lembar profil — tampilan dokumen/biodata yang bersih */
+.profil-sheet {
+  max-width: 680px; background: var(--surface);
+  border: 1.5px solid var(--line); border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card); padding: clamp(20px, 3vw, 34px);
+}
+.profil-sheet-head {
+  display: flex; align-items: center; gap: 16px;
+  padding-bottom: 18px; margin-bottom: 4px;
+  border-bottom: 1.5px solid var(--line);
+}
+.profil-sheet-head .nm {
+  font-family: var(--font-display); font-weight: 600; font-size: 23px;
+  color: var(--ink); line-height: 1.15;
+}
+.profil-sheet-head .role { font-size: 14px; color: var(--ink-soft); font-weight: 600; margin-top: 2px; }
+.profil-nik {
+  font-size: 12.5px; font-weight: 800; letter-spacing: 0.04em;
+  color: var(--muted); margin-top: 4px; font-variant-numeric: tabular-nums;
+}
+.profil-sheet-head .avatar { width: 64px; height: 64px; font-size: 24px; }
+.profil-sheet-sect { margin-top: 22px; }
+.profil-sheet-sect h3 {
+  font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.1em;
+  font-weight: 800; color: var(--muted); margin-bottom: 6px;
+}
+.profil-row {
+  display: flex; justify-content: space-between; gap: 16px;
+  padding: 10px 0; border-bottom: 1px dotted var(--line); font-size: 15px;
+}
+.profil-row:last-child { border-bottom: none; }
+.profil-row-label { color: var(--ink-soft); font-weight: 600; }
+.profil-row-val {
+  color: var(--ink); font-weight: 700; text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 .detail-head {
   display: flex; gap: 16px; align-items: center; flex-wrap: wrap;
   padding: 22px; background: var(--surface);

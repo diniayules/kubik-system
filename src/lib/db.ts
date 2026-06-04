@@ -52,6 +52,13 @@ type ProfileRow = {
   jabatan: string
   pin_hash: string | null
   role: 'admin' | 'karyawan' | null
+  nomor_induk: string | null
+  foto: string | null
+  nama_lengkap: string | null
+  tempat_lahir: string | null
+  tanggal_lahir: string | null
+  pendidikan: string | null
+  tanggal_diterima: string | null
 }
 type AbsenRow = {
   id: string
@@ -166,7 +173,7 @@ export async function fetchAppData(): Promise<AppData> {
   ] = await Promise.all([
     supabase
       .from('profiles')
-      .select('id, nama, jabatan, pin_hash, role')
+      .select('id, nama, jabatan, pin_hash, role, nomor_induk, foto, nama_lengkap, tempat_lahir, tanggal_lahir, pendidikan, tanggal_diterima')
       .eq('active', true)
       .order('created_at', { ascending: true }),
     supabase.from('absen_records').select('id, employee_id, tanggal, shift, events, status, extra_menit, extra_catatan'),
@@ -191,7 +198,7 @@ export async function fetchAppData(): Promise<AppData> {
     // Karyawan nonaktif (active = false) — untuk fitur "Aktifkan kembali" admin.
     supabase
       .from('profiles')
-      .select('id, nama, jabatan, pin_hash, role')
+      .select('id, nama, jabatan, pin_hash, role, nomor_induk, foto, nama_lengkap, tempat_lahir, tanggal_lahir, pendidikan, tanggal_diterima')
       .eq('active', false)
       .order('created_at', { ascending: true }),
   ])
@@ -215,6 +222,13 @@ export async function fetchAppData(): Promise<AppData> {
     jabatan: p.jabatan,
     pinHash: p.pin_hash ?? '',
     role: p.role ?? 'karyawan',
+    nomorInduk: p.nomor_induk ?? undefined,
+    foto: p.foto ?? undefined,
+    namaLengkap: p.nama_lengkap ?? undefined,
+    tempatLahir: p.tempat_lahir ?? undefined,
+    tanggalLahir: p.tanggal_lahir ?? undefined,
+    pendidikan: p.pendidikan ?? undefined,
+    tanggalDiterima: p.tanggal_diterima ?? undefined,
   })
   const employees: Employee[] = profiles.map(toEmployee)
   const inactiveEmployees: Employee[] = inactiveProfiles.map(toEmployee)
@@ -550,7 +564,18 @@ export async function persistChanges(
         Promise.resolve(
           supabase
             .from('profiles')
-            .update({ nama: e.nama, jabatan: e.jabatan, pin_hash: e.pinHash || null })
+            .update({
+              nama: e.nama,
+              jabatan: e.jabatan,
+              pin_hash: e.pinHash || null,
+              nomor_induk: e.nomorInduk ?? '',
+              foto: e.foto ?? null,
+              nama_lengkap: e.namaLengkap ?? '',
+              tempat_lahir: e.tempatLahir ?? '',
+              tanggal_lahir: e.tanggalLahir || null,
+              pendidikan: e.pendidikan ?? '',
+              tanggal_diterima: e.tanggalDiterima || null,
+            })
             .eq('id', e.id),
         ).then(throwIfError),
       )

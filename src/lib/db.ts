@@ -14,7 +14,6 @@ import type {
   AbsenHari,
   AppData,
   Employee,
-  EventConfig,
   EventKategori,
   HargaProduk,
   HargaTiket,
@@ -130,7 +129,6 @@ type ConfigRow = {
   harga_cetak: number
   harga_upgrade: HargaUpgrade
   harga_produk: HargaProduk | null
-  event_config: Partial<Record<EventKategori, EventConfig>> | null
   gaji_pokok: Record<string, number> | null
   gaji_dibayar: Record<string, boolean> | null
   brand_kicker: string | null
@@ -333,7 +331,6 @@ export async function fetchAppData(): Promise<AppData> {
     records,
     laporanIncome,
     laporanEvent,
-    eventConfig: config?.event_config ?? undefined,
     layananCatalog:
       Array.isArray(config?.layanan_catalog) && config.layanan_catalog.length
         ? config.layanan_catalog
@@ -579,7 +576,6 @@ export async function persistChanges(
     'hargaCetak',
     'hargaUpgrade',
     'hargaProduk',
-    'eventConfig',
     'gajiPokok',
     'gajiDibayar',
     'brandKicker',
@@ -604,7 +600,6 @@ export async function persistChanges(
             harga_cetak: next.hargaCetak,
             harga_upgrade: next.hargaUpgrade,
             harga_produk: next.hargaProduk,
-            event_config: next.eventConfig ?? null,
             gaji_pokok: next.gajiPokok ?? {},
             gaji_dibayar: next.gajiDibayar ?? {},
             brand_kicker: next.brandKicker ?? null,

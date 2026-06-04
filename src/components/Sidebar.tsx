@@ -25,7 +25,7 @@ type Item = {
 
 const NAV_ITEMS: Item[] = [
   { id: 'landing', label: 'Dashboard', icon: Icons.home, group: 'Utama' },
-  { id: 'absensi', label: 'Absensi Karyawan', icon: Icons.clock, group: 'Operasional' },
+  { id: 'absensi', label: 'Presensi Karyawan', icon: Icons.clock, group: 'Operasional' },
   { id: 'inventaris', label: 'Inventaris & Stok', icon: Icons.box, group: 'Operasional' },
   { id: 'laporan', label: 'Studio', icon: Icons.wallet, group: 'Keuangan' },
   { id: 'pengeluaran', label: 'Pengeluaran', icon: Icons.cart, group: 'Keuangan' },

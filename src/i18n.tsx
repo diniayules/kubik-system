@@ -23,7 +23,7 @@ const ID: Dict = {
   'side.group.Sistem': 'Sistem',
   // Sidebar items
   'side.landing': 'Dashboard',
-  'side.absensi': 'Absensi Karyawan',
+  'side.absensi': 'Presensi Karyawan',
   'side.inventaris': 'Inventaris & Stok',
   'side.laporan': 'Pemasukan',
   'side.event-photobooth': 'Photobooth',
@@ -37,7 +37,7 @@ const ID: Dict = {
   // Page meta
   'page.landing.title': 'Dashboard',
   'page.landing.sub': 'Ringkasan operasional studio hari ini',
-  'page.absensi.title': 'Absensi Karyawan',
+  'page.absensi.title': 'Presensi Karyawan',
   'page.absensi.sub': 'Catat clock-in & clock-out per karyawan',
   'page.absen.title': 'Detail Absensi',
   'page.absen.sub': 'Catat event harian & ringkasan jam kerja',

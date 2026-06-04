@@ -1,11 +1,11 @@
 import { useState } from 'react'
 import type { CSSProperties } from 'react'
-import type { AppData, EventKategori, LaporanEvent, SewaTipe } from '../types'
+import type { EventKategori, LaporanEvent, SewaTipe } from '../types'
 import { todayKey } from '../storage'
 import { Modal, ModalHead } from '../components/Modal'
 import { Icons } from '../components/Icons'
 import { formatRupiah } from '../income'
-import { getEventConfig, hitungEvent, labelEventKategori } from '../event'
+import { hitungEvent, labelEventKategori } from '../event'
 
 const inputStyle: CSSProperties = {
   width: '100%',
@@ -19,7 +19,6 @@ const inputStyle: CSSProperties = {
 }
 
 type Props = {
-  data: AppData
   kategori: EventKategori
   tipe: SewaTipe
   existing?: LaporanEvent
@@ -28,20 +27,18 @@ type Props = {
 }
 
 export function EventEntryModal({
-  data,
   kategori,
   tipe,
   existing,
   onSave,
   onClose,
 }: Props) {
-  const cfg = getEventConfig(data, kategori)
   const [tanggal, setTanggal] = useState(existing?.tanggal ?? todayKey())
   const [keterangan, setKeterangan] = useState(existing?.keterangan ?? '')
 
   // mode 'jam'
   const [jam, setJam] = useState(existing?.jam ?? 0)
-  const [tarif, setTarif] = useState(existing?.tarifPerJam ?? cfg.tarifPerJam)
+  const [tarif, setTarif] = useState(existing?.tarifPerJam ?? 0)
   const [biayaKertas, setBiayaKertas] = useState(existing?.biayaKertas ?? 0)
   const [biayaTinta, setBiayaTinta] = useState(existing?.biayaTinta ?? 0)
   const [biayaListrik, setBiayaListrik] = useState(existing?.biayaListrik ?? 0)
@@ -50,9 +47,9 @@ export function EventEntryModal({
   // mode 'voucher'
   const [voucher, setVoucher] = useState(existing?.voucher ?? 0)
   const [cetak, setCetak] = useState(existing?.cetak ?? 0)
-  // Harga snapshot: pakai harga laporan lama kalau ada, kalau tidak harga config.
-  const hargaVoucher = existing?.hargaVoucher ?? cfg.hargaVoucher
-  const hargaCetak = existing?.hargaCetak ?? cfg.hargaCetak
+  // Harga diatur khusus per event. Laporan lama mempertahankan harga snapshot.
+  const [hargaVoucher, setHargaVoucher] = useState(existing?.hargaVoucher ?? 0)
+  const [hargaCetak, setHargaCetak] = useState(existing?.hargaCetak ?? 0)
 
   const isJam = tipe === 'jam'
 
@@ -168,13 +165,23 @@ export function EventEntryModal({
               <div>
                 <div className="upgrade-section-judul">Voucher &amp; Cetak</div>
                 <div className="upgrade-section-sub">
-                  Voucher {formatRupiah(hargaVoucher)} · Cetak {formatRupiah(hargaCetak)}
+                  Atur jumlah &amp; harga khusus untuk event ini.
                 </div>
               </div>
             </div>
             <div className="event-field-grid">
               <NumField label="Jumlah voucher" value={voucher} onChange={setVoucher} />
+              <NumField
+                label="Harga / voucher (Rp)"
+                value={hargaVoucher}
+                onChange={setHargaVoucher}
+              />
               <NumField label="(+) Cetak" value={cetak} onChange={setCetak} />
+              <NumField
+                label="Harga / cetak (Rp)"
+                value={hargaCetak}
+                onChange={setHargaCetak}
+              />
             </div>
           </div>
         )}

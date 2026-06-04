@@ -3,12 +3,7 @@ import type { AppData, EventKategori, LaporanEvent, SewaTipe } from '../types'
 import { todayKey } from '../storage'
 import { formatTanggalPanjang } from '../attendance'
 import { formatRupiah } from '../income'
-import {
-  applyEventConfig,
-  getEventConfig,
-  hitungEvent,
-  labelEventKategori,
-} from '../event'
+import { hitungEvent, labelEventKategori } from '../event'
 import { Icons } from '../components/Icons'
 import { Modal, ModalHead } from '../components/Modal'
 import { useToast } from '../components/Toast'
@@ -17,20 +12,18 @@ import { EventEntryModal } from './EventEntryModal'
 type Props = {
   data: AppData
   setData: (d: AppData) => void
-  isAdmin: boolean
   kategori: EventKategori
 }
 
 // Tiap kategori event tampil sebagai halaman penuh sendiri (menu di sidebar).
 // `key={kategori}` mereset state form/draft saat berpindah menu.
-export function Event({ data, setData, isAdmin, kategori }: Props) {
+export function Event({ data, setData, kategori }: Props) {
   return (
     <EventKategoriPanel
       key={kategori}
       kategori={kategori}
       data={data}
       setData={setData}
-      isAdmin={isAdmin}
     />
   )
 }
@@ -39,41 +32,14 @@ function EventKategoriPanel({
   kategori,
   data,
   setData,
-  isAdmin,
 }: Props) {
   const toast = useToast()
-  const cfg = getEventConfig(data, kategori)
   const hariIni = todayKey()
   const monthKey = hariIni.slice(0, 7)
 
-  const [showSetting, setShowSetting] = useState(false)
   const [pilihTipe, setPilihTipe] = useState(false)
   const [formTipe, setFormTipe] = useState<SewaTipe | null>(null)
   const [editing, setEditing] = useState<LaporanEvent | null>(null)
-
-  // Draft "Atur Harga"
-  const [draftVoucher, setDraftVoucher] = useState(String(cfg.hargaVoucher))
-  const [draftCetak, setDraftCetak] = useState(String(cfg.hargaCetak))
-  const [draftTarif, setDraftTarif] = useState(String(cfg.tarifPerJam))
-
-  function openSetting() {
-    setDraftVoucher(String(cfg.hargaVoucher))
-    setDraftCetak(String(cfg.hargaCetak))
-    setDraftTarif(String(cfg.tarifPerJam))
-    setShowSetting(true)
-  }
-
-  function simpanHarga() {
-    setData(
-      applyEventConfig(data, kategori, {
-        hargaVoucher: parseInt(draftVoucher, 10) || 0,
-        hargaCetak: parseInt(draftCetak, 10) || 0,
-        tarifPerJam: parseInt(draftTarif, 10) || 0,
-      }),
-    )
-    toast('ok', 'Harga event diperbarui')
-    setShowSetting(false)
-  }
 
   const sorted = useMemo(
     () =>
@@ -117,72 +83,9 @@ function EventKategoriPanel({
           <span className="date-pill">
             <Icons.sun /> {formatTanggalPanjang(hariIni)}
           </span>
-          {isAdmin && (
-            <button
-              type="button"
-              className="hero-edit-btn"
-              onClick={() => (showSetting ? setShowSetting(false) : openSetting())}
-            >
-              <Icons.lock /> Atur Harga
-            </button>
-          )}
         </div>
         <h1>Laporan Event</h1>
         <p className="sub">{labelEventKategori(kategori)} · sewa per jam &amp; per voucher</p>
-
-        {showSetting && (
-          <div className="hero-edit-form">
-            <div className="field">
-              <label>Harga / voucher (Rp)</label>
-              <input
-                type="number"
-                inputMode="numeric"
-                min={0}
-                step={1000}
-                value={draftVoucher}
-                onChange={(e) => setDraftVoucher(e.target.value)}
-              />
-            </div>
-            <div className="field">
-              <label>Harga / cetak (Rp)</label>
-              <input
-                type="number"
-                inputMode="numeric"
-                min={0}
-                step={1000}
-                value={draftCetak}
-                onChange={(e) => setDraftCetak(e.target.value)}
-              />
-            </div>
-            <div className="field">
-              <label>Tarif sewa / jam (Rp) — default saat input per jam</label>
-              <input
-                type="number"
-                inputMode="numeric"
-                min={0}
-                step={1000}
-                value={draftTarif}
-                onChange={(e) => setDraftTarif(e.target.value)}
-              />
-            </div>
-            <div className="hero-edit-actions">
-              <button type="button" className="btn btn--primary" onClick={simpanHarga}>
-                <Icons.check /> Simpan
-              </button>
-              <button
-                type="button"
-                className="btn btn--ghost"
-                onClick={() => setShowSetting(false)}
-              >
-                Batal
-              </button>
-            </div>
-            <div className="form-hint">
-              ⚠️ Harga voucher &amp; cetak dipakai laporan per-voucher baru. Laporan
-              lama tetap pakai harga saat dibuat (snapshot).
-            </div>
-          </div>
-        )}
 
         <div className="hero-stats">
           <div className="stat">
@@ -297,7 +200,6 @@ function EventKategoriPanel({
 
       {formTipe && (
         <EventEntryModal
-          data={data}
           kategori={kategori}
           tipe={formTipe}
           existing={editing ?? undefined}

@@ -268,7 +268,7 @@ export function Pengaturan({
           <div className="settings-section-label">Mode tampilan halaman</div>
           <div className="mode-row">
             <div className="mode-info">
-              <div className="mode-judul">Absensi Karyawan</div>
+              <div className="mode-judul">Presensi Karyawan</div>
               <div className="mode-desc">
                 Pilih cara melihat daftar karyawan di halaman Absensi
               </div>

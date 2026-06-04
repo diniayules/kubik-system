@@ -206,13 +206,6 @@ export type LaporanEvent = {
   hargaCetak?: number
 }
 
-/** Harga tetap per kategori event (dipakai mode voucher + default tarif/jam). */
-export type EventConfig = {
-  hargaVoucher: number
-  hargaCetak: number
-  tarifPerJam: number
-}
-
 export type WarnaTinta = 'BK' | 'LC' | 'M' | 'C' | 'Y' | 'LM'
 
 export type JenisKertas = {
@@ -272,8 +265,6 @@ export type AppData = {
   laporanIncome: LaporanIncome[]
   /** Laporan event (Photobooth & Photo Game) — terpisah dari laporanIncome. */
   laporanEvent: LaporanEvent[]
-  /** Harga tetap per kategori event. Disimpan di `app_config.event_config`. */
-  eventConfig?: Partial<Record<EventKategori, EventConfig>>
   layananCatalog: LayananDef[]
   upgradeCatalog: UpgradeDef[]
   produkCatalog: ProdukDef[]

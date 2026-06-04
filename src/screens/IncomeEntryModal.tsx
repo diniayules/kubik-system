@@ -498,7 +498,7 @@ export function IncomeEntryModal({
 
         {employees.length === 0 ? (
           <div className="form-hint">
-            Belum ada karyawan. Tambahkan dulu di menu Absensi Karyawan supaya
+            Belum ada karyawan. Tambahkan dulu di menu Presensi Karyawan supaya
             bisa input penjualan per karyawan.
           </div>
         ) : (

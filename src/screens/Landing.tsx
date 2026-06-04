@@ -143,7 +143,7 @@ export function Landing({
         <QuickCard
           tone="absensi"
           emoji="⏱️"
-          title="Absensi Karyawan"
+          title="Presensi Karyawan"
           sub="Clock-in, clock-out, riwayat absen"
           onClick={onAbsensi}
         />

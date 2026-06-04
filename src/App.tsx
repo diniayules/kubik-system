@@ -323,7 +323,6 @@ function Inner() {
               <Event
                 data={data}
                 setData={setData}
-                isAdmin={isAdmin}
                 kategori="photobooth"
               />
             )}
@@ -332,7 +331,6 @@ function Inner() {
               <Event
                 data={data}
                 setData={setData}
-                isAdmin={isAdmin}
                 kategori="game"
               />
             )}

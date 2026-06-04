@@ -2,12 +2,7 @@
 // event.ts · Logika laporan Event (Photobooth & Photo Game).
 // Terpisah penuh dari income/Photo Studio: tidak menyentuh stok atau gaji.
 // =============================================================
-import type {
-  AppData,
-  EventConfig,
-  EventKategori,
-  LaporanEvent,
-} from './types'
+import type { EventKategori, LaporanEvent } from './types'
 
 export const EVENT_KATEGORI_LIST: {
   id: EventKategori
@@ -20,23 +15,6 @@ export const EVENT_KATEGORI_LIST: {
 
 export function labelEventKategori(kat: EventKategori): string {
   return EVENT_KATEGORI_LIST.find((k) => k.id === kat)?.label ?? kat
-}
-
-export function defaultEventConfig(): EventConfig {
-  return { hargaVoucher: 0, hargaCetak: 0, tarifPerJam: 0 }
-}
-
-export function getEventConfig(data: AppData, kat: EventKategori): EventConfig {
-  return data.eventConfig?.[kat] ?? defaultEventConfig()
-}
-
-/** Kembalikan AppData baru dengan config sebuah kategori event diperbarui. */
-export function applyEventConfig(
-  data: AppData,
-  kat: EventKategori,
-  cfg: EventConfig,
-): AppData {
-  return { ...data, eventConfig: { ...data.eventConfig, [kat]: cfg } }
 }
 
 export type EventBreakdown = {

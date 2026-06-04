@@ -213,12 +213,10 @@ export function IncomeEntryModal({
   const [tunai, setTunai] = useState<number>(existing?.tunai ?? 0)
   const [qris, setQris] = useState<number>(existing?.qris ?? 0)
   // Uang tunai di laci kasir (Rupiah). uangBesar + uangKecil seharusnya balance
-  // dengan `tunai`. totalUangBesar murni catatan (tidak memengaruhi apa pun).
+  // dengan `tunai`. "Total uang besar" tidak lagi diinput di sini — dihitung
+  // otomatis sebagai buku kas di laman Laporan Income.
   const [uangBesar, setUangBesar] = useState<number>(existing?.uangBesar ?? 0)
   const [uangKecil, setUangKecil] = useState<number>(existing?.uangKecil ?? 0)
-  const [totalUangBesar, setTotalUangBesar] = useState<number>(
-    existing?.totalUangBesar ?? 0,
-  )
 
   // Price snapshot. Keep the laporan's historic prices for items it already
   // had, but fall back to the current catalog price for any item without a
@@ -261,7 +259,6 @@ export function IncomeEntryModal({
     qris,
     uangBesar,
     uangKecil,
-    totalUangBesar,
   }
   const inc = hitungIncome(previewLaporan)
   const tiketPerLayanan = totalTiketPerLayanan(items)
@@ -320,7 +317,7 @@ export function IncomeEntryModal({
   const uangKasir = uangBesar + uangKecil
   const selisihKasir = uangKasir - tunai
   const kasirBalance = selisihKasir === 0
-  const kasirTerisi = uangBesar > 0 || uangKecil > 0 || totalUangBesar > 0
+  const kasirTerisi = uangBesar > 0 || uangKecil > 0
   const kasirSummary = !kasirTerisi
     ? 'Opsional'
     : kasirBalance
@@ -455,7 +452,6 @@ export function IncomeEntryModal({
       qris: Math.max(0, Math.floor(qris || 0)),
       uangBesar: Math.max(0, Math.floor(uangBesar || 0)),
       uangKecil: Math.max(0, Math.floor(uangKecil || 0)),
-      totalUangBesar: Math.max(0, Math.floor(totalUangBesar || 0)),
     }
     onSave(laporan)
   }
@@ -942,29 +938,10 @@ export function IncomeEntryModal({
                 : ` · kurang ${formatRupiah(Math.abs(selisihKasir))}`}
           </div>
 
-          <div className="field" style={{ marginTop: 14 }}>
-            <label>
-              🧾 Total uang besar (Rp){' '}
-              <span className="form-hint" style={{ fontWeight: 500 }}>
-                — catatan saja, tidak memengaruhi nilai apa pun
-              </span>
-            </label>
-            <input
-              type="number"
-              inputMode="numeric"
-              min={0}
-              step={1000}
-              value={totalUangBesar === 0 ? '' : String(totalUangBesar)}
-              placeholder="0"
-              onChange={(e) =>
-                setTotalUangBesar(Math.max(0, parseInt(e.target.value, 10) || 0))
-              }
-              style={selStyle}
-            />
-          </div>
           <div className="form-hint">
             Untuk mengecek isi laci. Uang besar + uang kecil sebaiknya sama dengan
-            pembayaran tunai. Total uang besar hanya catatan.
+            pembayaran tunai. Total uang besar yang menumpuk di laci dihitung
+            otomatis di laman Laporan Income.
           </div>
         </Section>
 

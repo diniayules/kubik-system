@@ -23,6 +23,7 @@ import type {
   LaporanEvent,
   LaporanIncome,
   LayananDef,
+  PenarikanUangBesar,
   Pengeluaran,
   ProdukDef,
   DayType,
@@ -53,6 +54,7 @@ type ProfileRow = {
   pin_hash: string | null
   role: 'admin' | 'karyawan' | null
   nomor_induk: string | null
+  no_hp: string[] | null
   foto: string | null
   nama_lengkap: string | null
   tempat_lahir: string | null
@@ -116,6 +118,12 @@ type PengeluaranRow = {
   jumlah: number
   catatan: string
 }
+type PenarikanUangBesarRow = {
+  id: string
+  tanggal: string
+  jumlah: number
+  catatan: string
+}
 type KertasRow = { id: string; nama: string; stok: number }
 type FrameRow = { id: string; nama: string; stok: number }
 type TintaRow = { warna: WarnaTinta; stok: number; catatan: string | null }
@@ -163,6 +171,7 @@ export async function fetchAppData(): Promise<AppData> {
     laporanRes,
     eventRes,
     pengRes,
+    penarikanRes,
     kertasRes,
     frameRes,
     tintaRes,
@@ -173,7 +182,7 @@ export async function fetchAppData(): Promise<AppData> {
   ] = await Promise.all([
     supabase
       .from('profiles')
-      .select('id, nama, jabatan, pin_hash, role, nomor_induk, foto, nama_lengkap, tempat_lahir, tanggal_lahir, pendidikan, tanggal_diterima')
+      .select('id, nama, jabatan, pin_hash, role, nomor_induk, no_hp, foto, nama_lengkap, tempat_lahir, tanggal_lahir, pendidikan, tanggal_diterima')
       .eq('active', true)
       .order('created_at', { ascending: true }),
     supabase.from('absen_records').select('id, employee_id, tanggal, shift, events, status, extra_menit, extra_catatan'),
@@ -189,6 +198,11 @@ export async function fetchAppData(): Promise<AppData> {
       ),
     // pengeluaran: semua user login (admin & karyawan) boleh lihat via RLS.
     supabase.from('pengeluaran').select('id, tanggal, kategori, deskripsi, jumlah, catatan'),
+    // penarikan uang besar: admin-only via RLS (karyawan dapat array kosong).
+    supabase
+      .from('penarikan_uang_besar')
+      .select('id, tanggal, jumlah, catatan')
+      .order('tanggal', { ascending: true }),
     supabase.from('stok_kertas').select('id, nama, stok').order('nama', { ascending: true }),
     supabase.from('stok_frame').select('id, nama, stok').order('nama', { ascending: true }),
     supabase.from('stok_tinta').select('warna, stok, catatan'),
@@ -198,7 +212,7 @@ export async function fetchAppData(): Promise<AppData> {
     // Karyawan nonaktif (active = false) — untuk fitur "Aktifkan kembali" admin.
     supabase
       .from('profiles')
-      .select('id, nama, jabatan, pin_hash, role, nomor_induk, foto, nama_lengkap, tempat_lahir, tanggal_lahir, pendidikan, tanggal_diterima')
+      .select('id, nama, jabatan, pin_hash, role, nomor_induk, no_hp, foto, nama_lengkap, tempat_lahir, tanggal_lahir, pendidikan, tanggal_diterima')
       .eq('active', false)
       .order('created_at', { ascending: true }),
   ])
@@ -208,6 +222,7 @@ export async function fetchAppData(): Promise<AppData> {
   const laporan = orErr(laporanRes) as LaporanRow[]
   const event = orErr(eventRes) as EventRow[]
   const peng = orErr(pengRes) as PengeluaranRow[]
+  const penarikan = orErr(penarikanRes) as PenarikanUangBesarRow[]
   const kertas = orErr(kertasRes) as KertasRow[]
   const frame = orErr(frameRes) as FrameRow[]
   const tinta = orErr(tintaRes) as TintaRow[]
@@ -223,6 +238,7 @@ export async function fetchAppData(): Promise<AppData> {
     pinHash: p.pin_hash ?? '',
     role: p.role ?? 'karyawan',
     nomorInduk: p.nomor_induk ?? undefined,
+    noHp: Array.isArray(p.no_hp) ? p.no_hp : undefined,
     foto: p.foto ?? undefined,
     namaLengkap: p.nama_lengkap ?? undefined,
     tempatLahir: p.tempat_lahir ?? undefined,
@@ -308,6 +324,13 @@ export async function fetchAppData(): Promise<AppData> {
     catatan: p.catatan ?? '',
   }))
 
+  const penarikanUangBesar: PenarikanUangBesar[] = penarikan.map((p) => ({
+    id: p.id,
+    tanggal: p.tanggal,
+    jumlah: p.jumlah,
+    catatan: p.catatan ?? '',
+  }))
+
   const stokKertas: JenisKertas[] = kertas.map((k) => ({
     id: k.id,
     nama: k.nama,
@@ -344,6 +367,7 @@ export async function fetchAppData(): Promise<AppData> {
     inactiveEmployees,
     records,
     laporanIncome,
+    penarikanUangBesar,
     laporanEvent,
     layananCatalog:
       Array.isArray(config?.layanan_catalog) && config.layanan_catalog.length
@@ -488,6 +512,22 @@ export async function persistChanges(
     userId,
   )
 
+  // ---- penarikan_uang_besar (created_by stamped on insert; admin-only) ----
+  syncRows(
+    jobs,
+    'penarikan_uang_besar',
+    prev.penarikanUangBesar,
+    next.penarikanUangBesar,
+    (p) => p.id,
+    (p) => ({
+      id: p.id,
+      tanggal: p.tanggal,
+      jumlah: p.jumlah,
+      catatan: p.catatan,
+    }),
+    userId,
+  )
+
   // ---- stok_kertas ----
   syncRows(
     jobs,
@@ -569,6 +609,7 @@ export async function persistChanges(
               jabatan: e.jabatan,
               pin_hash: e.pinHash || null,
               nomor_induk: e.nomorInduk ?? '',
+              no_hp: e.noHp ?? [],
               foto: e.foto ?? null,
               nama_lengkap: e.namaLengkap ?? '',
               tempat_lahir: e.tempatLahir ?? '',

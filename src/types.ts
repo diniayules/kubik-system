@@ -14,6 +14,8 @@ export type Employee = {
    * mengubah; karyawan melihat read-only. Migration 0026.
    */
   nomorInduk?: string
+  /** Nomor handphone — bisa lebih dari satu. Migration 0027. */
+  noHp?: string[]
   /**
    * Data profil kepegawaian (migration 0025). Semua opsional agar data lama
    * tetap kompatibel; bisa diisi/diedit karyawan sendiri maupun admin.
@@ -191,7 +193,25 @@ export type LaporanIncome = {
    */
   uangBesar?: number
   uangKecil?: number
+  /**
+   * @deprecated Tidak lagi diisi manual. "Total uang besar" sekarang dihitung
+   * otomatis sebagai buku kas: Σ(uangBesar semua laporan) − Σ(penarikan admin).
+   * Lihat [PenarikanUangBesar] & AppData.penarikanUangBesar. Kolom DB lama
+   * (`total_uang_besar`) dibiarkan demi data lama tapi tidak dipakai untuk tampilan.
+   */
   totalUangBesar?: number
+}
+
+/**
+ * Satu catatan pengambilan / setoran uang besar dari laci ke admin. Mengurangi
+ * saldo "Total uang besar" (buku kas). `jumlah` selalu > 0 (Rupiah); menghapus
+ * baris mengembalikan saldo. Admin-only.
+ */
+export type PenarikanUangBesar = {
+  id: string
+  tanggal: string
+  jumlah: number
+  catatan: string
 }
 
 // ---------- Event (Photobooth & Photo Game) ----------
@@ -284,6 +304,11 @@ export type AppData = {
   inactiveEmployees: Employee[]
   records: AbsenHari[]
   laporanIncome: LaporanIncome[]
+  /**
+   * Riwayat pengambilan/setoran uang besar dari laci ke admin. Dipakai bersama
+   * `uangBesar` tiap laporan untuk menghitung saldo "Total uang besar" berjalan.
+   */
+  penarikanUangBesar: PenarikanUangBesar[]
   /** Laporan event (Photobooth & Photo Game) — terpisah dari laporanIncome. */
   laporanEvent: LaporanEvent[]
   layananCatalog: LayananDef[]

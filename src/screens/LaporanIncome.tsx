@@ -4,6 +4,7 @@ import type {
   AppData,
   LaporanIncome as Laporan,
   LayananDef,
+  PenyesuaianUangKecil,
   PenarikanUangBesar,
   ProdukDef,
   UpgradeDef,
@@ -52,8 +53,10 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
   const [showForm, setShowForm] = useState(false)
   const [editing, setEditing] = useState<Laporan | null>(null)
   const [showSetting, setShowSetting] = useState(false)
-  // Modal "Ambil / Setor uang besar" (admin).
+  // Modal "Ambil / Setor uang besar" (admin & karyawan/kasir).
   const [showAmbil, setShowAmbil] = useState(false)
+  // Modal "Penyesuaian uang kecil" (tambah/pakai float laci; admin & karyawan).
+  const [showPenyesuaian, setShowPenyesuaian] = useState(false)
   // Laporan yang sedang dibuka detailnya dari tampilan kalender.
   const [detail, setDetail] = useState<Laporan | null>(null)
 
@@ -158,10 +161,12 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
   const monthData = sorted.filter((l) => l.tanggal.startsWith(monthKey))
   const totalBulanIni = monthData.reduce((s, l) => s + hitungIncome(l).total, 0)
 
-  // ---- Buku kas "uang besar" (admin) -------------------------------------
-  // Saldo berjalan = Σ(uangBesar tiap laporan) − Σ(pengambilan admin). Kumulatif
-  // per laporan = saldo s/d tanggal laporan itu. `penarikanUangBesar` kosong
-  // untuk karyawan (RLS), jadi nilai ini hanya ditampilkan ke admin.
+  // ---- Buku kas "uang besar" (admin & karyawan) --------------------------
+  // Saldo berjalan = Σ(uangBesar tiap laporan) − Σ(pengambilan/setoran).
+  // Kumulatif per laporan = saldo s/d tanggal laporan itu. `penarikanUangBesar`
+  // kini terlihat admin & karyawan (RLS 0029), jadi saldo benar untuk keduanya.
+  // `cumulativeById` (saldo s/d tanggal laporan) tidak lagi tampil di kartu,
+  // tapi masih dipakai kolom "total uang besar terkumpul" di ekspor CSV.
   const uangBesarLedger = useMemo(() => {
     const penarikan = data.penarikanUangBesar ?? []
     const totalMasuk = data.laporanIncome.reduce(
@@ -181,6 +186,54 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
     }
     return { saldo: totalMasuk - totalDiambil, cumulativeById }
   }, [data.laporanIncome, data.penarikanUangBesar])
+
+  // ---- Rekonsiliasi "float" uang kecil di laci ---------------------------
+  // Laci TIDAK mulai dari kosong tiap hari: uang kecil yang nyangkut di laporan
+  // sebelumnya menjadi "kembalian dari kemarin" hari ini. Penyesuaian uang kecil
+  // (tambah/pakai di luar penjualan) mengubah float itu — itulah yang
+  // menjelaskan kenapa float hari ini ≠ uang kecil kemarin. Per laporan:
+  //   floatMasuk = uang kecil laporan TEPAT sebelumnya (kronologis)
+  //   adjust     = Σtambah − Σpakai penyesuaian pada tanggal laporan ini
+  const kasirRekonById = useMemo(() => {
+    const penyesuaian = data.penyesuaianUangKecil ?? []
+    const asc = [...data.laporanIncome].sort((a, b) =>
+      a.tanggal.localeCompare(b.tanggal),
+    )
+    const byId = new Map<string, { floatMasuk: number; adjust: number }>()
+    let prevKecil = 0
+    for (const l of asc) {
+      const adjust = penyesuaian
+        .filter((p) => p.tanggal === l.tanggal)
+        .reduce((s, p) => s + (p.tipe === 'tambah' ? 1 : -1) * (p.jumlah ?? 0), 0)
+      byId.set(l.id, { floatMasuk: prevKecil, adjust })
+      prevKecil = l.uangKecil ?? 0
+    }
+    return byId
+  }, [data.laporanIncome, data.penyesuaianUangKecil])
+
+  // Net penyesuaian uang kecil bulan ini (tambah − pakai) untuk info di bar.
+  const penyesuaianBulanIni = (data.penyesuaianUangKecil ?? [])
+    .filter((p) => p.tanggal.startsWith(hariIni.slice(0, 7)))
+    .reduce((s, p) => s + (p.tipe === 'tambah' ? 1 : -1) * (p.jumlah ?? 0), 0)
+
+  function catatPenyesuaian(p: PenyesuaianUangKecil) {
+    setData({
+      ...data,
+      penyesuaianUangKecil: [...(data.penyesuaianUangKecil ?? []), p],
+    })
+    const label = p.tipe === 'tambah' ? 'Tambah' : 'Pakai'
+    toast('ok', `${label} uang kecil ${formatRupiah(p.jumlah)} dicatat`)
+  }
+
+  function hapusPenyesuaian(id: string) {
+    setData({
+      ...data,
+      penyesuaianUangKecil: (data.penyesuaianUangKecil ?? []).filter(
+        (p) => p.id !== id,
+      ),
+    })
+    toast('ok', 'Penyesuaian dihapus, float dikembalikan')
+  }
 
   function catatPenarikan(p: PenarikanUangBesar) {
     setData({
@@ -784,26 +837,49 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
           </div>
         )}
 
-        {showMoney && (
-          <div className="uang-besar-bar">
-            <div className="uang-besar-info">
-              <span className="uang-besar-lbl">💰 Total uang besar di laci</span>
-              <span className="uang-besar-val">
-                {formatRupiah(uangBesarLedger.saldo)}
-              </span>
-              <span className="uang-besar-hint">
-                bertambah otomatis dari uang besar tiap laporan
-              </span>
-            </div>
-            <button
-              type="button"
-              className="btn btn--ghost"
-              onClick={() => setShowAmbil(true)}
-            >
-              <Icons.download /> Ambil / Setor ke admin
-            </button>
+        {/* Saldo "uang besar" di laci & tombol ambil/setor ditampilkan untuk
+            admin DAN karyawan (kasir): kasir yang memegang laci menyetor uang
+            besar ke admin, jadi mereka perlu lihat saldo & mencatatnya. */}
+        <div className="uang-besar-bar">
+          <div className="uang-besar-info">
+            <span className="uang-besar-lbl">💰 Total uang besar di laci</span>
+            <span className="uang-besar-val">
+              {formatRupiah(uangBesarLedger.saldo)}
+            </span>
+            <span className="uang-besar-hint">
+              bertambah otomatis dari uang besar tiap laporan
+            </span>
           </div>
-        )}
+          <button
+            type="button"
+            className="btn btn--ghost"
+            onClick={() => setShowAmbil(true)}
+          >
+            <Icons.download /> Ambil / Setor ke admin
+          </button>
+        </div>
+
+        {/* Penyesuaian uang kecil (float laci): tambah/pakai di luar penjualan.
+            Dipegang kasir — mereka yang mengelola uang kecil di laci. */}
+        <div className="uang-besar-bar">
+          <div className="uang-besar-info">
+            <span className="uang-besar-lbl">🪙 Penyesuaian uang kecil bulan ini</span>
+            <span className="uang-besar-val">
+              {penyesuaianBulanIni < 0 ? '− ' : '+ '}
+              {formatRupiah(Math.abs(penyesuaianBulanIni))}
+            </span>
+            <span className="uang-besar-hint">
+              tambah / pakai uang kecil agar float laci antar hari tetap cocok
+            </span>
+          </div>
+          <button
+            type="button"
+            className="btn btn--ghost"
+            onClick={() => setShowPenyesuaian(true)}
+          >
+            <Icons.cart /> Tambah / Pakai
+          </button>
+        </div>
       </section>
 
       <div className="section-head">
@@ -871,11 +947,7 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
               // untuk karyawan) — sama persis seperti tampilan admin. Ringkasan
               // di hero (stat & grafik) tetap khusus admin lewat `showMoney`.
               showMoney={true}
-              // "Total terkumpul" (buku kas) hanya untuk admin — butuh data
-              // pengambilan yang tidak terlihat karyawan (RLS).
-              totalTerkumpul={
-                isAdmin ? uangBesarLedger.cumulativeById.get(l.id) : undefined
-              }
+              kasirRekon={kasirRekonById.get(l.id)}
               onEdit={() => {
                 setEditing(l)
                 setShowForm(true)
@@ -896,11 +968,7 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
               laporan={detail}
               canManage={true}
               showMoney={true}
-              totalTerkumpul={
-                isAdmin
-                  ? uangBesarLedger.cumulativeById.get(detail.id)
-                  : undefined
-              }
+              kasirRekon={kasirRekonById.get(detail.id)}
               onEdit={() => {
                 setEditing(detail)
                 setShowForm(true)
@@ -939,6 +1007,17 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
           onAmbil={catatPenarikan}
           onHapus={hapusPenarikan}
           onClose={() => setShowAmbil(false)}
+        />
+      )}
+
+      {showPenyesuaian && (
+        <PenyesuaianUangKecilModal
+          riwayat={data.penyesuaianUangKecil ?? []}
+          netBulanIni={penyesuaianBulanIni}
+          hariIni={hariIni}
+          onSimpan={catatPenyesuaian}
+          onHapus={hapusPenyesuaian}
+          onClose={() => setShowPenyesuaian(false)}
         />
       )}
     </>
@@ -1088,12 +1167,189 @@ function AmbilUangBesarModal({
   )
 }
 
+// Modal: catat penyesuaian uang kecil di laci (tambah/pakai di luar penjualan)
+// + riwayat. Tanpa "saldo" cap seperti uang besar — uang kecil bukan saldo
+// tunggal yang menumpuk, melainkan float revolving yang dibawa antar hari.
+// Pencatatan ini menjelaskan kenapa float hari ini ≠ uang kecil kemarin.
+function PenyesuaianUangKecilModal({
+  riwayat,
+  netBulanIni,
+  hariIni,
+  onSimpan,
+  onHapus,
+  onClose,
+}: {
+  riwayat: PenyesuaianUangKecil[]
+  netBulanIni: number
+  hariIni: string
+  onSimpan: (p: PenyesuaianUangKecil) => void
+  onHapus: (id: string) => void
+  onClose: () => void
+}) {
+  const [tipe, setTipe] = useState<'tambah' | 'pakai'>('tambah')
+  const [jumlah, setJumlah] = useState<number>(0)
+  const [tanggal, setTanggal] = useState<string>(hariIni)
+  const [catatan, setCatatan] = useState<string>('')
+
+  const valid = jumlah > 0
+  // Riwayat terbaru di atas.
+  const riwayatUrut = [...riwayat].sort((a, b) =>
+    b.tanggal.localeCompare(a.tanggal),
+  )
+
+  function simpan() {
+    if (!valid) return
+    onSimpan({
+      id: uid(),
+      tanggal,
+      tipe,
+      jumlah: Math.floor(jumlah),
+      catatan: catatan.trim(),
+    })
+    setJumlah(0)
+    setCatatan('')
+  }
+
+  return (
+    <Modal onClose={onClose}>
+      <ModalHead
+        icon={<Icons.cart />}
+        color="var(--pink)"
+        title="Penyesuaian Uang Kecil"
+        sub="Tambah / pakai uang kecil di laci"
+        onClose={onClose}
+      />
+      <div className="modal-body">
+        <div className="income-card-total" style={{ marginBottom: 14 }}>
+          <div className="income-card-total-num">
+            {netBulanIni < 0 ? '− ' : '+ '}
+            {formatRupiah(Math.abs(netBulanIni))}
+          </div>
+          <div className="income-card-total-lbl">
+            Net penyesuaian uang kecil bulan ini
+          </div>
+        </div>
+
+        {/* Toggle Tambah (+) / Pakai (−). */}
+        <div className="field">
+          <label>Jenis</label>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              type="button"
+              className={'btn ' + (tipe === 'tambah' ? 'btn--pink' : 'btn--ghost')}
+              onClick={() => setTipe('tambah')}
+              style={{ flex: 1 }}
+            >
+              ➕ Tambah
+            </button>
+            <button
+              type="button"
+              className={'btn ' + (tipe === 'pakai' ? 'btn--pink' : 'btn--ghost')}
+              onClick={() => setTipe('pakai')}
+              style={{ flex: 1 }}
+            >
+              ➖ Pakai
+            </button>
+          </div>
+        </div>
+
+        <div className="field">
+          <label>
+            🪙 Jumlah {tipe === 'tambah' ? 'ditambah' : 'dipakai'} (Rp)
+          </label>
+          <input
+            type="number"
+            inputMode="numeric"
+            min={0}
+            step={1000}
+            value={jumlah === 0 ? '' : String(jumlah)}
+            placeholder="0"
+            onChange={(e) =>
+              setJumlah(Math.max(0, parseInt(e.target.value, 10) || 0))
+            }
+          />
+        </div>
+
+        <div className="field">
+          <label>📅 Tanggal</label>
+          <input
+            type="date"
+            value={tanggal}
+            onChange={(e) => setTanggal(e.target.value || hariIni)}
+          />
+        </div>
+
+        <div className="field">
+          <label>📝 Catatan (opsional)</label>
+          <input
+            type="text"
+            value={catatan}
+            placeholder={
+              tipe === 'tambah' ? 'mis. tukar pecahan' : 'mis. beli galon'
+            }
+            onChange={(e) => setCatatan(e.target.value)}
+          />
+        </div>
+
+        <button
+          type="button"
+          className="btn btn--pink btn--lg"
+          disabled={!valid}
+          onClick={simpan}
+          style={{ width: '100%' }}
+        >
+          <Icons.cart /> Catat {tipe === 'tambah' ? 'penambahan' : 'pemakaian'}
+        </button>
+
+        {riwayatUrut.length > 0 && (
+          <div className="penarikan-riwayat">
+            <div className="harga-cat-head">🧾 Riwayat penyesuaian</div>
+            {riwayatUrut.map((p) => (
+              <div key={p.id} className="penarikan-row">
+                <div className="penarikan-row-info">
+                  <span className="penarikan-row-tgl">
+                    {formatTanggalPanjang(p.tanggal)}
+                  </span>
+                  {p.catatan && (
+                    <span className="penarikan-row-cat">{p.catatan}</span>
+                  )}
+                </div>
+                <span
+                  className="penarikan-row-val"
+                  style={{
+                    color:
+                      p.tipe === 'tambah'
+                        ? 'var(--mint-deep, #0B8A6B)'
+                        : 'var(--danger, #C0392B)',
+                  }}
+                >
+                  {p.tipe === 'tambah' ? '+ ' : '− '}
+                  {formatRupiah(p.jumlah)}
+                </span>
+                <button
+                  type="button"
+                  className="emp-row-icon emp-row-danger"
+                  aria-label="Hapus riwayat"
+                  title="Hapus & kembalikan float"
+                  onClick={() => onHapus(p.id)}
+                >
+                  <Icons.trash />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </Modal>
+  )
+}
+
 function IncomeRow({
   data,
   laporan,
   canManage,
   showMoney,
-  totalTerkumpul,
+  kasirRekon,
   onEdit,
   onDelete,
 }: {
@@ -1102,10 +1358,12 @@ function IncomeRow({
   canManage: boolean
   showMoney: boolean
   /**
-   * Saldo "uang besar" terkumpul s/d tanggal laporan ini (buku kas). Hanya diisi
-   * untuk admin; `undefined` = jangan tampilkan baris total terkumpul.
+   * Rekonsiliasi float laci: `floatMasuk` = uang kecil kembalian dari laporan
+   * sebelumnya; `adjust` = net penyesuaian uang kecil pada tanggal ini
+   * (Σtambah − Σpakai). Dipakai untuk menentukan status BALANCE.
+   * `undefined` = laporan paling awal / data belum tersedia.
    */
-  totalTerkumpul?: number
+  kasirRekon?: { floatMasuk: number; adjust: number }
   onEdit: () => void
   onDelete: () => void
 }) {
@@ -1294,40 +1552,31 @@ function IncomeRow({
       {showMoney &&
         ((laporan.uangBesar ?? 0) > 0 ||
           (laporan.uangKecil ?? 0) > 0 ||
-          (totalTerkumpul ?? 0) > 0) &&
+          (kasirRekon?.floatMasuk ?? 0) > 0 ||
+          (kasirRekon?.adjust ?? 0) !== 0) &&
         (() => {
-          const besar = laporan.uangBesar ?? 0
-          const kecil = laporan.uangKecil ?? 0
-          const kasir = besar + kecil
-          const selisih = kasir - (laporan.tunai ?? 0)
+          const kasir = (laporan.uangBesar ?? 0) + (laporan.uangKecil ?? 0)
+          const tunai = laporan.tunai ?? 0
+          const floatMasuk = kasirRekon?.floatMasuk ?? 0
+          const adjust = kasirRekon?.adjust ?? 0
+          // BALANCE: sisa di laci setelah tunai hari ini harus cocok dengan uang
+          // kecil kemarin + penyesuaian (tambah−pakai) hari ini (laci tak kosong).
+          const balance = kasir - (tunai + floatMasuk + adjust) === 0
           return (
             <div className="income-breakdown">
-              <div className="income-breakdown-row">
-                <span>💰 Uang di kasir</span>
-                <span className="income-breakdown-qty">
-                  {selisih === 0 ? 'balance' : `selisih ${formatRupiah(Math.abs(selisih))}`}
-                </span>
-                <span className="income-breakdown-val">{formatRupiah(kasir)}</span>
+              <div
+                style={{
+                  fontWeight: 800,
+                  fontSize: 15,
+                  letterSpacing: 0.4,
+                  textAlign: 'center',
+                  color: balance
+                    ? 'var(--mint-deep, #0B8A6B)'
+                    : 'var(--danger, #C0392B)',
+                }}
+              >
+                {balance ? '🟢 LAPORAN BALANCE' : '🔴 LAPORAN TIDAK BALANCE'}
               </div>
-              <div className="income-breakdown-row">
-                <span>💵 Uang besar</span>
-                <span className="income-breakdown-qty">di laci</span>
-                <span className="income-breakdown-val">{formatRupiah(besar)}</span>
-              </div>
-              <div className="income-breakdown-row">
-                <span>🪙 Uang kecil</span>
-                <span className="income-breakdown-qty">di laci</span>
-                <span className="income-breakdown-val">{formatRupiah(kecil)}</span>
-              </div>
-              {totalTerkumpul != null && (
-                <div className="income-breakdown-row">
-                  <span>🧾 Total terkumpul</span>
-                  <span className="income-breakdown-qty">di laci</span>
-                  <span className="income-breakdown-val">
-                    {formatRupiah(totalTerkumpul)}
-                  </span>
-                </div>
-              )}
             </div>
           )
         })()}

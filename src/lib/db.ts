@@ -23,6 +23,7 @@ import type {
   LaporanEvent,
   LaporanIncome,
   LayananDef,
+  PenyesuaianUangKecil,
   PenarikanUangBesar,
   Pengeluaran,
   ProdukDef,
@@ -124,6 +125,13 @@ type PenarikanUangBesarRow = {
   jumlah: number
   catatan: string
 }
+type PenyesuaianUangKecilRow = {
+  id: string
+  tanggal: string
+  tipe: 'tambah' | 'pakai'
+  jumlah: number
+  catatan: string
+}
 type KertasRow = { id: string; nama: string; stok: number }
 type FrameRow = { id: string; nama: string; stok: number }
 type TintaRow = { warna: WarnaTinta; stok: number; catatan: string | null }
@@ -172,6 +180,7 @@ export async function fetchAppData(): Promise<AppData> {
     eventRes,
     pengRes,
     penarikanRes,
+    penyesuaianRes,
     kertasRes,
     frameRes,
     tintaRes,
@@ -198,10 +207,15 @@ export async function fetchAppData(): Promise<AppData> {
       ),
     // pengeluaran: semua user login (admin & karyawan) boleh lihat via RLS.
     supabase.from('pengeluaran').select('id, tanggal, kategori, deskripsi, jumlah, catatan'),
-    // penarikan uang besar: admin-only via RLS (karyawan dapat array kosong).
+    // penarikan uang besar: semua user login (admin & karyawan) lihat via RLS.
     supabase
       .from('penarikan_uang_besar')
       .select('id, tanggal, jumlah, catatan')
+      .order('tanggal', { ascending: true }),
+    // penyesuaian uang kecil: semua user login (admin & karyawan) lihat via RLS.
+    supabase
+      .from('penyesuaian_uang_kecil')
+      .select('id, tanggal, tipe, jumlah, catatan')
       .order('tanggal', { ascending: true }),
     supabase.from('stok_kertas').select('id, nama, stok').order('nama', { ascending: true }),
     supabase.from('stok_frame').select('id, nama, stok').order('nama', { ascending: true }),
@@ -223,6 +237,12 @@ export async function fetchAppData(): Promise<AppData> {
   const event = orErr(eventRes) as EventRow[]
   const peng = orErr(pengRes) as PengeluaranRow[]
   const penarikan = orErr(penarikanRes) as PenarikanUangBesarRow[]
+  // Toleran kalau tabel `penyesuaian_uang_kecil` belum ada (migrasi 0030 belum
+  // dijalankan) — fallback [] agar kode bisa naik lebih dulu dari migrasi tanpa
+  // mematikan seluruh app. Fitur baru tinggal aktif begitu migrasi diterapkan.
+  const penyesuaian = (
+    penyesuaianRes.error ? [] : (penyesuaianRes.data ?? [])
+  ) as PenyesuaianUangKecilRow[]
   const kertas = orErr(kertasRes) as KertasRow[]
   const frame = orErr(frameRes) as FrameRow[]
   const tinta = orErr(tintaRes) as TintaRow[]
@@ -331,6 +351,14 @@ export async function fetchAppData(): Promise<AppData> {
     catatan: p.catatan ?? '',
   }))
 
+  const penyesuaianUangKecil: PenyesuaianUangKecil[] = penyesuaian.map((p) => ({
+    id: p.id,
+    tanggal: p.tanggal,
+    tipe: p.tipe,
+    jumlah: p.jumlah,
+    catatan: p.catatan ?? '',
+  }))
+
   const stokKertas: JenisKertas[] = kertas.map((k) => ({
     id: k.id,
     nama: k.nama,
@@ -368,6 +396,7 @@ export async function fetchAppData(): Promise<AppData> {
     records,
     laporanIncome,
     penarikanUangBesar,
+    penyesuaianUangKecil,
     laporanEvent,
     layananCatalog:
       Array.isArray(config?.layanan_catalog) && config.layanan_catalog.length
@@ -512,7 +541,7 @@ export async function persistChanges(
     userId,
   )
 
-  // ---- penarikan_uang_besar (created_by stamped on insert; admin-only) ----
+  // ---- penarikan_uang_besar (created_by stamped on insert; admin & karyawan) ----
   syncRows(
     jobs,
     'penarikan_uang_besar',
@@ -522,6 +551,23 @@ export async function persistChanges(
     (p) => ({
       id: p.id,
       tanggal: p.tanggal,
+      jumlah: p.jumlah,
+      catatan: p.catatan,
+    }),
+    userId,
+  )
+
+  // ---- penyesuaian_uang_kecil (created_by stamped on insert; admin & karyawan) ----
+  syncRows(
+    jobs,
+    'penyesuaian_uang_kecil',
+    prev.penyesuaianUangKecil ?? [],
+    next.penyesuaianUangKecil ?? [],
+    (p) => p.id,
+    (p) => ({
+      id: p.id,
+      tanggal: p.tanggal,
+      tipe: p.tipe,
       jumlah: p.jumlah,
       catatan: p.catatan,
     }),

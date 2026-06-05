@@ -313,16 +313,28 @@ export function IncomeEntryModal({
       .filter(Boolean)
       .join(' · ') || 'Opsional'
 
-  // Uang di laci: uangBesar + uangKecil harus balance dengan `tunai`.
+  // Rekonsiliasi float laci. Laci TIDAK mulai dari kosong tiap hari: ada uang
+  // kecil kembalian yang nyangkut dari laporan sebelumnya. Jadi BALANCE bukan
+  // saat (besar+kecil) === tunai, melainkan saat sisa di laci setelah tunai
+  // hari ini = uang kecil kemarin + penyesuaian (tambah−pakai) hari ini:
+  //   (uangBesar + uangKecil) − tunai  ===  uangKecilKemarin + Σtambah − Σpakai
   const uangKasir = uangBesar + uangKecil
-  const selisihKasir = uangKasir - tunai
-  const kasirBalance = selisihKasir === 0
+  const prevLaporan = data.laporanIncome
+    .filter((l) => l.tanggal < tanggal)
+    .sort((a, b) => b.tanggal.localeCompare(a.tanggal))[0]
+  const floatMasuk = prevLaporan?.uangKecil ?? 0
+  const penyesuaianHariIni = (data.penyesuaianUangKecil ?? [])
+    .filter((p) => p.tanggal === tanggal)
+    .reduce((s, p) => s + (p.tipe === 'tambah' ? 1 : -1) * (p.jumlah ?? 0), 0)
+  const floatSeharusnya = floatMasuk + penyesuaianHariIni
+  const floatAktual = uangKasir - tunai
+  const kasirBalance = floatAktual === floatSeharusnya
   const kasirTerisi = uangBesar > 0 || uangKecil > 0
   const kasirSummary = !kasirTerisi
     ? 'Opsional'
     : kasirBalance
-      ? `Balance · ${formatRupiah(uangKasir)}`
-      : `⚠️ selisih ${formatRupiah(Math.abs(selisihKasir))}`
+      ? 'BALANCE'
+      : 'TIDAK BALANCE'
 
   // Section yang dibuka otomatis saat edit kalau laporannya sudah punya isi,
   // supaya data lama tidak tersembunyi. Dihitung sekali dari `existing`.
@@ -918,30 +930,29 @@ export function IncomeEntryModal({
             />
           </div>
 
-          {/* Indikator balance vs pembayaran tunai. */}
-          <div
-            className="form-hint"
-            style={{
-              marginTop: 2,
-              fontWeight: 700,
-              color: kasirBalance
-                ? 'var(--mint-deep, #0B8A6B)'
-                : 'var(--warn, #b26a00)',
-            }}
-          >
-            Uang besar + kecil = <strong>{formatRupiah(uangKasir)}</strong> vs
-            tunai <strong>{formatRupiah(tunai)}</strong>
-            {kasirBalance
-              ? ' ✓ balance'
-              : selisihKasir > 0
-                ? ` · lebih ${formatRupiah(selisihKasir)}`
-                : ` · kurang ${formatRupiah(Math.abs(selisihKasir))}`}
-          </div>
+          {/* Indikator BALANCE / TIDAK BALANCE. BALANCE = sisa di laci setelah
+              tunai hari ini cocok dengan uang kecil kemarin + penyesuaian. */}
+          {kasirTerisi && (
+            <div
+              style={{
+                marginTop: 2,
+                fontWeight: 800,
+                fontSize: 16,
+                letterSpacing: 0.5,
+                color: kasirBalance
+                  ? 'var(--mint-deep, #0B8A6B)'
+                  : 'var(--danger, #C0392B)',
+              }}
+            >
+              {kasirBalance ? '🟢 BALANCE' : '🔴 TIDAK BALANCE'}
+            </div>
+          )}
 
           <div className="form-hint">
-            Untuk mengecek isi laci. Uang besar + uang kecil sebaiknya sama dengan
-            pembayaran tunai. Total uang besar yang menumpuk di laci dihitung
-            otomatis di laman Laporan Income.
+            Untuk mengecek isi laci. Laci tidak mulai kosong tiap hari: uang kecil
+            kembalian dari kemarin tetap nyangkut. BALANCE jika (uang besar + uang
+            kecil) − tunai sama dengan uang kecil kemarin ditambah penyesuaian
+            (tambah − pakai) uang kecil hari ini.
           </div>
         </Section>
 

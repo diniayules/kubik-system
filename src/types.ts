@@ -214,6 +214,23 @@ export type PenarikanUangBesar = {
   catatan: string
 }
 
+/**
+ * Satu penyesuaian uang kecil di laci di luar penjualan. Dipakai untuk
+ * rekonsiliasi "float" laci: laci tidak mulai dari kosong tiap hari, ada
+ * kembalian kecil yang nyangkut dari laporan sebelumnya.
+ *  - `tipe` 'tambah' : admin/kasir menambah uang kecil ke laci (tukar pecahan).
+ *  - `tipe` 'pakai'  : uang kecil dipakai keluar dari laci (belanja, dll).
+ * Inilah yang menjelaskan kenapa float hari ini ≠ uang kecil kemarin. `jumlah`
+ * selalu > 0 (Rupiah); menghapus baris mengembalikan float.
+ */
+export type PenyesuaianUangKecil = {
+  id: string
+  tanggal: string
+  tipe: 'tambah' | 'pakai'
+  jumlah: number
+  catatan: string
+}
+
 // ---------- Event (Photobooth & Photo Game) ----------
 // Laporan event berdiri SENDIRI, terpisah penuh dari laporan_income (Photo
 // Studio): tidak menyentuh stok, gaji, maupun dashboard income.
@@ -309,6 +326,12 @@ export type AppData = {
    * `uangBesar` tiap laporan untuk menghitung saldo "Total uang besar" berjalan.
    */
   penarikanUangBesar: PenarikanUangBesar[]
+  /**
+   * Riwayat penyesuaian uang kecil di laci (tambah/pakai di luar penjualan).
+   * Dipakai untuk rekonsiliasi float laci: menjelaskan selisih antara uang kecil
+   * di laci dan kembalian yang nyangkut dari laporan sebelumnya.
+   */
+  penyesuaianUangKecil: PenyesuaianUangKecil[]
   /** Laporan event (Photobooth & Photo Game) — terpisah dari laporanIncome. */
   laporanEvent: LaporanEvent[]
   layananCatalog: LayananDef[]

@@ -189,24 +189,27 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
 
   // ---- Rekonsiliasi "float" uang kecil di laci ---------------------------
   // Laci TIDAK mulai dari kosong tiap hari: uang kecil yang nyangkut di laporan
-  // sebelumnya menjadi "kembalian dari kemarin" hari ini. Penyesuaian uang kecil
-  // (tambah/pakai di luar penjualan) mengubah float itu — itulah yang
-  // menjelaskan kenapa float hari ini ≠ uang kecil kemarin. Per laporan:
-  //   floatMasuk = uang kecil laporan TEPAT sebelumnya (kronologis)
-  //   adjust     = Σtambah − Σpakai penyesuaian pada tanggal laporan ini
+  // sebelumnya menjadi "kembalian" yang masuk hari ini. Penyesuaian uang kecil
+  // (tambah/pakai di luar penjualan) mengubah float yang DIBAWA ke laporan
+  // BERIKUTNYA — bukan balance hari penyesuaian itu sendiri (uang kecil hari itu
+  // sudah dihitung & balance). Per laporan, float masuk =
+  //   uang kecil laporan sebelumnya + Σ(tambah−pakai) penyesuaian sejak laporan
+  //   sebelumnya s/d sebelum laporan ini.
   const kasirRekonById = useMemo(() => {
     const penyesuaian = data.penyesuaianUangKecil ?? []
     const asc = [...data.laporanIncome].sort((a, b) =>
       a.tanggal.localeCompare(b.tanggal),
     )
-    const byId = new Map<string, { floatMasuk: number; adjust: number }>()
+    const byId = new Map<string, { floatMasuk: number }>()
     let prevKecil = 0
+    let prevDate = ''
     for (const l of asc) {
-      const adjust = penyesuaian
-        .filter((p) => p.tanggal === l.tanggal)
+      const antara = penyesuaian
+        .filter((p) => p.tanggal >= prevDate && p.tanggal < l.tanggal)
         .reduce((s, p) => s + (p.tipe === 'tambah' ? 1 : -1) * (p.jumlah ?? 0), 0)
-      byId.set(l.id, { floatMasuk: prevKecil, adjust })
+      byId.set(l.id, { floatMasuk: prevKecil + antara })
       prevKecil = l.uangKecil ?? 0
+      prevDate = l.tanggal
     }
     return byId
   }, [data.laporanIncome, data.penyesuaianUangKecil])
@@ -1291,6 +1294,12 @@ function PenyesuaianUangKecilModal({
           />
         </div>
 
+        <div className="form-hint">
+          Penyesuaian pada tanggal ini tidak mengubah laporan tanggal itu sendiri
+          (uang kecilnya sudah dihitung), melainkan float yang dibawa ke laporan
+          berikutnya.
+        </div>
+
         <button
           type="button"
           className="btn btn--pink btn--lg"
@@ -1359,11 +1368,11 @@ function IncomeRow({
   showMoney: boolean
   /**
    * Rekonsiliasi float laci: `floatMasuk` = uang kecil kembalian dari laporan
-   * sebelumnya; `adjust` = net penyesuaian uang kecil pada tanggal ini
-   * (Σtambah − Σpakai). Dipakai untuk menentukan status BALANCE.
+   * sebelumnya, sudah memperhitungkan penyesuaian (tambah/pakai) yang terjadi
+   * sebelum laporan ini. Dipakai untuk menentukan status BALANCE.
    * `undefined` = laporan paling awal / data belum tersedia.
    */
-  kasirRekon?: { floatMasuk: number; adjust: number }
+  kasirRekon?: { floatMasuk: number }
   onEdit: () => void
   onDelete: () => void
 }) {
@@ -1552,16 +1561,14 @@ function IncomeRow({
       {showMoney &&
         ((laporan.uangBesar ?? 0) > 0 ||
           (laporan.uangKecil ?? 0) > 0 ||
-          (kasirRekon?.floatMasuk ?? 0) > 0 ||
-          (kasirRekon?.adjust ?? 0) !== 0) &&
+          (kasirRekon?.floatMasuk ?? 0) !== 0) &&
         (() => {
           const kasir = (laporan.uangBesar ?? 0) + (laporan.uangKecil ?? 0)
           const tunai = laporan.tunai ?? 0
           const floatMasuk = kasirRekon?.floatMasuk ?? 0
-          const adjust = kasirRekon?.adjust ?? 0
-          // BALANCE: sisa di laci setelah tunai hari ini harus cocok dengan uang
-          // kecil kemarin + penyesuaian (tambah−pakai) hari ini (laci tak kosong).
-          const balance = kasir - (tunai + floatMasuk + adjust) === 0
+          // BALANCE: sisa di laci setelah tunai hari ini harus cocok dengan float
+          // yang masuk (uang kecil laporan sebelumnya ± penyesuaian sebelum ini).
+          const balance = kasir - (tunai + floatMasuk) === 0
           return (
             <div className="income-breakdown">
               <div

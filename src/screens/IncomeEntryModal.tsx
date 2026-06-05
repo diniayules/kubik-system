@@ -314,19 +314,21 @@ export function IncomeEntryModal({
       .join(' · ') || 'Opsional'
 
   // Rekonsiliasi float laci. Laci TIDAK mulai dari kosong tiap hari: ada uang
-  // kecil kembalian yang nyangkut dari laporan sebelumnya. Jadi BALANCE bukan
-  // saat (besar+kecil) === tunai, melainkan saat sisa di laci setelah tunai
-  // hari ini = uang kecil kemarin + penyesuaian (tambah−pakai) hari ini:
-  //   (uangBesar + uangKecil) − tunai  ===  uangKecilKemarin + Σtambah − Σpakai
+  // kecil kembalian yang nyangkut dari laporan sebelumnya. Penyesuaian uang
+  // kecil pada suatu tanggal mengubah float yang DIBAWA ke laporan berikutnya
+  // (bukan balance hari penyesuaian itu). Jadi float yang masuk laporan ini =
+  // uang kecil laporan sebelumnya ± penyesuaian sejak laporan itu s/d sebelum
+  // tanggal ini. BALANCE saat: (uangBesar + uangKecil) − tunai === float masuk.
   const uangKasir = uangBesar + uangKecil
   const prevLaporan = data.laporanIncome
     .filter((l) => l.tanggal < tanggal)
     .sort((a, b) => b.tanggal.localeCompare(a.tanggal))[0]
-  const floatMasuk = prevLaporan?.uangKecil ?? 0
-  const penyesuaianHariIni = (data.penyesuaianUangKecil ?? [])
-    .filter((p) => p.tanggal === tanggal)
+  const penyesuaianSebelum = (data.penyesuaianUangKecil ?? [])
+    .filter(
+      (p) => p.tanggal >= (prevLaporan?.tanggal ?? '') && p.tanggal < tanggal,
+    )
     .reduce((s, p) => s + (p.tipe === 'tambah' ? 1 : -1) * (p.jumlah ?? 0), 0)
-  const floatSeharusnya = floatMasuk + penyesuaianHariIni
+  const floatSeharusnya = (prevLaporan?.uangKecil ?? 0) + penyesuaianSebelum
   const floatAktual = uangKasir - tunai
   const kasirBalance = floatAktual === floatSeharusnya
   const kasirTerisi = uangBesar > 0 || uangKecil > 0
@@ -931,7 +933,8 @@ export function IncomeEntryModal({
           </div>
 
           {/* Indikator BALANCE / TIDAK BALANCE. BALANCE = sisa di laci setelah
-              tunai hari ini cocok dengan uang kecil kemarin + penyesuaian. */}
+              tunai hari ini cocok dengan float yang masuk (uang kecil laporan
+              sebelumnya ± penyesuaian sebelum tanggal ini). */}
           {kasirTerisi && (
             <div
               style={{
@@ -950,9 +953,10 @@ export function IncomeEntryModal({
 
           <div className="form-hint">
             Untuk mengecek isi laci. Laci tidak mulai kosong tiap hari: uang kecil
-            kembalian dari kemarin tetap nyangkut. BALANCE jika (uang besar + uang
-            kecil) − tunai sama dengan uang kecil kemarin ditambah penyesuaian
-            (tambah − pakai) uang kecil hari ini.
+            kembalian dari laporan sebelumnya tetap nyangkut. BALANCE jika (uang
+            besar + uang kecil) − tunai sama dengan float yang masuk, yaitu uang
+            kecil laporan sebelumnya ± penyesuaian (tambah/pakai) yang terjadi
+            sebelum tanggal ini.
           </div>
         </Section>
 

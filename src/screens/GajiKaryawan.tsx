@@ -5,7 +5,6 @@ import { formatRupiah } from '../income'
 import {
   BONUS_PER_ITEM,
   HARI_KERJA_SEBULAN,
-  JATAH_CUTI_SEBULAN,
   MENIT_KERJA_HARIAN,
   hariSeharusnyaBulan,
   hitungSlipGaji,
@@ -20,6 +19,9 @@ type Props = {
   isAdmin: boolean
   currentUserId: string
 }
+
+/** Pilihan metode pembayaran gaji (label bebas, bisa diketik manual juga). */
+const METODE_PEMBAYARAN = ['Transfer Bank', 'Tunai', 'QRIS / e-Wallet'] as const
 
 /** "2026-05" → "Mei 2026". */
 function labelBulan(key: string): string {
@@ -60,11 +62,35 @@ export function GajiKaryawan({ data, setData, isAdmin, currentUserId }: Props) {
     return [...set].sort().reverse()
   }, [data.records, data.laporanIncome])
 
+  // Bulan pertama tiap karyawan mulai aktif = bulan presensi paling awal
+  // miliknya (fallback: bulan `tanggalDiterima` bila belum pernah absen).
+  // Slip gaji hanya dibuat sejak bulan ini — bulan sebelum karyawan bergabung
+  // tidak punya slip sama sekali.
+  const mulaiBulanMap = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const r of data.records) {
+      const bulan = r.tanggal.slice(0, 7)
+      const cur = m.get(r.employeeId)
+      if (!cur || bulan < cur) m.set(r.employeeId, bulan)
+    }
+    for (const e of data.employees) {
+      if (!m.has(e.id) && e.tanggalDiterima)
+        m.set(e.id, e.tanggalDiterima.slice(0, 7))
+    }
+    return m
+  }, [data.records, data.employees])
+
   // Pilihan di dropdown: bulan berdata + bulan berjalan, terbaru di atas.
+  // Untuk karyawan, batasi sejak bulan ia mulai (admin tetap lihat semua).
   const bulanTersedia = useMemo(() => {
     const set = new Set<string>([bulanIni, ...bulanBerdata])
-    return [...set].sort().reverse()
-  }, [bulanBerdata, bulanIni])
+    let list = [...set].sort().reverse()
+    if (!isAdmin) {
+      const mulai = mulaiBulanMap.get(currentUserId)
+      if (mulai) list = list.filter((b) => b >= mulai)
+    }
+    return list
+  }, [bulanBerdata, bulanIni, isAdmin, mulaiBulanMap, currentUserId])
 
   // `periode` = pilihan eksplisit user (null = belum memilih / mengikuti data).
   const [periode, setPeriode] = useState<string | null>(null)
@@ -77,7 +103,9 @@ export function GajiKaryawan({ data, setData, isAdmin, currentUserId }: Props) {
   const periodeAktif =
     periode && bulanTersedia.includes(periode)
       ? periode
-      : bulanBerdata[0] ?? bulanIni
+      : bulanBerdata.find((b) => bulanTersedia.includes(b)) ??
+        bulanTersedia[0] ??
+        bulanIni
 
   // Data bulan terpilih.
   const recordsBulan = useMemo(
@@ -90,27 +118,43 @@ export function GajiKaryawan({ data, setData, isAdmin, currentUserId }: Props) {
   )
   const hariSeharusnya = hariSeharusnyaBulan(periodeAktif, hariIni)
 
-  // Slip gaji tiap karyawan untuk bulan terpilih.
+  // Slip gaji tiap karyawan untuk bulan terpilih. Karyawan yang belum mulai
+  // pada periode ini (bulan sebelum presensi pertamanya) tidak punya slip.
   const slips = useMemo(
     () =>
-      karyawan.map((emp) => ({
-        emp,
-        slip: hitungSlipGaji(
+      karyawan
+        .filter((emp) => {
+          const mulai = mulaiBulanMap.get(emp.id)
+          if (!mulai) return periodeAktif === bulanIni
+          return periodeAktif >= mulai
+        })
+        .map((emp) => ({
           emp,
-          data.gajiPokok[emp.id] ?? 0,
-          recordsBulan,
-          laporanBulan,
-          hariSeharusnya,
-        ),
-      })),
-    [karyawan, data.gajiPokok, recordsBulan, laporanBulan, hariSeharusnya],
+          slip: hitungSlipGaji(
+            emp,
+            data.gajiPokok[emp.id] ?? 0,
+            recordsBulan,
+            laporanBulan,
+            hariSeharusnya,
+          ),
+        })),
+    [
+      karyawan,
+      data.gajiPokok,
+      recordsBulan,
+      laporanBulan,
+      hariSeharusnya,
+      mulaiBulanMap,
+      periodeAktif,
+      bulanIni,
+    ],
   )
 
   // KPI total.
   const total = useMemo(() => {
     const acc = { gajiPokok: 0, bonus: 0, gaji: 0, item: 0, menit: 0 }
     for (const { slip } of slips) {
-      acc.gajiPokok += slip.gajiPokok
+      acc.gajiPokok += slip.gajiPokokTerhitung
       acc.bonus += slip.bonusPenjualan
       acc.gaji += slip.total
       acc.item += slip.jumlahItem
@@ -135,6 +179,25 @@ export function GajiKaryawan({ data, setData, isAdmin, currentUserId }: Props) {
     setData({ ...data, gajiDibayar: next })
   }
 
+  // Info pembayaran per slip (metode + nomor rekening/e-wallet) — key sama
+  // seperti dibayar. `patch` me-merge sebagian; baris dihapus kalau dua-duanya
+  // kosong supaya tidak menyisakan entri kosong.
+  function setPembayaran(
+    empId: string,
+    patch: Partial<{ metode: string; nomor: string }>,
+  ) {
+    const key = dibayarKey(empId)
+    const cur = data.gajiPembayaranVia[key] ?? { metode: '', nomor: '' }
+    const merged = {
+      metode: (patch.metode ?? cur.metode).trim(),
+      nomor: (patch.nomor ?? cur.nomor).trim(),
+    }
+    const next = { ...data.gajiPembayaranVia }
+    if (merged.metode || merged.nomor) next[key] = merged
+    else delete next[key]
+    setData({ ...data, gajiPembayaranVia: next })
+  }
+
   // Pisahkan slip bulan terpilih: yang belum dibayar vs yang sudah (riwayat).
   const { belumDibayar, sudahDibayar } = useMemo(() => {
     const belum: typeof slips = []
@@ -155,14 +218,16 @@ export function GajiKaryawan({ data, setData, isAdmin, currentUserId }: Props) {
           <p className="gaji-toolbar-sub">
             {isAdmin ? (
               <>
-                Slip gaji {slips.length} karyawan · gaji pokok + bonus
-                penjualan (Rp {BONUS_PER_ITEM.toLocaleString('id-ID')}/item) +
-                lembur &amp; shift penuh − keterlambatan − cuti berlebih
+                Slip gaji {slips.length} karyawan · gaji pokok per hari hadir
+                (sejak tgl 1) + bonus penjualan (Rp{' '}
+                {BONUS_PER_ITEM.toLocaleString('id-ID')}/item) + lembur &amp;
+                shift penuh − keterlambatan
               </>
             ) : (
               <>
-                Slip gaji kamu · diperbarui otomatis dari absensi &amp; penjualan
-                (bonus Rp {BONUS_PER_ITEM.toLocaleString('id-ID')}/item)
+                Slip gaji kamu · gaji pokok dihitung per hari hadir sejak tgl 1,
+                diperbarui otomatis dari absensi &amp; penjualan (bonus Rp{' '}
+                {BONUS_PER_ITEM.toLocaleString('id-ID')}/item)
               </>
             )}
           </p>
@@ -190,9 +255,9 @@ export function GajiKaryawan({ data, setData, isAdmin, currentUserId }: Props) {
           />
           <KpiCard
             tone="primary"
-            label="Total gaji pokok"
+            label="Total gaji pokok terhitung"
             value={formatRupiah(total.gajiPokok)}
-            sub="Sebelum penyesuaian"
+            sub="Per hari hadir sejak tgl 1"
             icon={<Icons.lock />}
           />
           <KpiCard
@@ -221,8 +286,10 @@ export function GajiKaryawan({ data, setData, isAdmin, currentUserId }: Props) {
           </div>
           <div className="gaji-empty">
             {isAdmin
-              ? 'Belum ada karyawan. Karyawan baru mendaftar sendiri di halaman login.'
-              : 'Slip gaji kamu belum tersedia.'}
+              ? karyawan.length === 0
+                ? 'Belum ada karyawan. Karyawan baru mendaftar sendiri di halaman login.'
+                : `Belum ada karyawan yang aktif pada ${labelBulan(periodeAktif)}.`
+              : 'Slip gaji kamu belum tersedia untuk periode ini.'}
           </div>
         </>
       ) : (
@@ -250,6 +317,9 @@ export function GajiKaryawan({ data, setData, isAdmin, currentUserId }: Props) {
                   onToggleDibayar={
                     isAdmin ? (v) => setDibayar(emp.id, v) : undefined
                   }
+                  metode={data.gajiPembayaranVia[dibayarKey(emp.id)]?.metode ?? ''}
+                  nomor={data.gajiPembayaranVia[dibayarKey(emp.id)]?.nomor ?? ''}
+                  onPembayaran={(patch) => setPembayaran(emp.id, patch)}
                   printTitle={`Slip Gaji · ${emp.nama} · ${labelBulan(periodeAktif)}`}
                   onGajiPokok={(v) => setGajiPokok(emp.id, v)}
                 />
@@ -277,6 +347,9 @@ export function GajiKaryawan({ data, setData, isAdmin, currentUserId }: Props) {
                     onToggleDibayar={
                       isAdmin ? (v) => setDibayar(emp.id, v) : undefined
                     }
+                    metode={data.gajiPembayaranVia[dibayarKey(emp.id)]?.metode ?? ''}
+                    nomor={data.gajiPembayaranVia[dibayarKey(emp.id)]?.nomor ?? ''}
+                    onPembayaran={(patch) => setPembayaran(emp.id, patch)}
                     printTitle={`Slip Gaji · ${emp.nama} · ${labelBulan(periodeAktif)}`}
                     onGajiPokok={(v) => setGajiPokok(emp.id, v)}
                   />
@@ -300,6 +373,9 @@ function SlipCard({
   onGajiPokok,
   dibayar = false,
   onToggleDibayar,
+  metode = '',
+  nomor = '',
+  onPembayaran,
 }: {
   empId: string
   nama: string
@@ -310,6 +386,9 @@ function SlipCard({
   onGajiPokok: (v: number) => void
   dibayar?: boolean
   onToggleDibayar?: (paid: boolean) => void
+  metode?: string
+  nomor?: string
+  onPembayaran?: (patch: Partial<{ metode: string; nomor: string }>) => void
 }) {
   // Input gaji pokok pakai draft lokal supaya tidak menulis DB tiap ketukan;
   // commit saat blur / Enter.
@@ -323,6 +402,16 @@ function SlipCard({
   function commit() {
     const v = parseInt(draft, 10) || 0
     if (v !== slip.gajiPokok) onGajiPokok(v)
+  }
+
+  // Nomor rekening / e-wallet pakai draft lokal juga (commit saat blur / Enter).
+  const [nomorDraft, setNomorDraft] = useState(nomor)
+  useEffect(() => {
+    setNomorDraft(nomor)
+  }, [nomor])
+
+  function commitNomor() {
+    if (nomorDraft.trim() !== nomor) onPembayaran?.({ nomor: nomorDraft })
   }
 
   function handlePrint() {
@@ -395,6 +484,55 @@ function SlipCard({
         </label>
       )}
 
+      {/* Pembayaran (admin & karyawan) — metode + nomor rekening/e-wallet.
+          Tersembunyi saat di-print; hasilnya tetap tampil lewat readout di bawah
+          total. Disimpan per bulan (key `${empId}::${periode}`), jadi mengganti
+          data bulan ini tidak mengubah slip bulan-bulan sebelumnya. */}
+      {onPembayaran && (
+        <>
+          <label className="gaji-pokok-field gaji-bayar-via-edit">
+            <span>Pembayaran via</span>
+            <select
+              value={
+                metode && !METODE_PEMBAYARAN.includes(metode as never)
+                  ? '__custom__'
+                  : metode
+              }
+              onChange={(e) =>
+                onPembayaran({
+                  metode: e.target.value === '__custom__' ? metode : e.target.value,
+                })
+              }
+            >
+              <option value="">— belum dipilih —</option>
+              {METODE_PEMBAYARAN.map((m) => (
+                <option key={m} value={m}>
+                  {m}
+                </option>
+              ))}
+              {metode && !METODE_PEMBAYARAN.includes(metode as never) && (
+                <option value="__custom__">{metode}</option>
+              )}
+            </select>
+          </label>
+
+          <label className="gaji-pokok-field gaji-bayar-via-edit">
+            <span>No. rekening / e-wallet</span>
+            <input
+              type="text"
+              inputMode="numeric"
+              value={nomorDraft}
+              placeholder="mis. 1234567890 (BCA) / 08xx (OVO)"
+              onChange={(e) => setNomorDraft(e.target.value)}
+              onBlur={commitNomor}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+              }}
+            />
+          </label>
+        </>
+      )}
+
       {/* Ringkasan kehadiran */}
       <div className="gaji-absen">
         <Chip label="Hadir" val={`${slip.hariHadir}/${slip.hariSeharusnya} hr`} />
@@ -404,11 +542,9 @@ function SlipCard({
         {slip.extraMenit > 0 && (
           <Chip label="Extra time" val={formatDurasi(slip.extraMenit)} />
         )}
-        <Chip
-          label="Cuti"
-          val={`${slip.cutiTerpakai}/${JATAH_CUTI_SEBULAN}${slip.hariCutiBerlebih > 0 ? ` (+${slip.hariCutiBerlebih} lebih)` : ''}`}
-          warn={slip.hariCutiBerlebih > 0}
-        />
+        {slip.hariCuti > 0 && (
+          <Chip label="Cuti" val={`${slip.hariCuti} hr`} />
+        )}
         {slip.hariLibur > 0 && (
           <Chip label="Libur studio" val={`${slip.hariLibur} hr`} />
         )}
@@ -416,7 +552,11 @@ function SlipCard({
 
       {/* Rincian gaji */}
       <div className="gaji-rincian">
-        <Line label="Gaji pokok" val={slip.gajiPokok} />
+        <Line
+          label="Gaji pokok terhitung"
+          val={slip.gajiPokokTerhitung}
+          sub={`${slip.hariHadir} hari hadir × ${formatRupiah(slip.gajiPokokPerHari)}/hari (sejak tgl 1)`}
+        />
         <Line
           label={`Bonus penjualan · ${slip.jumlahItem} item`}
           val={slip.bonusPenjualan}
@@ -451,19 +591,24 @@ function SlipCard({
             minus
           />
         )}
-        {slip.potonganCuti > 0 && (
-          <Line
-            label={`Cuti berlebih · ${slip.hariCutiBerlebih} hari`}
-            val={slip.potonganCuti}
-            minus
-          />
-        )}
       </div>
 
       <div className="gaji-total">
         <span className="gaji-total-lbl">Total gaji</span>
         <span className="gaji-total-val">{formatRupiah(slip.total)}</span>
       </div>
+
+      {/* Readout pembayaran — tampil di layar & ikut ter-print. */}
+      <div className="gaji-bayar-via">
+        <span className="gaji-bayar-via-lbl">Pembayaran via:</span>
+        <span className="gaji-bayar-via-val">{metode || '—'}</span>
+      </div>
+      {nomor && (
+        <div className="gaji-bayar-via">
+          <span className="gaji-bayar-via-lbl">No. rekening / e-wallet:</span>
+          <span className="gaji-bayar-via-val">{nomor}</span>
+        </div>
+      )}
 
       {/* Tanda tangan Owner — hanya tampil saat di-print */}
       <div className="gaji-print-sign">

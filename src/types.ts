@@ -354,6 +354,18 @@ export type AppData = {
    * Disimpan di `app_config.gaji_dibayar` (JSONB), pola sama seperti gajiPokok.
    */
   gajiDibayar: Record<string, boolean>
+  /**
+   * Info pembayaran per slip gaji, key = `${employeeId}::${YYYY-MM}`:
+   *  - `metode` : "Pembayaran via" — label bebas (mis. "Transfer Bank", "Tunai").
+   *  - `nomor`  : nomor rekening / e-wallet (isian manual karyawan).
+   * Murni informatif, ditampilkan di slip termasuk saat di-print. KARYAWAN ikut
+   * mengisi field ini untuk slipnya sendiri, jadi disimpan di tabel tersendiri
+   * `gaji_pembayaran_via` (satu baris per karyawan+periode, RLS per-orang) —
+   * BUKAN di app_config yang admin-only. Disimpan per periode sehingga mengganti
+   * data bulan ini tidak mengubah slip bulan sebelumnya. Key tidak ada = belum
+   * diisi. Lihat migrasi 0031 & 0032.
+   */
+  gajiPembayaranVia: Record<string, { metode: string; nomor: string }>
   stokKertas: JenisKertas[]
   /**
    * Stok frame foto (berbagai jenis). Berkurang otomatis saat produk dengan nama

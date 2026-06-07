@@ -391,6 +391,29 @@
   font-variant-numeric: tabular-nums; outline: none;
 }
 .gaji-pokok-tarif { font-size: 11.5px; color: var(--ink-soft); font-weight: 600; }
+
+/* Slip gaji: pilih metode pembayaran + nomor rekening/e-wallet (admin & karyawan) */
+.gaji-bayar-via-edit select,
+.gaji-bayar-via-edit input {
+  width: 100%;
+  background: var(--surface-2); border: 1.8px solid var(--line);
+  border-radius: var(--radius-sm); padding: 11px 12px;
+  font-size: 15px; font-weight: 700; color: var(--ink);
+  outline: none;
+}
+.gaji-bayar-via-edit select { cursor: pointer; }
+.gaji-bayar-via-edit input { font-variant-numeric: tabular-nums; }
+.gaji-bayar-via-edit select:focus,
+.gaji-bayar-via-edit input:focus { border-color: var(--mint-deep); }
+
+/* Slip gaji: readout metode pembayaran (tampil di layar & saat di-print) */
+.gaji-bayar-via {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; padding: 2px 4px;
+}
+.gaji-bayar-via-lbl { font-size: 12.5px; font-weight: 700; color: var(--ink-soft); }
+.gaji-bayar-via-val { font-size: 13.5px; font-weight: 800; color: var(--ink); }
+
 /* Slip gaji: tombol aksi (print) */
 .gaji-card-actions {
   display: flex; justify-content: flex-end; gap: 10px; margin-top: -4px;
@@ -1606,6 +1629,46 @@
   background: transparent; font-weight: 800; font-size: 11px;
   text-transform: uppercase; color: var(--muted); letter-spacing: 0.06em; padding: 8px 12px;
 }
+/* Pengelompokan riwayat per bulan — model tumpukan (stack) agar batas
+   tanggal antar bulan jelas dan rapi. */
+.riwayat-bulan {
+  display: flex; flex-direction: column;
+  background: var(--surface);
+  border: 1.5px solid var(--line); border-radius: var(--radius);
+  overflow: hidden; box-shadow: var(--shadow-card);
+}
+.riwayat-bulan-head {
+  position: sticky; top: 0; z-index: 2;
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; padding: 12px 14px;
+  background: color-mix(in srgb, var(--primary-2) 14%, var(--surface));
+  border: none; border-bottom: 1.5px solid transparent;
+  font: inherit; text-align: left; cursor: pointer;
+  transition: background .15s;
+}
+.riwayat-bulan-head:hover {
+  background: color-mix(in srgb, var(--primary-2) 22%, var(--surface));
+}
+.riwayat-bulan-buka > .riwayat-bulan-head {
+  border-bottom-color: color-mix(in srgb, var(--primary-2) 30%, var(--line));
+}
+.riwayat-bulan-chevron {
+  color: var(--primary); font-size: 13px; line-height: 1;
+  transition: transform .18s ease;
+}
+.riwayat-bulan-buka > .riwayat-bulan-head .riwayat-bulan-chevron {
+  transform: rotate(180deg);
+}
+.riwayat-bulan-nama {
+  font-family: var(--font-display); font-weight: 700; font-size: 15px;
+  color: var(--ink); letter-spacing: 0.01em;
+}
+.riwayat-bulan-meta {
+  margin-left: auto;
+  font-size: 12px; font-weight: 700; color: var(--muted);
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.riwayat-bulan-rows { display: flex; flex-direction: column; gap: 6px; padding: 10px; }
 .riwayat-tanggal { font-weight: 700; color: var(--ink); }
 .riwayat-edit-btn { display: inline-flex; margin-top: 6px; }
 .riwayat-row.riwayat-editing {

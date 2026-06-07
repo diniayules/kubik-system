@@ -19,6 +19,7 @@ import {
   isHariKerja,
   cariOperatorOverlap,
   cariTakeover,
+  formatBulanTahun,
   formatDurasi,
   formatJam,
   formatTanggalPanjang,
@@ -60,6 +61,16 @@ export function Riwayat({
   const today = todayKey()
   const [editId, setEditId] = useState<string | null>(null)
   const [draft, setDraft] = useState<Draft | null>(null)
+  // Accordion per bulan. Default: hanya bulan terbaru yang terbuka. `bulanFlip`
+  // menyimpan bulan yang status bukanya dibalik dari default oleh pengguna.
+  const [bulanFlip, setBulanFlip] = useState<Set<string>>(() => new Set())
+  const toggleBulan = (key: string) =>
+    setBulanFlip((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
   const employee = data.employees.find((e) => e.id === employeeId)
   // Pemilik kartu & admin boleh mengedit absensi langsung dari riwayat;
   // karyawan lain hanya melihat riwayat resmi (read-only).
@@ -74,6 +85,19 @@ export function Riwayat({
         .sort((a, b) => b.tanggal.localeCompare(a.tanggal)),
     [data.records, employeeId, bolehLihatMenunggu],
   )
+
+  // Kelompokkan riwayat per bulan (YYYY-MM). `records` sudah terurut menurun,
+  // jadi bulan terbaru muncul lebih dulu dan tanggal di tiap bulan tetap menurun.
+  const perBulan = useMemo(() => {
+    const map = new Map<string, AbsenHari[]>()
+    for (const r of records) {
+      const key = r.tanggal.slice(0, 7)
+      const arr = map.get(key)
+      if (arr) arr.push(r)
+      else map.set(key, [r])
+    }
+    return Array.from(map.entries())
+  }, [records])
 
   const total = useMemo(() => {
     let kerja = 0
@@ -397,7 +421,32 @@ export function Riwayat({
               <div>Lembur</div>
               <div>Kerja Bersih</div>
             </div>
-            {records.map((r) => {
+            {perBulan.map(([bulanKey, rows], bulanIdx) => {
+              // Default terbuka hanya bulan terbaru (index 0); pengguna bisa
+              // membalik status tiap bulan lewat `bulanFlip`.
+              const terbuka = (bulanIdx === 0) !== bulanFlip.has(bulanKey)
+              return (
+              <div
+                className={`riwayat-bulan${terbuka ? ' riwayat-bulan-buka' : ''}`}
+                key={bulanKey}
+              >
+                <button
+                  type="button"
+                  className="riwayat-bulan-head"
+                  onClick={() => toggleBulan(bulanKey)}
+                  aria-expanded={terbuka}
+                >
+                  <span className="riwayat-bulan-chevron" aria-hidden="true">
+                    ▾
+                  </span>
+                  <span className="riwayat-bulan-nama">
+                    📅 {formatBulanTahun(rows[0].tanggal)}
+                  </span>
+                  <span className="riwayat-bulan-meta">{rows.length} hari</span>
+                </button>
+                {terbuka && (
+                <div className="riwayat-bulan-rows">
+                  {rows.map((r) => {
               const ring = hitungRingkasan(r, cariTakeover(r, data.records))
               const shiftCls = r.shift === 'full' ? 'penuh' : r.shift
               const pending = !absenDisetujui(r)
@@ -612,6 +661,11 @@ export function Riwayat({
                   </div>
                 )}
                 </Fragment>
+              )
+                  })}
+                </div>
+                )}
+              </div>
               )
             })}
           </div>

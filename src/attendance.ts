@@ -159,6 +159,13 @@ export function formatTanggalPanjang(tanggal: string): string {
   })
 }
 
+// Label bulan + tahun untuk pengelompokan riwayat (mis. "Juni 2026").
+export function formatBulanTahun(tanggal: string): string {
+  const [y, mo] = tanggal.split('-').map(Number)
+  const dt = new Date(y, mo - 1, 1)
+  return dt.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })
+}
+
 export type Ringkasan = {
   shift: Shift | null
   terlambatMenit: number

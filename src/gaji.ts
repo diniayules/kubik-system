@@ -2,19 +2,22 @@
 // gaji.ts · Perhitungan slip gaji karyawan (murni / deterministik).
 //
 // Model (lihat keputusan produk di GajiKaryawan):
-//  - Gaji pokok dibayar PENUH sebulan, lalu disesuaikan:
+//  - Gaji pokok DIAKRU per HARI HADIR sejak tanggal 1 (bukan dibayar penuh di
+//    muka): gaji pokok terhitung = gaji pokok ÷ 30 hari × jumlah hari hadir.
+//    Untuk bulan berjalan, nilainya tumbuh tiap hari karyawan masuk kerja.
+//    Hanya hari yang benar-benar masuk kerja yang membayar gaji pokok — cuti,
+//    libur studio, maupun hari mangkir tidak menambah gaji pokok.
+//  - Gaji pokok terhitung lalu disesuaikan:
 //      + bonus penjualan (Rp 1.000 / item: tiket, cetak, produk — upgrade TIDAK)
 //      + upah lembur          (menit lembur × tarif/menit)
 //      + upah shift penuh     (menit coverage × tarif/menit)
 //      + upah waktu ekstra    (menit extra manual × tarif/menit — backup/meeting)
 //      − potongan keterlambatan (menit telat × tarif/menit)
-//      − potongan cuti berlebih (hari di atas jatah × 1 hari × tarif/menit)
 //  - Tarif/menit = gaji pokok ÷ 30 hari ÷ 300 menit (800.000 → Rp 88,8).
-//  - CUTI dicatat EKSPLISIT (tombol "Cuti" di pemilih shift), bukan ditebak dari
-//    ketiadaan absensi. Jatah cuti 2 hari/bulan; cuti ke-3 dst memotong 1 hari
-//    penuh. Hari "Libur Studio" (studio tutup) tidak pernah memotong gaji dan
-//    tidak memakai jatah. Hari tanpa catatan apa pun TIDAK lagi otomatis
-//    dipotong — hanya ditampilkan sebagai info "tidak hadir".
+//  - CUTI & "Libur Studio" dicatat EKSPLISIT lewat pemilih shift; keduanya hanya
+//    ditampilkan sebagai info kehadiran dan tidak lagi mempengaruhi nominal gaji
+//    (tidak dibayar, tidak pula dipotong). Hari tanpa catatan apa pun juga hanya
+//    info "tidak hadir".
 // =============================================================
 import type { AbsenHari, Employee, LaporanIncome } from './types'
 import { hitungRingkasan } from './attendance'
@@ -26,16 +29,22 @@ export const BONUS_PER_ITEM = 1000
 export const HARI_KERJA_SEBULAN = 30
 /** Basis menit kerja harian (shift pagi/sore = 5 jam = 300 menit). */
 export const MENIT_KERJA_HARIAN = 300
-/** Jatah hari tidak hadir yang tidak memotong gaji (cuti) per bulan. */
-export const JATAH_CUTI_SEBULAN = 2
 
 /** Tarif per menit = gaji pokok ÷ 30 hari ÷ 300 menit. (800.000 → 88,89) */
 export function tarifPerMenit(gajiPokok: number): number {
   return gajiPokok / (HARI_KERJA_SEBULAN * MENIT_KERJA_HARIAN)
 }
 
+/** Gaji pokok per hari hadir = gaji pokok ÷ 30 hari. (800.000 → 26.667) */
+export function gajiPokokPerHari(gajiPokok: number): number {
+  return gajiPokok / HARI_KERJA_SEBULAN
+}
+
 export type SlipGaji = {
   gajiPokok: number
+  gajiPokokPerHari: number
+  /** Gaji pokok yang sudah diakru = gaji pokok/hari × hari hadir. */
+  gajiPokokTerhitung: number
   tarifPerMenit: number
   // --- kehadiran ---
   hariHadir: number
@@ -43,8 +52,6 @@ export type SlipGaji = {
   hariTidakHadir: number
   hariCuti: number
   hariLibur: number
-  cutiTerpakai: number
-  hariCutiBerlebih: number
   terlambatMenit: number
   lemburMenit: number
   coverageMenit: number
@@ -62,7 +69,6 @@ export type SlipGaji = {
   upahCoverage: number
   upahExtra: number
   potonganTerlambat: number
-  potonganCuti: number
   total: number
 }
 
@@ -136,14 +142,11 @@ export function hitungSlipGaji(
   }
 
   // Hari tanpa catatan apa pun (bukan kerja, cuti, maupun libur). Hanya info —
-  // TIDAK memotong gaji (cuti sekarang harus ditandai eksplisit).
+  // TIDAK menambah maupun memotong gaji.
   const hariTidakHadir = Math.max(
     0,
     hariSeharusnya - hariHadir - hariCuti - hariLibur,
   )
-  // Potongan hanya dari cuti EKSPLISIT yang melebihi jatah 2 hari/bulan.
-  const cutiTerpakai = Math.min(hariCuti, JATAH_CUTI_SEBULAN)
-  const hariCutiBerlebih = Math.max(0, hariCuti - JATAH_CUTI_SEBULAN)
 
   let tiket = 0
   let cetak = 0
@@ -162,32 +165,35 @@ export function hitungSlipGaji(
   // di laporan income (hitungIncome), bukan sebagai item bonus penjualan.
   const jumlahItem = tiket + cetak + produk
 
+  // Gaji pokok diakru per hari hadir sejak tanggal 1 — hanya hari masuk kerja
+  // yang membayar gaji pokok (cuti/libur/mangkir tidak menambah).
+  const perHari = gajiPokokPerHari(gajiPokok)
+  const gajiPokokTerhitung = hariHadir * perHari
+
   const bonusPenjualan = jumlahItem * BONUS_PER_ITEM
   const upahLembur = lemburMenit * tarif
   const upahCoverage = coverageMenit * tarif
   const upahExtra = extraMenit * tarif
   const potonganTerlambat = terlambatMenit * tarif
-  const potonganCuti = hariCutiBerlebih * MENIT_KERJA_HARIAN * tarif
 
   const total =
-    gajiPokok +
+    gajiPokokTerhitung +
     bonusPenjualan +
     upahLembur +
     upahCoverage +
     upahExtra -
-    potonganTerlambat -
-    potonganCuti
+    potonganTerlambat
 
   return {
     gajiPokok,
+    gajiPokokPerHari: perHari,
+    gajiPokokTerhitung,
     tarifPerMenit: tarif,
     hariHadir,
     hariSeharusnya,
     hariTidakHadir,
     hariCuti,
     hariLibur,
-    cutiTerpakai,
-    hariCutiBerlebih,
     terlambatMenit,
     lemburMenit,
     coverageMenit,
@@ -203,7 +209,6 @@ export function hitungSlipGaji(
     upahCoverage,
     upahExtra,
     potonganTerlambat,
-    potonganCuti,
     total,
   }
 }

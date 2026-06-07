@@ -132,6 +132,12 @@ type PenyesuaianUangKecilRow = {
   jumlah: number
   catatan: string
 }
+type GajiPembayaranViaRow = {
+  employee_id: string
+  periode: string
+  metode: string
+  nomor: string | null
+}
 type KertasRow = { id: string; nama: string; stok: number }
 type FrameRow = { id: string; nama: string; stok: number }
 type TintaRow = { warna: WarnaTinta; stok: number; catatan: string | null }
@@ -181,6 +187,7 @@ export async function fetchAppData(): Promise<AppData> {
     pengRes,
     penarikanRes,
     penyesuaianRes,
+    pembayaranViaRes,
     kertasRes,
     frameRes,
     tintaRes,
@@ -217,6 +224,8 @@ export async function fetchAppData(): Promise<AppData> {
       .from('penyesuaian_uang_kecil')
       .select('id, tanggal, tipe, jumlah, catatan')
       .order('tanggal', { ascending: true }),
+    // metode pembayaran gaji per (karyawan, periode): semua user login lihat.
+    supabase.from('gaji_pembayaran_via').select('employee_id, periode, metode, nomor'),
     supabase.from('stok_kertas').select('id, nama, stok').order('nama', { ascending: true }),
     supabase.from('stok_frame').select('id, nama, stok').order('nama', { ascending: true }),
     supabase.from('stok_tinta').select('warna, stok, catatan'),
@@ -243,6 +252,12 @@ export async function fetchAppData(): Promise<AppData> {
   const penyesuaian = (
     penyesuaianRes.error ? [] : (penyesuaianRes.data ?? [])
   ) as PenyesuaianUangKecilRow[]
+  // Toleran kalau tabel `gaji_pembayaran_via` belum ada (migrasi 0031 belum
+  // dijalankan) — fallback [] agar app tetap jalan; fitur aktif begitu migrasi
+  // diterapkan.
+  const pembayaranVia = (
+    pembayaranViaRes.error ? [] : (pembayaranViaRes.data ?? [])
+  ) as GajiPembayaranViaRow[]
   const kertas = orErr(kertasRes) as KertasRow[]
   const frame = orErr(frameRes) as FrameRow[]
   const tinta = orErr(tintaRes) as TintaRow[]
@@ -415,6 +430,12 @@ export async function fetchAppData(): Promise<AppData> {
     hargaProduk: config?.harga_produk ?? { ...HARGA_PRODUK_DEFAULT },
     gajiPokok: config?.gaji_pokok ?? {},
     gajiDibayar: config?.gaji_dibayar ?? {},
+    gajiPembayaranVia: Object.fromEntries(
+      pembayaranVia.map((r) => [
+        `${r.employee_id}::${r.periode}`,
+        { metode: r.metode ?? '', nomor: r.nomor ?? '' },
+      ]),
+    ),
     stokKertas,
     stokFrame,
     stokTinta,
@@ -573,6 +594,44 @@ export async function persistChanges(
     }),
     userId,
   )
+
+  // ---- gaji_pembayaran_via (per karyawan & periode; karyawan isi sendiri) ----
+  // Map key = `${employeeId}::${YYYY-MM}`. Upsert key yang baru/berubah, hapus
+  // key yang dihilangkan. Karyawan hanya boleh menyentuh baris miliknya (RLS).
+  {
+    const prevVia = prev.gajiPembayaranVia ?? {}
+    const nextVia = next.gajiPembayaranVia ?? {}
+    const parse = (k: string) => {
+      const i = k.indexOf('::')
+      return { employee_id: k.slice(0, i), periode: k.slice(i + 2) }
+    }
+    const upserts = Object.entries(nextVia)
+      .filter(([k, v]) => !eq(prevVia[k], v))
+      .map(([k, v]) => ({ ...parse(k), metode: v.metode, nomor: v.nomor }))
+    if (upserts.length) {
+      jobs.push(
+        Promise.resolve(
+          supabase
+            .from('gaji_pembayaran_via')
+            .upsert(upserts, { onConflict: 'employee_id,periode' }),
+        ).then(throwIfError),
+      )
+    }
+    for (const k of Object.keys(prevVia)) {
+      if (!(k in nextVia)) {
+        const { employee_id, periode } = parse(k)
+        jobs.push(
+          Promise.resolve(
+            supabase
+              .from('gaji_pembayaran_via')
+              .delete()
+              .eq('employee_id', employee_id)
+              .eq('periode', periode),
+          ).then(throwIfError),
+        )
+      }
+    }
+  }
 
   // ---- stok_kertas ----
   syncRows(

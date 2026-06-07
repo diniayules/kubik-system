@@ -1,4 +1,4 @@
-export type Theme = 'pop' | 'aurora' | 'studio' | 'tosca' | 'oui'
+export type Theme = 'pop' | 'aurora' | 'studio' | 'tosca' | 'oui' | 'galaxy' | 'neon' | 'popdark' | 'studiodark'
 
 const THEMES: { id: Theme; label: string; c: string }[] = [
   { id: 'pop', label: 'Pop', c: '#FFCE2E' },
@@ -6,6 +6,10 @@ const THEMES: { id: Theme; label: string; c: string }[] = [
   { id: 'studio', label: 'Studio', c: '#EF5C8C' },
   { id: 'tosca', label: 'Tosca', c: '#14B8A6' },
   { id: 'oui', label: 'Candy', c: '#7274ED' },
+  { id: 'galaxy', label: 'Galaksi', c: '#B57BFF' },
+  { id: 'neon', label: 'Neon', c: '#25E0FF' },
+  { id: 'popdark', label: 'Pop Gelap', c: '#FFCE2E' },
+  { id: 'studiodark', label: 'Studio Gelap', c: '#F06A96' },
 ]
 
 type Props = {

@@ -41,7 +41,11 @@ type Screen =
 
 function loadTheme(): Theme {
   const t = localStorage.getItem('kubik-theme')
-  if (t === 'pop' || t === 'aurora' || t === 'studio' || t === 'tosca' || t === 'oui')
+  if (
+    t === 'pop' || t === 'aurora' || t === 'studio' || t === 'tosca' || t === 'oui' ||
+    t === 'galaxy' || t === 'neon' ||
+    t === 'popdark' || t === 'studiodark'
+  )
     return t
   return 'pop'
 }

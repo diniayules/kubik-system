@@ -440,3 +440,248 @@ svg { width: 1em; height: 1em; flex-shrink: 0; }
 :root[data-theme="oui"] .b4 { top: 48%; right: 4%;  width: 48px; height: 48px; background: #FFB356; transform: rotate(11deg); }
 :root[data-theme="oui"] .b5 { bottom: 9%; right: 13%; width: 44px; height: 44px; background: #FF8B8B; transform: rotate(-12deg); }
 :root[data-theme="oui"] .b6 { top: 70%; left: 3%;  width: 42px; height: 42px; background: #FB96BB; transform: rotate(9deg); }
+
+/* =====================================================
+   THEME GALAKSI — gelap tapi gemas: langit indigo
+   berbintang, aksen lavender & pink, bintang berkelip
+   + bulan berpendar
+   ===================================================== */
+:root[data-theme="galaxy"] {
+  --bg: #14122B;
+  --bg-2: #1E1B3A;
+  --surface: #232046;
+  --surface-2: #2C2858;
+  --ink: #F3F0FF;
+  --ink-soft: #BCB4EC;
+  --muted: #837CB4;
+  --line: rgba(255,255,255,0.10);
+
+  --primary: #B57BFF;
+  --primary-2: #FF7BD5;
+  --on-primary: #1A1430;
+
+  --yellow: #FFD45E; --yellow-deep: #FFE9A8; --yellow-bg: rgba(255,212,94,0.16);
+  --pink:   #FF8AD4; --pink-deep:   #FFCDEC; --pink-bg:   rgba(255,138,212,0.16);
+  --mint:   #5EE6C8; --mint-deep:   #B8F6E9; --mint-bg:   rgba(94,230,200,0.16);
+
+  --radius-sm: 14px; --radius: 22px; --radius-lg: 30px; --radius-pill: 999px;
+  --card-border: 1.5px solid rgba(181,123,255,0.22);
+  --shadow-card: 0 20px 46px -26px rgba(0,0,0,0.70);
+  --shadow-float: 0 30px 64px -28px rgba(0,0,0,0.78);
+  --ring: 0 0 0 4px rgba(181,123,255,0.28);
+}
+:root[data-theme="galaxy"] body { background: var(--bg); }
+:root[data-theme="galaxy"] .bg-decor {
+  background:
+    radial-gradient(60% 50% at 14% 8%, rgba(181,123,255,0.30), transparent 70%),
+    radial-gradient(50% 46% at 88% 16%, rgba(255,123,213,0.26), transparent 70%),
+    radial-gradient(58% 52% at 82% 92%, rgba(94,230,200,0.18), transparent 70%),
+    var(--bg);
+}
+:root[data-theme="galaxy"] .blob { position: absolute; border-radius: 50%; animation: twinkle 3.4s ease-in-out infinite; }
+:root[data-theme="galaxy"] .b1 { top: 10%; left: 8%;   width: 14px; height: 14px; background: #FFE9A8; box-shadow: 0 0 16px 3px rgba(255,233,168,0.85); }
+:root[data-theme="galaxy"] .b2 { top: 30%; left: 18%;  width: 9px;  height: 9px;  background: #FF8AD4; box-shadow: 0 0 14px 3px rgba(255,138,212,0.80); animation-delay: -0.8s; }
+:root[data-theme="galaxy"] .b3 { bottom: 22%; left: 12%; width: 12px; height: 12px; background: #5EE6C8; box-shadow: 0 0 14px 3px rgba(94,230,200,0.80); animation-delay: -1.6s; }
+:root[data-theme="galaxy"] .b4 { top: 64%; right: 9%;   width: 10px; height: 10px; background: #B57BFF; box-shadow: 0 0 12px 3px rgba(181,123,255,0.80); animation-delay: -2.2s; }
+:root[data-theme="galaxy"] .b5 { top: 12%; right: 8%;   width: 50px; height: 50px; background: radial-gradient(circle at 38% 34%, #FFF6DC, #FFD45E); box-shadow: 0 0 28px 8px rgba(255,212,94,0.40); opacity: .95; animation: none; }
+:root[data-theme="galaxy"] .b6 { bottom: 12%; right: 16%; width: 8px;  height: 8px;  background: #FFFFFF; box-shadow: 0 0 12px 3px rgba(255,255,255,0.70); animation-delay: -1.2s; }
+@keyframes twinkle { 0%,100%{ transform: scale(1); opacity: .5 } 50%{ transform: scale(1.35); opacity: 1 } }
+
+/* =====================================================
+   THEME NEON — gelap pekat & menyala: sian + magenta +
+   lime candy, orb berpendar yang berdenyut
+   ===================================================== */
+:root[data-theme="neon"] {
+  --bg: #0A0E1A;
+  --bg-2: #0D1322;
+  --surface: #131A2C;
+  --surface-2: #1A2238;
+  --ink: #EAF6FF;
+  --ink-soft: #97B7D8;
+  --muted: #5D7596;
+  --line: rgba(120,200,255,0.14);
+
+  --primary: #25E0FF;
+  --primary-2: #FF4FD8;
+  --on-primary: #07131C;
+
+  --yellow: #FFE14D; --yellow-deep: #FFF1A0; --yellow-bg: rgba(255,225,77,0.14);
+  --pink:   #FF5FC8; --pink-deep:   #FFB3E6; --pink-bg:   rgba(255,95,200,0.16);
+  --mint:   #4DFFC3; --mint-deep:   #B0FFE6; --mint-bg:   rgba(77,255,195,0.14);
+
+  --radius-sm: 14px; --radius: 20px; --radius-lg: 28px; --radius-pill: 999px;
+  --card-border: 1.5px solid rgba(37,224,255,0.22);
+  --shadow-card: 0 0 0 1px rgba(37,224,255,0.10), 0 22px 50px -28px rgba(0,0,0,0.85);
+  --shadow-float: 0 0 0 1px rgba(255,79,216,0.14), 0 30px 64px -30px rgba(0,0,0,0.90);
+  --ring: 0 0 0 4px rgba(37,224,255,0.30);
+}
+:root[data-theme="neon"] body { background: var(--bg); }
+:root[data-theme="neon"] .bg-decor {
+  background:
+    radial-gradient(46% 42% at 12% 10%, rgba(37,224,255,0.26), transparent 68%),
+    radial-gradient(44% 40% at 90% 16%, rgba(255,79,216,0.26), transparent 68%),
+    radial-gradient(50% 46% at 84% 92%, rgba(77,255,195,0.18), transparent 68%),
+    var(--bg);
+}
+:root[data-theme="neon"] .blob { position: absolute; border-radius: 50%; filter: blur(2px); opacity: .9; animation: neonpulse 5s ease-in-out infinite; }
+:root[data-theme="neon"] .b1 { top: 10%; left: 6%;   width: 60px; height: 60px; background: #25E0FF; box-shadow: 0 0 40px 8px rgba(37,224,255,0.70); }
+:root[data-theme="neon"] .b2 { top: 22%; right: 8%;  width: 48px; height: 48px; background: #FF4FD8; box-shadow: 0 0 40px 8px rgba(255,79,216,0.70); animation-delay: -1.4s; }
+:root[data-theme="neon"] .b3 { bottom: 18%; left: 9%; width: 52px; height: 52px; background: #4DFFC3; box-shadow: 0 0 40px 8px rgba(77,255,195,0.65); animation-delay: -2.6s; }
+:root[data-theme="neon"] .b4 { top: 62%; right: 6%;  width: 40px; height: 40px; background: #FFE14D; box-shadow: 0 0 36px 8px rgba(255,225,77,0.60); animation-delay: -3.6s; }
+:root[data-theme="neon"] .b5, :root[data-theme="neon"] .b6 { display: none; }
+@keyframes neonpulse { 0%,100%{ transform: scale(1); opacity: .7 } 50%{ transform: scale(1.12); opacity: 1 } }
+
+/* =====================================================
+   THEME POP GELAP — versi malam dari Pop: stiker tebal,
+   garis terang, bayangan keras hitam, blob warna-warni
+   ===================================================== */
+:root[data-theme="popdark"] {
+  --bg: #15151C;
+  --bg-2: #1C1C26;
+  --surface: #222230;
+  --surface-2: #2A2A38;
+  --ink: #F4F2FF;
+  --ink-soft: #B8B6CC;
+  --muted: #807E96;
+  --line: rgba(255,255,255,0.12);
+
+  --primary: #6B7BFF;
+  --primary-2: #8A97FF;
+  --on-primary: #0E0E16;
+
+  --yellow: #FFCE2E; --yellow-deep: #FFE58A; --yellow-bg: rgba(255,206,46,0.16);
+  --pink:   #FF5E9C; --pink-deep:   #FFAFCF; --pink-bg:   rgba(255,94,156,0.16);
+  --mint:   #16C79A; --mint-deep:   #7EE8CE; --mint-bg:   rgba(22,199,154,0.16);
+
+  --radius-sm: 14px; --radius: 20px; --radius-lg: 28px;
+  --card-border: 2.5px solid #F4F2FF;
+  --shadow-card: 6px 8px 0 0 rgba(0,0,0,0.85);
+  --shadow-float: 10px 14px 0 0 rgba(0,0,0,0.80);
+}
+:root[data-theme="popdark"] body { background: var(--bg); }
+:root[data-theme="popdark"] .hero { border: 2.5px solid var(--ink); }
+:root[data-theme="popdark"] .shift { border-width: 1.5px; box-shadow: none; }
+:root[data-theme="popdark"] .clock-chip { border: 2.5px solid var(--ink); box-shadow: 4px 5px 0 0 rgba(0,0,0,0.80); }
+:root[data-theme="popdark"] .brand .logo { border: 2.5px solid var(--ink); box-shadow: 3px 4px 0 0 rgba(0,0,0,0.80); }
+:root[data-theme="popdark"] .btn--primary { box-shadow: 3px 4px 0 0 rgba(0,0,0,0.85); }
+:root[data-theme="popdark"] .btn--pink { box-shadow: 3px 4px 0 0 rgba(0,0,0,0.85); }
+:root[data-theme="popdark"] .stat { border-width: 2px; }
+:root[data-theme="popdark"] .badge { border: 2px solid currentColor; }
+
+:root[data-theme="popdark"] .bg-decor { background: var(--bg); }
+:root[data-theme="popdark"] .blob { position: absolute; opacity: .92; }
+:root[data-theme="popdark"] .b1 { top: 8%; left: 4%; width: 70px; height: 70px; border-radius: 22px; background: var(--yellow); transform: rotate(-12deg); border: 2.5px solid var(--ink); }
+:root[data-theme="popdark"] .b2 { top: 18%; right: 6%; width: 54px; height: 54px; border-radius: 50%; background: var(--pink); border: 2.5px solid var(--ink); }
+:root[data-theme="popdark"] .b3 { bottom: 14%; left: 7%; width: 60px; height: 60px; border-radius: 50%; background: var(--mint); border: 2.5px solid var(--ink); }
+:root[data-theme="popdark"] .b4 { top: 46%; right: 3%; width: 46px; height: 46px; background: var(--primary-2); transform: rotate(18deg); border-radius: 12px; border: 2.5px solid var(--ink); }
+:root[data-theme="popdark"] .b5 { bottom: 8%; right: 14%; width: 38px; height: 38px; border-radius: 50%; background: var(--yellow); border: 2.5px solid var(--ink); }
+:root[data-theme="popdark"] .b6 { top: 70%; left: 3%; width: 40px; height: 40px; background: var(--pink); transform: rotate(-20deg); border-radius: 10px; border: 2.5px solid var(--ink); }
+
+/* =====================================================
+   THEME STUDIO GELAP — versi malam dari Studio: editorial
+   mono, sudut tajam, aksen garis putus-putus terang,
+   film-strip di tepi
+   ===================================================== */
+:root[data-theme="studiodark"] {
+  --bg: #141318;
+  --bg-2: #1A191F;
+  --surface: #1E1D24;
+  --surface-2: #26252D;
+  --ink: #ECE7DD;
+  --ink-soft: #B5AFA2;
+  --muted: #837D70;
+  --line: rgba(236,231,221,0.16);
+
+  --primary: #ECE7DD;
+  --primary-2: #6E86C8;
+  --on-primary: #141318;
+
+  --yellow: #F2C744; --yellow-deep: #F7E0A0; --yellow-bg: rgba(242,199,68,0.14);
+  --pink:   #F06A96; --pink-deep:   #F8B9CE; --pink-bg:   rgba(240,106,150,0.14);
+  --mint:   #38C2A0; --mint-deep:   #9EE8D6; --mint-bg:   rgba(56,194,160,0.14);
+
+  --radius-sm: 6px; --radius: 8px; --radius-lg: 12px; --radius-pill: 6px;
+  --card-border: 1.8px solid var(--ink);
+  --shadow-card: 0 10px 30px -20px rgba(0,0,0,0.80);
+  --shadow-float: 0 20px 44px -22px rgba(0,0,0,0.85);
+  --font-mono: "Space Mono", ui-monospace, monospace;
+}
+:root[data-theme="studiodark"] body { background: var(--bg); }
+:root[data-theme="studiodark"] .hero,
+:root[data-theme="studiodark"] .clock-chip,
+:root[data-theme="studiodark"] .stat,
+:root[data-theme="studiodark"] .shift,
+:root[data-theme="studiodark"] .metrics,
+:root[data-theme="studiodark"] .brand .logo,
+:root[data-theme="studiodark"] .modal { border: 1.8px solid var(--ink); }
+:root[data-theme="studiodark"] .shift { box-shadow: none; }
+:root[data-theme="studiodark"] .badge { border: 1.5px solid currentColor; border-radius: 4px; }
+:root[data-theme="studiodark"] .btn { border-radius: 6px; }
+:root[data-theme="studiodark"] .avatar { border-radius: 6px; }
+:root[data-theme="studiodark"] .emp-card .accent-strip {
+  height: 8px;
+  background: repeating-linear-gradient(90deg, var(--ink) 0 8px, transparent 8px 16px);
+  opacity: .25;
+}
+/* Aksen garis-garis (dashed) di header semua card — seperti card absensi (.emp-card) */
+:root[data-theme="studiodark"] .kpi-card,
+:root[data-theme="studiodark"] .dash-laba-card,
+:root[data-theme="studiodark"] .quick-card,
+:root[data-theme="studiodark"] .inv-card,
+:root[data-theme="studiodark"] .tinta-card,
+:root[data-theme="studiodark"] .amplop-card,
+:root[data-theme="studiodark"] .settings-card,
+:root[data-theme="studiodark"] .detail-card,
+:root[data-theme="studiodark"] .income-card,
+:root[data-theme="studiodark"] .kal-card,
+:root[data-theme="studiodark"] .auth-card {
+  position: relative;
+  overflow: hidden;
+}
+:root[data-theme="studiodark"] .kpi-card::before,
+:root[data-theme="studiodark"] .dash-laba-card::before,
+:root[data-theme="studiodark"] .quick-card::before,
+:root[data-theme="studiodark"] .inv-card::before,
+:root[data-theme="studiodark"] .tinta-card::before,
+:root[data-theme="studiodark"] .amplop-card::before,
+:root[data-theme="studiodark"] .settings-card::before,
+:root[data-theme="studiodark"] .detail-card::before,
+:root[data-theme="studiodark"] .income-card:not(.is-printing)::before,
+:root[data-theme="studiodark"] .kal-card::before,
+:root[data-theme="studiodark"] .auth-card::before,
+:root[data-theme="studiodark"] .thumb::after {
+  content: "";
+  position: absolute; top: 0; left: 0; right: 0; height: 8px;
+  background: repeating-linear-gradient(90deg, var(--ink) 0 8px, transparent 8px 16px);
+  opacity: .25;
+  pointer-events: none;
+  z-index: 2;
+}
+:root[data-theme="studiodark"] .brand-text .kicker,
+:root[data-theme="studiodark"] .badge,
+:root[data-theme="studiodark"] .metric .k,
+:root[data-theme="studiodark"] .stat .lbl,
+:root[data-theme="studiodark"] .date-pill,
+:root[data-theme="studiodark"] .hist-row .h-times .ht .hk,
+:root[data-theme="studiodark"] .key--fn {
+  font-family: var(--font-mono); letter-spacing: 0.02em;
+}
+:root[data-theme="studiodark"] .clock-chip .now,
+:root[data-theme="studiodark"] .metric .v,
+:root[data-theme="studiodark"] .hist-row .h-times .ht .hv { font-family: var(--font-mono); }
+
+:root[data-theme="studiodark"] .bg-decor { background: var(--bg); }
+:root[data-theme="studiodark"] .blob { display: none; }
+:root[data-theme="studiodark"] .bg-decor::before,
+:root[data-theme="studiodark"] .bg-decor::after {
+  content: ""; position: absolute; top: 0; bottom: 0; width: 26px;
+  background-image: repeating-linear-gradient(180deg, transparent 0 16px, rgba(236,231,221,0.10) 16px 30px);
+  background-size: 26px 46px;
+}
+:root[data-theme="studiodark"] .bg-decor::before { left: 0; }
+:root[data-theme="studiodark"] .bg-decor::after { right: 0; }
+
+@media (max-width: 700px) {
+  :root[data-theme="studiodark"] .bg-decor::before,
+  :root[data-theme="studiodark"] .bg-decor::after { display: none; }
+}

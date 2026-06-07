@@ -1539,24 +1539,42 @@ function IncomeRow({
         </div>
       )}
 
-      {showMoney && ((laporan.tunai ?? 0) > 0 || (laporan.qris ?? 0) > 0) && (
-        <div className="income-breakdown">
-          <div className="income-breakdown-row">
-            <span>💵 Tunai</span>
-            <span className="income-breakdown-qty">bayar via</span>
-            <span className="income-breakdown-val">
-              {formatRupiah(laporan.tunai ?? 0)}
-            </span>
+      {showMoney &&
+        ((laporan.tunai ?? 0) > 0 ||
+          (laporan.qris ?? 0) > 0 ||
+          (laporan.uangBesar ?? 0) > 0 ||
+          (laporan.uangKecil ?? 0) > 0) && (
+          <div className="income-breakdown">
+            <div className="income-breakdown-row">
+              <span>💵 Tunai</span>
+              <span className="income-breakdown-qty">bayar via</span>
+              <span className="income-breakdown-val">
+                {formatRupiah(laporan.tunai ?? 0)}
+              </span>
+            </div>
+            <div className="income-breakdown-row">
+              <span>📱 QRIS</span>
+              <span className="income-breakdown-qty">bayar via</span>
+              <span className="income-breakdown-val">
+                {formatRupiah(laporan.qris ?? 0)}
+              </span>
+            </div>
+            <div className="income-breakdown-row">
+              <span>💰 Uang besar</span>
+              <span className="income-breakdown-qty">di laci</span>
+              <span className="income-breakdown-val">
+                {formatRupiah(laporan.uangBesar ?? 0)}
+              </span>
+            </div>
+            <div className="income-breakdown-row">
+              <span>🪙 Uang kecil</span>
+              <span className="income-breakdown-qty">di laci</span>
+              <span className="income-breakdown-val">
+                {formatRupiah(laporan.uangKecil ?? 0)}
+              </span>
+            </div>
           </div>
-          <div className="income-breakdown-row">
-            <span>📱 QRIS</span>
-            <span className="income-breakdown-qty">bayar via</span>
-            <span className="income-breakdown-val">
-              {formatRupiah(laporan.qris ?? 0)}
-            </span>
-          </div>
-        </div>
-      )}
+        )}
 
       {showMoney &&
         ((laporan.uangBesar ?? 0) > 0 ||

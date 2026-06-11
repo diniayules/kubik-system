@@ -32,6 +32,7 @@ import { Modal, ModalHead } from '../components/Modal'
 import { useToast } from '../components/Toast'
 import RupiahInput from '../components/RupiahInput'
 import { usePrefs } from '../lib/prefs'
+import { useLang } from '../i18n'
 
 type Props = {
   data: AppData
@@ -42,6 +43,7 @@ type Props = {
 
 export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) {
   const toast = useToast()
+  const { t } = useLang()
   // Karyawan boleh input & edit laporan, tapi nominal Rupiah disembunyikan.
   const showMoney = isAdmin
   // Admin & karyawan sama-sama boleh menambah laporan income. Admin mengisi
@@ -225,8 +227,12 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
       ...data,
       penyesuaianUangKecil: [...(data.penyesuaianUangKecil ?? []), p],
     })
-    const label = p.tipe === 'tambah' ? 'Tambah' : 'Pakai'
-    toast('ok', `${label} uang kecil ${formatRupiah(p.jumlah)} dicatat`)
+    toast(
+      'ok',
+      t(p.tipe === 'tambah' ? 'inc.toast.ukTambah' : 'inc.toast.ukPakai', {
+        rp: formatRupiah(p.jumlah),
+      }),
+    )
   }
 
   function hapusPenyesuaian(id: string) {
@@ -236,7 +242,7 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
         (p) => p.id !== id,
       ),
     })
-    toast('ok', 'Penyesuaian dihapus, float dikembalikan')
+    toast('ok', t('inc.toast.ukHapus'))
   }
 
   function catatPenarikan(p: PenarikanUangBesar) {
@@ -244,7 +250,7 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
       ...data,
       penarikanUangBesar: [...(data.penarikanUangBesar ?? []), p],
     })
-    toast('ok', `Uang besar ${formatRupiah(p.jumlah)} diambil`)
+    toast('ok', t('inc.toast.ubAmbil', { rp: formatRupiah(p.jumlah) }))
   }
 
   function hapusPenarikan(id: string) {
@@ -254,7 +260,7 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
         (p) => p.id !== id,
       ),
     })
-    toast('ok', 'Riwayat pengambilan dihapus, saldo dikembalikan')
+    toast('ok', t('inc.toast.ubHapus'))
   }
 
   function simpanLaporan(l: Laporan) {
@@ -269,11 +275,7 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
     } else {
       const sameDate = data.laporanIncome.find((x) => x.tanggal === l.tanggal)
       if (sameDate) {
-        if (
-          !confirm(
-            `Sudah ada laporan tanggal ${l.tanggal}. Timpa dengan data baru?`,
-          )
-        ) {
+        if (!confirm(t('inc.confirm.timpa', { tgl: l.tanggal }))) {
           return
         }
         lama = sameDate
@@ -310,16 +312,16 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
     )
 
     setData({ ...data, laporanIncome: baru, stokKertas, stokAmplop, stokFrame })
-    toast('ok', `Laporan ${l.tanggal} disimpan`)
+    toast('ok', t('inc.toast.simpan', { tgl: l.tanggal }))
     if (kurang) {
-      toast('warn', 'Stok tidak cukup — sebagian dipotong sampai 0')
+      toast('warn', t('inc.toast.stokKurang'))
     }
     setShowForm(false)
     setEditing(null)
   }
 
   function hapusLaporan(l: Laporan) {
-    if (!confirm(`Hapus laporan tanggal ${l.tanggal}? Stok dikembalikan.`)) return
+    if (!confirm(t('inc.confirm.hapus', { tgl: l.tanggal }))) return
     // Kembalikan stok yang dulu dipotong laporan ini (kertas, amplop & frame).
     const pakai = hitungPemakaianStok(
       l,
@@ -342,7 +344,7 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
       stokAmplop,
       stokFrame,
     })
-    toast('warn', `Laporan ${l.tanggal} dihapus`)
+    toast('warn', t('inc.toast.hapus', { tgl: l.tanggal }))
   }
 
   // ---- catalog editor handlers ----
@@ -439,7 +441,7 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
       hargaUpgrade,
       hargaProduk,
     })
-    toast('ok', 'Item & harga diperbarui')
+    toast('ok', t('inc.cat.saved'))
     setShowSetting(false)
   }
 
@@ -574,7 +576,7 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
               className="hero-edit-btn"
               onClick={() => (showSetting ? setShowSetting(false) : openSetting())}
             >
-              <Icons.lock /> Atur Item &amp; Harga
+              <Icons.lock /> {t('inc.aturHarga')}
             </button>
           )}
         </div>
@@ -583,7 +585,7 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
 
         {showSetting && (
           <div className="hero-edit-form">
-            <div className="harga-cat-head">📸 Layanan (tiket + cetak)</div>
+            <div className="harga-cat-head">{t('inc.cat.layanan')}</div>
             <div className="harga-cat-list">
               {draftLayanan.map((def) => (
                 <div key={def.id} className="harga-cat-row">
@@ -592,7 +594,7 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
                     className="harga-cat-ikon"
                     value={def.ikon}
                     onChange={(e) => patchLayanan(def.id, { ikon: e.target.value })}
-                    aria-label="Ikon"
+                    aria-label={t('inc.cat.ikon')}
                     maxLength={4}
                   />
                   <input
@@ -602,8 +604,8 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
                     onChange={(e) =>
                       patchLayanan(def.id, { label: e.target.value })
                     }
-                    placeholder="Nama layanan"
-                    aria-label="Nama layanan"
+                    placeholder={t('inc.cat.namaLayanan')}
+                    aria-label={t('inc.cat.namaLayanan')}
                   />
                   <RupiahInput
                     className="harga-cat-harga"
@@ -614,15 +616,15 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
                         [def.id]: n === 0 ? '' : String(n),
                       }))
                     }
-                    placeholder="Harga tiket"
-                    aria-label="Harga tiket"
+                    placeholder={t('inc.cat.hargaTiket')}
+                    aria-label={t('inc.cat.hargaTiket')}
                   />
                   <button
                     type="button"
                     className="harga-cat-del"
                     onClick={() => removeLayanan(def.id)}
-                    title="Hapus layanan"
-                    aria-label="Hapus layanan"
+                    title={t('inc.cat.hapusLayanan')}
+                    aria-label={t('inc.cat.hapusLayanan')}
                   >
                     <Icons.trash />
                   </button>
@@ -633,19 +635,19 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
                 className="btn btn--ghost btn--sm"
                 onClick={addLayanan}
               >
-                <Icons.plus /> Tambah layanan
+                <Icons.plus /> {t('inc.cat.tambahLayanan')}
               </button>
             </div>
 
             <div className="field" style={{ margin: '14px 0' }}>
-              <label>(+) Harga Cetak (Rp) — berlaku untuk semua layanan</label>
+              <label>{t('inc.cat.hargaCetak')}</label>
               <RupiahInput
                 value={Number(draftCetak) || 0}
                 onChange={(n) => setDraftCetak(n === 0 ? '' : String(n))}
               />
             </div>
 
-            <div className="harga-cat-head">🎁 Upgrade cetak (qty)</div>
+            <div className="harga-cat-head">{t('inc.cat.upgrade')}</div>
             <div className="harga-cat-list">
               {draftUpgrade.map((def) => (
                 <div key={def.id} className="harga-cat-row">
@@ -654,7 +656,7 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
                     className="harga-cat-ikon"
                     value={def.ikon}
                     onChange={(e) => patchUpgrade(def.id, { ikon: e.target.value })}
-                    aria-label="Ikon"
+                    aria-label={t('inc.cat.ikon')}
                     maxLength={4}
                   />
                   <input
@@ -664,8 +666,8 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
                     onChange={(e) =>
                       patchUpgrade(def.id, { label: e.target.value })
                     }
-                    placeholder="Nama upgrade"
-                    aria-label="Nama upgrade"
+                    placeholder={t('inc.cat.namaUpgrade')}
+                    aria-label={t('inc.cat.namaUpgrade')}
                   />
                   <RupiahInput
                     className="harga-cat-harga"
@@ -676,15 +678,15 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
                         [def.id]: n === 0 ? '' : String(n),
                       }))
                     }
-                    placeholder="Harga / item"
-                    aria-label="Harga upgrade"
+                    placeholder={t('inc.cat.hargaItem')}
+                    aria-label={t('inc.cat.hargaUpgrade')}
                   />
                   <button
                     type="button"
                     className="harga-cat-del"
                     onClick={() => removeUpgrade(def.id)}
-                    title="Hapus upgrade"
-                    aria-label="Hapus upgrade"
+                    title={t('inc.cat.hapusUpgrade')}
+                    aria-label={t('inc.cat.hapusUpgrade')}
                   >
                     <Icons.trash />
                   </button>
@@ -695,12 +697,12 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
                 className="btn btn--ghost btn--sm"
                 onClick={addUpgrade}
               >
-                <Icons.plus /> Tambah upgrade
+                <Icons.plus /> {t('inc.cat.tambahUpgrade')}
               </button>
             </div>
 
             <div className="harga-cat-head" style={{ marginTop: 14 }}>
-              🛍️ Produk (qty) — merchandise &amp; lainnya
+              {t('inc.cat.produk')}
             </div>
             <div className="harga-cat-list">
               {draftProduk.map((def) => (
@@ -710,7 +712,7 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
                     className="harga-cat-ikon"
                     value={def.ikon}
                     onChange={(e) => patchProduk(def.id, { ikon: e.target.value })}
-                    aria-label="Ikon"
+                    aria-label={t('inc.cat.ikon')}
                     maxLength={4}
                   />
                   <input
@@ -720,8 +722,8 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
                     onChange={(e) =>
                       patchProduk(def.id, { label: e.target.value })
                     }
-                    placeholder="Nama produk (cth: Frame foto, T-shirt)"
-                    aria-label="Nama produk"
+                    placeholder={t('inc.cat.namaProdukPh')}
+                    aria-label={t('inc.cat.namaProduk')}
                   />
                   <RupiahInput
                     className="harga-cat-harga"
@@ -732,15 +734,15 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
                         [def.id]: n === 0 ? '' : String(n),
                       }))
                     }
-                    placeholder="Harga / item"
-                    aria-label="Harga produk"
+                    placeholder={t('inc.cat.hargaItem')}
+                    aria-label={t('inc.cat.hargaProduk')}
                   />
                   <button
                     type="button"
                     className="harga-cat-del"
                     onClick={() => removeProduk(def.id)}
-                    title="Hapus produk"
-                    aria-label="Hapus produk"
+                    title={t('inc.cat.hapusProduk')}
+                    aria-label={t('inc.cat.hapusProduk')}
                   >
                     <Icons.trash />
                   </button>
@@ -751,7 +753,7 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
                 className="btn btn--ghost btn--sm"
                 onClick={addProduk}
               >
-                <Icons.plus /> Tambah produk
+                <Icons.plus /> {t('inc.cat.tambahProduk')}
               </button>
             </div>
 
@@ -761,20 +763,17 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
                 className="btn btn--primary"
                 onClick={simpanHarga}
               >
-                <Icons.check /> Simpan
+                <Icons.check /> {t('inc.cat.simpan')}
               </button>
               <button
                 type="button"
                 className="btn btn--ghost"
                 onClick={() => setShowSetting(false)}
               >
-                Batal
+                {t('inc.cat.batal')}
               </button>
             </div>
-            <div className="form-hint">
-              ⚠️ Item &amp; harga ini berlaku untuk laporan baru. Laporan lama
-              tetap pakai harga saat dibuat (snapshot).
-            </div>
+            <div className="form-hint">{t('inc.cat.hint')}</div>
           </div>
         )}
 
@@ -783,22 +782,22 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
             <div className="stat">
               <span className="dot" style={{ background: 'var(--mint)' }} />
               <span className="num">{formatRupiah(totalHariIni)}</span>
-              <span className="lbl">Hari ini</span>
+              <span className="lbl">{t('inc.stat.hariIni')}</span>
             </div>
             <div className="stat">
               <span className="dot" style={{ background: 'var(--primary-2)' }} />
               <span className="num">{formatRupiah(sum7)}</span>
-              <span className="lbl">7 hari terakhir</span>
+              <span className="lbl">{t('inc.stat.minggu')}</span>
             </div>
             <div className="stat">
               <span className="dot" style={{ background: 'var(--yellow)' }} />
               <span className="num">{formatRupiah(rata7)}</span>
-              <span className="lbl">Rata-rata / hari</span>
+              <span className="lbl">{t('inc.stat.rata')}</span>
             </div>
             <div className="stat">
               <span className="dot" style={{ background: 'var(--pink)' }} />
               <span className="num">{formatRupiah(totalBulanIni)}</span>
-              <span className="lbl">Bulan ini ({monthData.length} hari)</span>
+              <span className="lbl">{t('inc.stat.bulan', { n: monthData.length })}</span>
             </div>
           </div>
         )}
@@ -830,20 +829,18 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
             besar ke admin, jadi mereka perlu lihat saldo & mencatatnya. */}
         <div className="uang-besar-bar">
           <div className="uang-besar-info">
-            <span className="uang-besar-lbl">💰 Total uang besar di laci</span>
+            <span className="uang-besar-lbl">{t('inc.ub.label')}</span>
             <span className="uang-besar-val">
               {formatRupiah(uangBesarLedger.saldo)}
             </span>
-            <span className="uang-besar-hint">
-              bertambah otomatis dari uang besar tiap laporan
-            </span>
+            <span className="uang-besar-hint">{t('inc.ub.hint')}</span>
           </div>
           <button
             type="button"
             className="btn btn--ghost"
             onClick={() => setShowAmbil(true)}
           >
-            <Icons.download /> Ambil / Setor ke admin
+            <Icons.download /> {t('inc.ub.ambil')}
           </button>
         </div>
 
@@ -851,34 +848,32 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
             Dipegang kasir — mereka yang mengelola uang kecil di laci. */}
         <div className="uang-besar-bar">
           <div className="uang-besar-info">
-            <span className="uang-besar-lbl">🪙 Penyesuaian uang kecil bulan ini</span>
+            <span className="uang-besar-lbl">{t('inc.uk.label')}</span>
             <span className="uang-besar-val">
               {penyesuaianBulanIni < 0 ? '− ' : '+ '}
               {formatRupiah(Math.abs(penyesuaianBulanIni))}
             </span>
-            <span className="uang-besar-hint">
-              tambah / pakai uang kecil agar float laci antar hari tetap cocok
-            </span>
+            <span className="uang-besar-hint">{t('inc.uk.hint')}</span>
           </div>
           <button
             type="button"
             className="btn btn--ghost"
             onClick={() => setShowPenyesuaian(true)}
           >
-            <Icons.cart /> Tambah / Pakai
+            <Icons.cart /> {t('inc.uk.tambahPakai')}
           </button>
         </div>
       </section>
 
       <div className="section-head">
         <h2>
-          Daftar Laporan{' '}
+          {t('inc.list.title')}{' '}
           <span className="count-badge">{data.laporanIncome.length}</span>
         </h2>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           {showMoney && data.laporanIncome.length > 0 && (
             <button type="button" className="btn btn--ghost" onClick={exportCSV}>
-              <Icons.download /> Unduh CSV
+              <Icons.download /> {t('inc.list.unduh')}
             </button>
           )}
           {canTambahLaporan && (
@@ -890,7 +885,7 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
                 setShowForm(true)
               }}
             >
-              <Icons.plus /> Tambah Laporan
+              <Icons.plus /> {t('inc.list.tambah')}
             </button>
           )}
         </div>
@@ -899,8 +894,8 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
       {data.laporanIncome.length === 0 ? (
         <div className="emp-empty">
           <div className="ee-emoji">💸</div>
-          <h3>Belum ada laporan income</h3>
-          <p>Klik "Tambah Laporan" untuk mulai mencatat penjualan harian.</p>
+          <h3>{t('inc.empty.title')}</h3>
+          <p>{t('inc.empty.sub')}</p>
           <button
             type="button"
             className="btn btn--pink btn--lg"
@@ -909,7 +904,7 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
               setShowForm(true)
             }}
           >
-            <Icons.plus /> Tambah Laporan
+            <Icons.plus /> {t('inc.list.tambah')}
           </button>
         </div>
       ) : tampilan === 'kalender' ? (
@@ -1028,6 +1023,7 @@ function AmbilUangBesarModal({
   onHapus: (id: string) => void
   onClose: () => void
 }) {
+  const { t } = useLang()
   const [jumlah, setJumlah] = useState<number>(0)
   const [tanggal, setTanggal] = useState<string>(hariIni)
   const [catatan, setCatatan] = useState<string>('')
@@ -1048,18 +1044,18 @@ function AmbilUangBesarModal({
       <ModalHead
         icon={<Icons.download />}
         color="var(--pink)"
-        title="Ambil / Setor Uang Besar"
-        sub="Mengurangi total uang besar di laci"
+        title={t('inc.ambil.title')}
+        sub={t('inc.ambil.sub')}
         onClose={onClose}
       />
       <div className="modal-body">
         <div className="income-card-total" style={{ marginBottom: 14 }}>
           <div className="income-card-total-num">{formatRupiah(saldo)}</div>
-          <div className="income-card-total-lbl">Total uang besar di laci</div>
+          <div className="income-card-total-lbl">{t('inc.ambil.total')}</div>
         </div>
 
         <div className="field">
-          <label>💵 Jumlah diambil (Rp)</label>
+          <label>{t('inc.ambil.jumlah')}</label>
           <div style={{ display: 'flex', gap: 8 }}>
             <RupiahInput
               value={jumlah}
@@ -1073,18 +1069,18 @@ function AmbilUangBesarModal({
               disabled={saldo <= 0}
               onClick={() => setJumlah(saldo)}
             >
-              Ambil semua
+              {t('inc.ambil.semua')}
             </button>
           </div>
           {jumlah > saldo && (
             <div className="form-hint" style={{ color: 'var(--warn, #b26a00)' }}>
-              Tidak bisa melebihi saldo {formatRupiah(saldo)}.
+              {t('inc.ambil.maks', { rp: formatRupiah(saldo) })}
             </div>
           )}
         </div>
 
         <div className="field">
-          <label>📅 Tanggal</label>
+          <label>{t('inc.field.tanggal')}</label>
           <input
             type="date"
             value={tanggal}
@@ -1093,11 +1089,11 @@ function AmbilUangBesarModal({
         </div>
 
         <div className="field">
-          <label>📝 Catatan (opsional)</label>
+          <label>{t('inc.field.catatan')}</label>
           <input
             type="text"
             value={catatan}
-            placeholder="mis. disetor ke admin"
+            placeholder={t('inc.ambil.catatanPh')}
             onChange={(e) => setCatatan(e.target.value)}
           />
         </div>
@@ -1109,12 +1105,12 @@ function AmbilUangBesarModal({
           onClick={simpan}
           style={{ width: '100%' }}
         >
-          <Icons.download /> Catat pengambilan
+          <Icons.download /> {t('inc.ambil.catat')}
         </button>
 
         {riwayatUrut.length > 0 && (
           <div className="penarikan-riwayat">
-            <div className="harga-cat-head">🧾 Riwayat pengambilan</div>
+            <div className="harga-cat-head">{t('inc.ambil.riwayat')}</div>
             {riwayatUrut.map((p) => (
               <div key={p.id} className="penarikan-row">
                 <div className="penarikan-row-info">
@@ -1131,8 +1127,8 @@ function AmbilUangBesarModal({
                 <button
                   type="button"
                   className="emp-row-icon emp-row-danger"
-                  aria-label="Hapus riwayat"
-                  title="Hapus & kembalikan saldo"
+                  aria-label={t('inc.ambil.hapusRiwayat')}
+                  title={t('inc.ambil.hapusSaldo')}
                   onClick={() => onHapus(p.id)}
                 >
                   <Icons.trash />
@@ -1165,6 +1161,7 @@ function PenyesuaianUangKecilModal({
   onHapus: (id: string) => void
   onClose: () => void
 }) {
+  const { t } = useLang()
   const [tipe, setTipe] = useState<'tambah' | 'pakai'>('tambah')
   const [jumlah, setJumlah] = useState<number>(0)
   const [tanggal, setTanggal] = useState<string>(hariIni)
@@ -1194,8 +1191,8 @@ function PenyesuaianUangKecilModal({
       <ModalHead
         icon={<Icons.cart />}
         color="var(--pink)"
-        title="Penyesuaian Uang Kecil"
-        sub="Tambah / pakai uang kecil di laci"
+        title={t('inc.peny.title')}
+        sub={t('inc.peny.sub')}
         onClose={onClose}
       />
       <div className="modal-body">
@@ -1204,14 +1201,12 @@ function PenyesuaianUangKecilModal({
             {netBulanIni < 0 ? '− ' : '+ '}
             {formatRupiah(Math.abs(netBulanIni))}
           </div>
-          <div className="income-card-total-lbl">
-            Net penyesuaian uang kecil bulan ini
-          </div>
+          <div className="income-card-total-lbl">{t('inc.peny.net')}</div>
         </div>
 
         {/* Toggle Tambah (+) / Pakai (−). */}
         <div className="field">
-          <label>Jenis</label>
+          <label>{t('inc.peny.jenis')}</label>
           <div style={{ display: 'flex', gap: 8 }}>
             <button
               type="button"
@@ -1219,7 +1214,7 @@ function PenyesuaianUangKecilModal({
               onClick={() => setTipe('tambah')}
               style={{ flex: 1 }}
             >
-              ➕ Tambah
+              {t('inc.peny.tambah')}
             </button>
             <button
               type="button"
@@ -1227,20 +1222,20 @@ function PenyesuaianUangKecilModal({
               onClick={() => setTipe('pakai')}
               style={{ flex: 1 }}
             >
-              ➖ Pakai
+              {t('inc.peny.pakai')}
             </button>
           </div>
         </div>
 
         <div className="field">
           <label>
-            🪙 Jumlah {tipe === 'tambah' ? 'ditambah' : 'dipakai'} (Rp)
+            {t(tipe === 'tambah' ? 'inc.peny.jumlahTambah' : 'inc.peny.jumlahPakai')}
           </label>
           <RupiahInput value={jumlah} onChange={setJumlah} />
         </div>
 
         <div className="field">
-          <label>📅 Tanggal</label>
+          <label>{t('inc.field.tanggal')}</label>
           <input
             type="date"
             value={tanggal}
@@ -1249,22 +1244,20 @@ function PenyesuaianUangKecilModal({
         </div>
 
         <div className="field">
-          <label>📝 Catatan (opsional)</label>
+          <label>{t('inc.field.catatan')}</label>
           <input
             type="text"
             value={catatan}
-            placeholder={
-              tipe === 'tambah' ? 'mis. tukar pecahan' : 'mis. beli galon'
-            }
+            placeholder={t(
+              tipe === 'tambah'
+                ? 'inc.peny.catatanTambahPh'
+                : 'inc.peny.catatanPakaiPh',
+            )}
             onChange={(e) => setCatatan(e.target.value)}
           />
         </div>
 
-        <div className="form-hint">
-          Penyesuaian pada tanggal ini tidak mengubah laporan tanggal itu sendiri
-          (uang kecilnya sudah dihitung), melainkan float yang dibawa ke laporan
-          berikutnya.
-        </div>
+        <div className="form-hint">{t('inc.peny.hint')}</div>
 
         <button
           type="button"
@@ -1273,12 +1266,13 @@ function PenyesuaianUangKecilModal({
           onClick={simpan}
           style={{ width: '100%' }}
         >
-          <Icons.cart /> Catat {tipe === 'tambah' ? 'penambahan' : 'pemakaian'}
+          <Icons.cart />{' '}
+          {t(tipe === 'tambah' ? 'inc.peny.catatTambah' : 'inc.peny.catatPakai')}
         </button>
 
         {riwayatUrut.length > 0 && (
           <div className="penarikan-riwayat">
-            <div className="harga-cat-head">🧾 Riwayat penyesuaian</div>
+            <div className="harga-cat-head">{t('inc.peny.riwayat')}</div>
             {riwayatUrut.map((p) => (
               <div key={p.id} className="penarikan-row">
                 <div className="penarikan-row-info">
@@ -1304,8 +1298,8 @@ function PenyesuaianUangKecilModal({
                 <button
                   type="button"
                   className="emp-row-icon emp-row-danger"
-                  aria-label="Hapus riwayat"
-                  title="Hapus & kembalikan float"
+                  aria-label={t('inc.ambil.hapusRiwayat')}
+                  title={t('inc.peny.hapusFloat')}
                   onClick={() => onHapus(p.id)}
                 >
                   <Icons.trash />
@@ -1342,6 +1336,7 @@ function IncomeRow({
   onEdit: () => void
   onDelete: () => void
 }) {
+  const { t } = useLang()
   const inc = hitungIncome(laporan)
   const tPerLayanan = totalTiketPerLayanan(laporan.items)
   const uPerTipe = totalUpgradePerTipe(laporan.upgrades)
@@ -1382,8 +1377,8 @@ function IncomeRow({
           type="button"
           className="income-card-delete"
           onClick={onDelete}
-          title="Hapus laporan"
-          aria-label="Hapus laporan"
+          title={t('inc.card.hapus')}
+          aria-label={t('inc.card.hapus')}
         >
           <Icons.trash />
         </button>
@@ -1394,15 +1389,19 @@ function IncomeRow({
             {formatTanggalPanjang(laporan.tanggal)}
           </div>
           <div className="income-card-sub">
-            {totalTiketAll} tiket · {tC} cetak
-            {totalUpgradeAll > 0 && <> · {totalUpgradeAll} upgrade</>}
-            {totalProdukAll > 0 && <> · {totalProdukAll} produk</>}
+            {totalTiketAll} {t('inc.card.tiket')} · {tC} {t('inc.card.cetak')}
+            {totalUpgradeAll > 0 && (
+              <> · {totalUpgradeAll} {t('inc.card.upgrade')}</>
+            )}
+            {totalProdukAll > 0 && (
+              <> · {totalProdukAll} {t('inc.card.produk')}</>
+            )}
           </div>
         </div>
         {showMoney && (
           <div className="income-card-total">
             <div className="income-card-total-num">{formatRupiah(inc.total)}</div>
-            <div className="income-card-total-lbl">Total income</div>
+            <div className="income-card-total-lbl">{t('inc.card.totalIncome')}</div>
           </div>
         )}
       </div>
@@ -1415,7 +1414,7 @@ function IncomeRow({
                 {def.ikon} {def.label}
               </span>
               <span className="income-breakdown-qty">
-                {tPerLayanan[def.id]} tiket
+                {tPerLayanan[def.id]} {t('inc.card.tiket')}
               </span>
               {showMoney && (
                 <span className="income-breakdown-val">
@@ -1427,8 +1426,8 @@ function IncomeRow({
         )}
         {tC > 0 && (
           <div className="income-breakdown-row">
-            <span>🖨️ (+) Cetak</span>
-            <span className="income-breakdown-qty">{tC} item</span>
+            <span>{t('inc.card.cetakRow')}</span>
+            <span className="income-breakdown-qty">{tC} {t('inc.card.item')}</span>
             {showMoney && (
               <span className="income-breakdown-val">
                 {formatRupiah(inc.incomeCetak)}
@@ -1442,7 +1441,7 @@ function IncomeRow({
               <span>
                 {def.ikon} {def.label}
               </span>
-              <span className="income-breakdown-qty">{uPerTipe[def.id]} item</span>
+              <span className="income-breakdown-qty">{uPerTipe[def.id]} {t('inc.card.item')}</span>
               {showMoney && (
                 <span className="income-breakdown-val">
                   {formatRupiah(inc.incomeUpgradePerTipe[def.id] ?? 0)}
@@ -1457,7 +1456,7 @@ function IncomeRow({
               <span>
                 {def.ikon} {def.label}
               </span>
-              <span className="income-breakdown-qty">{pPerTipe[def.id]} item</span>
+              <span className="income-breakdown-qty">{pPerTipe[def.id]} {t('inc.card.item')}</span>
               {showMoney && (
                 <span className="income-breakdown-val">
                   {formatRupiah(inc.incomeProdukPerTipe[def.id] ?? 0)}
@@ -1468,8 +1467,8 @@ function IncomeRow({
         )}
         {showMoney && inc.potonganHarga > 0 && (
           <div className="income-breakdown-row">
-            <span>🏷️ Potongan harga</span>
-            <span className="income-breakdown-qty">diskon</span>
+            <span>{t('inc.card.potongan')}</span>
+            <span className="income-breakdown-qty">{t('inc.card.diskon')}</span>
             <span className="income-breakdown-val">
               −{formatRupiah(inc.potonganHarga)}
             </span>
@@ -1482,10 +1481,10 @@ function IncomeRow({
           const emp = data.employees.find((e) => e.id === kId)
           if (!emp) return null
           const detail: string[] = []
-          if (s.tiket > 0) detail.push(`${s.tiket} tiket`)
-          if (s.cetak > 0) detail.push(`${s.cetak} cetak`)
-          if (s.upgrade > 0) detail.push(`${s.upgrade} upgrade`)
-          if (s.produk > 0) detail.push(`${s.produk} produk`)
+          if (s.tiket > 0) detail.push(`${s.tiket} ${t('inc.card.tiket')}`)
+          if (s.cetak > 0) detail.push(`${s.cetak} ${t('inc.card.cetak')}`)
+          if (s.upgrade > 0) detail.push(`${s.upgrade} ${t('inc.card.upgrade')}`)
+          if (s.produk > 0) detail.push(`${s.produk} ${t('inc.card.produk')}`)
           return (
             <div key={kId} className="income-perkar-row">
               <span className="income-perkar-nama">{emp.nama}</span>
@@ -1500,7 +1499,7 @@ function IncomeRow({
 
       {laporan.keterangan && (
         <div className="income-keterangan">
-          <span className="income-keterangan-lbl">Catatan:</span>{' '}
+          <span className="income-keterangan-lbl">{t('inc.card.catatan')}</span>{' '}
           {laporan.keterangan}
         </div>
       )}
@@ -1512,29 +1511,29 @@ function IncomeRow({
           (laporan.uangKecil ?? 0) > 0) && (
           <div className="income-breakdown">
             <div className="income-breakdown-row">
-              <span>💵 Tunai</span>
-              <span className="income-breakdown-qty">bayar via</span>
+              <span>{t('inc.card.tunai')}</span>
+              <span className="income-breakdown-qty">{t('inc.card.bayarVia')}</span>
               <span className="income-breakdown-val">
                 {formatRupiah(laporan.tunai ?? 0)}
               </span>
             </div>
             <div className="income-breakdown-row">
-              <span>📱 QRIS</span>
-              <span className="income-breakdown-qty">bayar via</span>
+              <span>{t('inc.card.qris')}</span>
+              <span className="income-breakdown-qty">{t('inc.card.bayarVia')}</span>
               <span className="income-breakdown-val">
                 {formatRupiah(laporan.qris ?? 0)}
               </span>
             </div>
             <div className="income-breakdown-row">
-              <span>💰 Uang besar</span>
-              <span className="income-breakdown-qty">di laci</span>
+              <span>{t('inc.card.uangBesar')}</span>
+              <span className="income-breakdown-qty">{t('inc.card.diLaci')}</span>
               <span className="income-breakdown-val">
                 {formatRupiah(laporan.uangBesar ?? 0)}
               </span>
             </div>
             <div className="income-breakdown-row">
-              <span>🪙 Uang kecil</span>
-              <span className="income-breakdown-qty">di laci</span>
+              <span>{t('inc.card.uangKecil')}</span>
+              <span className="income-breakdown-qty">{t('inc.card.diLaci')}</span>
               <span className="income-breakdown-val">
                 {formatRupiah(laporan.uangKecil ?? 0)}
               </span>
@@ -1566,7 +1565,7 @@ function IncomeRow({
                     : 'var(--danger, #C0392B)',
                 }}
               >
-                {balance ? '🟢 LAPORAN BALANCE' : '🔴 LAPORAN TIDAK BALANCE'}
+                {balance ? t('inc.card.balance') : t('inc.card.notBalance')}
               </div>
             </div>
           )
@@ -1575,12 +1574,12 @@ function IncomeRow({
       <div className="income-card-actions">
         {canManage && (
           <button type="button" className="btn btn--ghost" onClick={onEdit}>
-            <Icons.pencil /> Edit
+            <Icons.pencil /> {t('inc.card.edit')}
           </button>
         )}
         {showMoney && (
           <button type="button" className="btn btn--ghost" onClick={handlePrint}>
-            <Icons.printer /> Print
+            <Icons.printer /> {t('inc.card.print')}
           </button>
         )}
       </div>
@@ -1618,7 +1617,11 @@ type IncomeChannel = {
  * pernah muncul di laporan, sehingga warna tiap item stabil di seluruh kalender
  * (item yang sudah dihapus pun tetap dapat warna sendiri).
  */
-function buildChannels(data: AppData, reports: Laporan[]): IncomeChannel[] {
+function buildChannels(
+  data: AppData,
+  reports: Laporan[],
+  cetakLabel: string,
+): IncomeChannel[] {
   const layanan = mergeLayanan(
     data.layananCatalog,
     reports.flatMap((l) => l.items.map((i) => i.layanan)),
@@ -1636,7 +1639,7 @@ function buildChannels(data: AppData, reports: Laporan[]): IncomeChannel[] {
   const next = () => PALET_INCOME[i++ % PALET_INCOME.length]
   for (const d of layanan)
     out.push({ key: `L:${d.id}`, label: d.label, ikon: d.ikon, color: next() })
-  out.push({ key: 'cetak', label: 'Cetak', ikon: '🖨️', color: next() })
+  out.push({ key: 'cetak', label: cetakLabel, ikon: '🖨️', color: next() })
   for (const d of upgrade)
     out.push({ key: `U:${d.id}`, label: d.label, ikon: d.ikon, color: next() })
   for (const d of produk)
@@ -1657,8 +1660,6 @@ function channelValues(laporan: Laporan): Record<string, number> {
     out[`P:${id}`] = v
   return out
 }
-
-const NAMA_HARI_SINGKAT = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab']
 
 function pad2(n: number): string {
   return String(n).padStart(2, '0')
@@ -1687,7 +1688,21 @@ function KalenderIncome({
   hariIni: string
   onOpen: (l: Laporan) => void
 }) {
-  const channels = useMemo(() => buildChannels(data, sorted), [data, sorted])
+  const { t, lang } = useLang()
+  const cetakLabel = t('inc.kal.cetak')
+  const channels = useMemo(
+    () => buildChannels(data, sorted, cetakLabel),
+    [data, sorted, cetakLabel],
+  )
+  const namaHariSingkat = [
+    t('inc.hari.min'),
+    t('inc.hari.sen'),
+    t('inc.hari.sel'),
+    t('inc.hari.rab'),
+    t('inc.hari.kam'),
+    t('inc.hari.jum'),
+    t('inc.hari.sab'),
+  ]
 
   // Peta tanggal → laporan (satu laporan per tanggal).
   const byDate = useMemo(() => {
@@ -1813,7 +1828,7 @@ function KalenderIncome({
           </div>
         </div>
         <span className="kal-amt">{ringkasRupiah(total)}</span>
-        {lap.keterangan && <span className="kal-dot" title="Ada catatan" />}
+        {lap.keterangan && <span className="kal-dot" title={t('inc.kal.adaCatatan')} />}
 
         <div className="kal-tip" role="tooltip">
           <div className="kal-tip-date">{formatTanggalPanjang(tgl)}</div>
@@ -1830,24 +1845,27 @@ function KalenderIncome({
           {(lap.potonganHarga ?? 0) > 0 && (
             <div className="kal-tip-row">
               <span className="kal-tip-sw" style={{ background: 'transparent' }} />
-              <span className="kal-tip-lbl">🏷️ Potongan harga</span>
+              <span className="kal-tip-lbl">{t('inc.card.potongan')}</span>
               <span className="kal-tip-val">
                 −{formatRupiah(lap.potonganHarga ?? 0)}
               </span>
             </div>
           )}
           <div className="kal-tip-hint">
-            {bisaHover ? 'Klik untuk laporan lengkap →' : 'Tap lagi untuk laporan lengkap →'}
+            {bisaHover ? t('inc.kal.klikBuka') : t('inc.kal.tapBuka')}
           </div>
         </div>
       </div>,
     )
   }
 
-  const judulBulan = new Date(tahun, bulan, 1).toLocaleDateString('id-ID', {
-    month: 'long',
-    year: 'numeric',
-  })
+  const judulBulan = new Date(tahun, bulan, 1).toLocaleDateString(
+    lang === 'en' ? 'en-US' : 'id-ID',
+    {
+      month: 'long',
+      year: 'numeric',
+    },
+  )
   const rata = hariAda ? Math.round(totalBulan / hariAda) : 0
 
   return (
@@ -1857,7 +1875,7 @@ function KalenderIncome({
           type="button"
           className="kal-nav-btn"
           onClick={() => gantiBulan(-1)}
-          aria-label="Bulan sebelumnya"
+          aria-label={t('inc.kal.bulanPrev')}
         >
           ‹
         </button>
@@ -1866,7 +1884,7 @@ function KalenderIncome({
           type="button"
           className="kal-nav-btn"
           onClick={() => gantiBulan(1)}
-          aria-label="Bulan berikutnya"
+          aria-label={t('inc.kal.bulanNext')}
         >
           ›
         </button>
@@ -1883,7 +1901,7 @@ function KalenderIncome({
 
       <div className="kal-card">
         <div className="kal-dow">
-          {NAMA_HARI_SINGKAT.map((h) => (
+          {namaHariSingkat.map((h) => (
             <span key={h}>{h}</span>
           ))}
         </div>
@@ -1893,15 +1911,15 @@ function KalenderIncome({
           <div className="kal-foot">
             <div className="kal-foot-stat">
               <div className="v">{formatRupiah(totalBulan)}</div>
-              <div className="l">Total bulan ini</div>
+              <div className="l">{t('inc.kal.totalBulan')}</div>
             </div>
             <div className="kal-foot-stat">
-              <div className="v">{hariAda} hari</div>
-              <div className="l">Hari ada laporan</div>
+              <div className="v">{hariAda} {t('inc.kal.hari')}</div>
+              <div className="l">{t('inc.kal.hariAda')}</div>
             </div>
             <div className="kal-foot-stat">
               <div className="v">{formatRupiah(rata)}</div>
-              <div className="l">Rata-rata / hari</div>
+              <div className="l">{t('inc.stat.rata')}</div>
             </div>
             <div className="kal-foot-stat">
               <div className="v">
@@ -1909,12 +1927,12 @@ function KalenderIncome({
                   ? `${Number(best.tgl.slice(8))} · ${ringkasRupiah(best.total)}`
                   : '—'}
               </div>
-              <div className="l">Hari tertinggi</div>
+              <div className="l">{t('inc.kal.tertinggi')}</div>
             </div>
           </div>
         ) : (
           <div className="kal-empty-month">
-            Belum ada laporan di {judulBulan}.
+            {t('inc.kal.kosongBulan', { bulan: judulBulan })}
           </div>
         )}
       </div>

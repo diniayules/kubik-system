@@ -1,4 +1,5 @@
 import type { AbsenEvent, AbsenHari, DayType, EventTipe, Shift } from './types'
+import { dateLocale } from './i18n'
 
 export const EVENT_LABEL: Record<EventTipe, string> = {
   masuk: 'Jam Masuk',
@@ -151,7 +152,7 @@ export function formatDurasi(menit: number): string {
 export function formatTanggalPanjang(tanggal: string): string {
   const [y, mo, d] = tanggal.split('-').map(Number)
   const dt = new Date(y, mo - 1, d)
-  return dt.toLocaleDateString('id-ID', {
+  return dt.toLocaleDateString(dateLocale(), {
     weekday: 'long',
     day: 'numeric',
     month: 'long',
@@ -163,7 +164,7 @@ export function formatTanggalPanjang(tanggal: string): string {
 export function formatBulanTahun(tanggal: string): string {
   const [y, mo] = tanggal.split('-').map(Number)
   const dt = new Date(y, mo - 1, 1)
-  return dt.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })
+  return dt.toLocaleDateString(dateLocale(), { month: 'long', year: 'numeric' })
 }
 
 export type Ringkasan = {

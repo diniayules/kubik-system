@@ -12,6 +12,7 @@ import { todayKey } from '../storage'
 import { Modal, ModalHead } from '../components/Modal'
 import { Icons } from '../components/Icons'
 import RupiahInput from '../components/RupiahInput'
+import { useLang } from '../i18n'
 import {
   formatRupiah,
   hitungIncome,
@@ -58,6 +59,7 @@ export function IncomeEntryModal({
   onSave,
   onClose,
 }: Props) {
+  const { t } = useLang()
   // Admin (pengelola) tidak mengisi laporan income / tidak diatribusikan
   // sebagai operator penjualan, jadi tidak muncul sebagai pilihan karyawan.
   const employees = data.employees.filter((e) => e.role !== 'admin')
@@ -288,31 +290,39 @@ export function IncomeEntryModal({
   const totalKertasPotong = kertasTerpotong.reduce((s, x) => s + x.jumlah, 0)
   const totalFramePotong = frameTerpotong.reduce((s, x) => s + x.jumlah, 0)
   const upgradeSummary =
-    totalUpgradeQty > 0 ? `${totalUpgradeQty} item` : 'Ketuk untuk isi'
+    totalUpgradeQty > 0
+      ? `${totalUpgradeQty} ${t('ie.unit.item')}`
+      : t('ie.sum.ketuk')
   const produkSummary =
-    totalProdukQty > 0 ? `${totalProdukQty} item` : 'Ketuk untuk isi'
+    totalProdukQty > 0
+      ? `${totalProdukQty} ${t('ie.unit.item')}`
+      : t('ie.sum.ketuk')
   const stokSummary =
     [
-      totalKertasPotong > 0 ? `${totalKertasPotong} lembar kertas` : null,
-      amplopTerpakai > 0 ? `${amplopTerpakai} amplop` : null,
-      totalFramePotong > 0 ? `${totalFramePotong} frame` : null,
+      totalKertasPotong > 0
+        ? t('ie.sum.lembarKertas', { n: totalKertasPotong })
+        : null,
+      amplopTerpakai > 0 ? t('ie.sum.amplop', { n: amplopTerpakai }) : null,
+      totalFramePotong > 0 ? t('ie.sum.frame', { n: totalFramePotong }) : null,
     ]
       .filter(Boolean)
-      .join(' · ') || 'Otomatis dari tiket & produk'
+      .join(' · ') || t('ie.sum.stokAuto')
   const lainSummary =
     [
-      potonganHarga > 0 ? `diskon ${formatRupiah(potonganHarga)}` : null,
-      keterangan.trim() ? 'ada catatan' : null,
+      potonganHarga > 0
+        ? t('ie.sum.diskon', { rp: formatRupiah(potonganHarga) })
+        : null,
+      keterangan.trim() ? t('ie.sum.adaCatatan') : null,
     ]
       .filter(Boolean)
-      .join(' · ') || 'Opsional'
+      .join(' · ') || t('ie.sum.opsional')
   const bayarSummary =
     [
-      tunai > 0 ? `tunai ${formatRupiah(tunai)}` : null,
-      qris > 0 ? `QRIS ${formatRupiah(qris)}` : null,
+      tunai > 0 ? t('ie.sum.tunai', { rp: formatRupiah(tunai) }) : null,
+      qris > 0 ? t('ie.sum.qris', { rp: formatRupiah(qris) }) : null,
     ]
       .filter(Boolean)
-      .join(' · ') || 'Opsional'
+      .join(' · ') || t('ie.sum.opsional')
 
   // Rekonsiliasi float laci. Laci TIDAK mulai dari kosong tiap hari: ada uang
   // kecil kembalian yang nyangkut dari laporan sebelumnya. Penyesuaian uang
@@ -334,10 +344,10 @@ export function IncomeEntryModal({
   const kasirBalance = floatAktual === floatSeharusnya
   const kasirTerisi = uangBesar > 0 || uangKecil > 0
   const kasirSummary = !kasirTerisi
-    ? 'Opsional'
+    ? t('ie.sum.opsional')
     : kasirBalance
-      ? 'BALANCE'
-      : 'TIDAK BALANCE'
+      ? t('ie.sum.balance')
+      : t('ie.sum.notBalance')
 
   // Section yang dibuka otomatis saat edit kalau laporannya sudah punya isi,
   // supaya data lama tidak tersembunyi. Dihitung sekali dari `existing`.
@@ -483,13 +493,13 @@ export function IncomeEntryModal({
       <ModalHead
         icon={<Icons.pencil />}
         color="var(--mint-deep)"
-        title={existing ? 'Edit Laporan Income' : 'Tambah Laporan Income'}
+        title={existing ? t('ie.title.edit') : t('ie.title.add')}
         sub={tanggal}
         onClose={onClose}
       />
       <div className="modal-body">
         <div className="field">
-          <label>Tanggal</label>
+          <label>{t('ie.tanggal')}</label>
           <input
             type="date"
             value={tanggal}
@@ -508,17 +518,10 @@ export function IncomeEntryModal({
         </div>
 
         {employees.length === 0 ? (
-          <div className="form-hint">
-            Belum ada karyawan. Tambahkan dulu di menu Presensi Karyawan supaya
-            bisa input penjualan per karyawan.
-          </div>
+          <div className="form-hint">{t('ie.noEmployee')}</div>
         ) : (
           <>
-            <Section
-              ikon="📸"
-              title="Layanan (tiket & cetak)"
-              defaultOpen
-            >
+            <Section ikon="📸" title={t('ie.sec.layanan')} defaultOpen>
               {layananList.map((def) => (
                 <ItemGroup
                   key={def.id}
@@ -537,7 +540,7 @@ export function IncomeEntryModal({
 
             <Section
               ikon="🎨"
-              title="Upgrade Cetak"
+              title={t('ie.sec.upgrade')}
               summary={upgradeSummary}
               defaultOpen={upgradeDefaultOpen}
             >
@@ -559,7 +562,7 @@ export function IncomeEntryModal({
             {produkList.length > 0 && (
               <Section
                 ikon="🛍️"
-                title="Produk / Frame"
+                title={t('ie.sec.produk')}
                 summary={produkSummary}
                 defaultOpen={produkDefaultOpen}
               >
@@ -583,25 +586,19 @@ export function IncomeEntryModal({
 
         <Section
           ikon="📦"
-          title="Pemakaian Stok"
+          title={t('ie.sec.stok')}
           summary={stokSummary}
           defaultOpen={stokDefaultOpen}
         >
           <div className="form-hint" style={{ marginTop: -2, marginBottom: 10 }}>
-            Tiket &amp; tambahan cetak memotong kertas; tiap tiket dapat 1 amplop.
-            Upgrade (Poster / Crack n Share) tidak pakai amplop. Produk yang
-            namanya sama dengan jenis frame memotong stok frame. Stok berkurang
-            otomatis saat laporan disimpan.
+            {t('ie.stok.hint')}
           </div>
 
           {kertasPilihan.length === 0 ? (
-            <div className="form-hint">
-              Belum ada jenis kertas (selain kertas upgrade) di Inventaris.
-              Tambahkan dulu supaya stok kertas bisa berkurang otomatis.
-            </div>
+            <div className="form-hint">{t('ie.stok.noKertas')}</div>
           ) : kertasAuto ? (
             <div className="field">
-              <label>Jenis kertas (untuk {totalLembar} lembar tiket &amp; cetak)</label>
+              <label>{t('ie.stok.jenisKertasAuto', { n: totalLembar })}</label>
               <select
                 value={kertasRows[0]?.kertasId ?? ''}
                 onChange={(e) => setAutoPaper(e.target.value)}
@@ -609,7 +606,7 @@ export function IncomeEntryModal({
               >
                 {kertasPilihan.map((k) => (
                   <option key={k.id} value={k.id}>
-                    {k.nama} · stok {k.stok}
+                    {k.nama} · {t('ie.unit.stok')} {k.stok}
                   </option>
                 ))}
               </select>
@@ -619,14 +616,12 @@ export function IncomeEntryModal({
                 style={{ marginTop: 8 }}
                 onClick={pakaiBeberapaKertas}
               >
-                + Pakai beberapa jenis kertas
+                {t('ie.stok.pakaiBeberapa')}
               </button>
             </div>
           ) : (
             <div className="field">
-              <label>
-                Pemakaian kertas (tiket + cetak = {totalLembar} lembar)
-              </label>
+              <label>{t('ie.stok.pemakaianKertas', { n: totalLembar })}</label>
               {kertasRows.map((r, i) => (
                 <div
                   key={i}
@@ -642,10 +637,10 @@ export function IncomeEntryModal({
                     onChange={(e) => setRowKertas(i, e.target.value)}
                     style={{ ...selStyle, flex: 1 }}
                   >
-                    <option value="">— pilih kertas —</option>
+                    <option value="">{t('ie.stok.pilihKertas')}</option>
                     {kertasPilihan.map((k) => (
                       <option key={k.id} value={k.id}>
-                        {k.nama} · stok {k.stok}
+                        {k.nama} · {t('ie.unit.stok')} {k.stok}
                       </option>
                     ))}
                   </select>
@@ -666,7 +661,7 @@ export function IncomeEntryModal({
                       type="button"
                       className="btn btn--ghost"
                       onClick={() => hapusBarisKertas(i)}
-                      aria-label="Hapus baris"
+                      aria-label={t('ie.stok.hapusBaris')}
                     >
                       ✕
                     </button>
@@ -686,14 +681,14 @@ export function IncomeEntryModal({
                   className="btn btn--ghost"
                   onClick={tambahBarisKertas}
                 >
-                  + jenis kertas
+                  {t('ie.stok.tambahKertas')}
                 </button>
                 <button
                   type="button"
                   className="btn btn--ghost"
                   onClick={pakaiSatuKertas}
                 >
-                  Pakai 1 kertas saja
+                  {t('ie.stok.pakaiSatu')}
                 </button>
               </div>
               <div
@@ -706,22 +701,27 @@ export function IncomeEntryModal({
                       : 'var(--warn, #b26a00)',
                 }}
               >
-                Dialokasikan {totalDialokasikan} dari {totalLembar} lembar
+                {t('ie.stok.dialokasikan', {
+                  n: totalDialokasikan,
+                  m: totalLembar,
+                })}
                 {totalDialokasikan === totalLembar
                   ? ' ✓'
                   : totalDialokasikan < totalLembar
-                    ? ` · sisa ${totalLembar - totalDialokasikan} belum dialokasikan`
-                    : ` · kelebihan ${totalDialokasikan - totalLembar}`}
+                    ? t('ie.stok.sisa', { n: totalLembar - totalDialokasikan })
+                    : t('ie.stok.kelebihan', {
+                        n: totalDialokasikan - totalLembar,
+                      })}
               </div>
             </div>
           )}
 
           <div className="field">
             <label>
-              Amplop terpakai{' '}
+              {t('ie.stok.amplopTerpakai')}{' '}
               {!amplopManual && (
                 <span className="form-hint" style={{ fontWeight: 500 }}>
-                  (otomatis = {jumlahTiket} tiket)
+                  {t('ie.stok.amplopAuto', { n: jumlahTiket })}
                 </span>
               )}
             </label>
@@ -757,14 +757,11 @@ export function IncomeEntryModal({
                     setAmplopInput(0)
                   }}
                 >
-                  Ikuti tiket
+                  {t('ie.stok.ikutiTiket')}
                 </button>
               )}
             </div>
-            <div className="form-hint">
-              Naikkan kalau customer minta cetak tambahan yang butuh amplop
-              ekstra di luar amplop dari tiket.
-            </div>
+            <div className="form-hint">{t('ie.stok.amplopHint')}</div>
           </div>
 
           {(kertasTerpotong.length > 0 ||
@@ -775,8 +772,8 @@ export function IncomeEntryModal({
                 <div key={k.id} className="income-total-row">
                   <span>📄 {k.nama}</span>
                   <span className="income-total-val">
-                    −{jumlah} lembar
-                    {jumlah > k.stok ? ' ⚠️ stok kurang' : ''}
+                    −{jumlah} {t('ie.unit.lembar')}
+                    {jumlah > k.stok ? t('ie.stok.kurang') : ''}
                   </span>
                 </div>
               ))}
@@ -784,17 +781,17 @@ export function IncomeEntryModal({
                 <div key={f.id} className="income-total-row">
                   <span>🖼️ {f.nama}</span>
                   <span className="income-total-val">
-                    −{jumlah} buah
-                    {jumlah > f.stok ? ' ⚠️ stok kurang' : ''}
+                    −{jumlah} {t('ie.unit.buah')}
+                    {jumlah > f.stok ? t('ie.stok.kurang') : ''}
                   </span>
                 </div>
               ))}
               {amplopTerpakai > 0 && (
                 <div className="income-total-row">
-                  <span>✉️ Amplop</span>
+                  <span>{t('ie.stok.amplopLbl')}</span>
                   <span className="income-total-val">
                     −{amplopTerpakai}
-                    {amplopTerpakai > data.stokAmplop ? ' ⚠️ stok kurang' : ''}
+                    {amplopTerpakai > data.stokAmplop ? t('ie.stok.kurang') : ''}
                   </span>
                 </div>
               )}
@@ -804,7 +801,7 @@ export function IncomeEntryModal({
 
         <Section
           ikon="🏷️"
-          title="Potongan harga & catatan"
+          title={t('ie.sec.lain')}
           summary={lainSummary}
           defaultOpen={lainDefaultOpen}
         >
@@ -813,28 +810,25 @@ export function IncomeEntryModal({
               — bukan nominal income yang disembunyikan dari karyawan. */}
           <div className="field">
             <label>
-              Potongan harga (Rp){' '}
+              {t('ie.lain.potongan')}{' '}
               <span className="form-hint" style={{ fontWeight: 500 }}>
-                — diskon, dikurangkan dari total income
+                {t('ie.lain.potonganSub')}
               </span>
             </label>
             <RupiahInput
               value={potonganHarga}
               onChange={setPotonganHarga}
             />
-            <div className="form-hint">
-              Mis. diskon promo atau potongan khusus customer. Tidak memengaruhi
-              bonus penjualan karyawan.
-            </div>
+            <div className="form-hint">{t('ie.lain.potonganHint')}</div>
           </div>
 
           <div className="field">
-            <label>Keterangan (opsional)</label>
+            <label>{t('ie.lain.keterangan')}</label>
             <textarea
               value={keterangan}
               onChange={(e) => setKeterangan(e.target.value)}
               rows={2}
-              placeholder="cth: rame banget, ada event sekolah"
+              placeholder={t('ie.lain.keteranganPh')}
               style={{ minHeight: 60, resize: 'vertical' }}
             />
           </div>
@@ -842,42 +836,39 @@ export function IncomeEntryModal({
 
         <Section
           ikon="💳"
-          title="Pembayaran via"
+          title={t('ie.sec.bayar')}
           summary={bayarSummary}
           defaultOpen={bayarDefaultOpen}
         >
           {/* Pecahan pembayaran yang diterima per metode (tunai/QRIS). Murni
               catatan — tidak memengaruhi total income maupun bonus karyawan. */}
           <div className="field">
-            <label>💵 Tunai (Rp)</label>
+            <label>{t('ie.bayar.tunai')}</label>
             <RupiahInput value={tunai} onChange={setTunai} />
           </div>
 
           <div className="field">
-            <label>📱 QRIS (Rp)</label>
+            <label>{t('ie.bayar.qris')}</label>
             <RupiahInput value={qris} onChange={setQris} />
           </div>
-          <div className="form-hint">
-            Catatan metode pembayaran yang diterima. Tidak memengaruhi total
-            income.
-          </div>
+          <div className="form-hint">{t('ie.bayar.hint')}</div>
         </Section>
 
         <Section
           ikon="💰"
-          title="Uang Tunai di Kasir"
+          title={t('ie.sec.kasir')}
           summary={kasirSummary}
           defaultOpen={kasirDefaultOpen}
         >
           {/* Cek isi laci: uang besar + uang kecil harus balance dengan
               pembayaran tunai. Total uang besar murni catatan. */}
           <div className="field">
-            <label>💵 Uang besar (Rp)</label>
+            <label>{t('ie.kasir.uangBesar')}</label>
             <RupiahInput value={uangBesar} onChange={setUangBesar} />
           </div>
 
           <div className="field">
-            <label>🪙 Uang kecil (Rp)</label>
+            <label>{t('ie.kasir.uangKecil')}</label>
             <RupiahInput value={uangKecil} onChange={setUangKecil} />
           </div>
 
@@ -896,17 +887,11 @@ export function IncomeEntryModal({
                   : 'var(--danger, #C0392B)',
               }}
             >
-              {kasirBalance ? '🟢 BALANCE' : '🔴 TIDAK BALANCE'}
+              {kasirBalance ? t('ie.kasir.balance') : t('ie.kasir.notBalance')}
             </div>
           )}
 
-          <div className="form-hint">
-            Untuk mengecek isi laci. Laci tidak mulai kosong tiap hari: uang kecil
-            kembalian dari laporan sebelumnya tetap nyangkut. BALANCE jika (uang
-            besar + uang kecil) − tunai sama dengan float yang masuk, yaitu uang
-            kecil laporan sebelumnya ± penyesuaian (tambah/pakai) yang terjadi
-            sebelum tanggal ini.
-          </div>
+          <div className="form-hint">{t('ie.kasir.hint')}</div>
         </Section>
 
         {showMoney && (
@@ -915,8 +900,8 @@ export function IncomeEntryModal({
             (tiketPerLayanan[def.id] ?? 0) > 0 ? (
               <div key={def.id} className="income-total-row">
                 <span>
-                  {def.ikon} {def.label} · {tiketPerLayanan[def.id]} tiket ×{' '}
-                  {formatRupiah(hargaTiket[def.id] ?? 0)}
+                  {def.ikon} {def.label} · {tiketPerLayanan[def.id]}{' '}
+                  {t('ie.unit.tiket')} × {formatRupiah(hargaTiket[def.id] ?? 0)}
                 </span>
                 <span className="income-total-val">
                   {formatRupiah(inc.incomeTiketPerLayanan[def.id] ?? 0)}
@@ -926,9 +911,7 @@ export function IncomeEntryModal({
           )}
           {tC > 0 && (
             <div className="income-total-row">
-              <span>
-                (+) Cetak {tC} × {formatRupiah(hargaCetak)}
-              </span>
+              <span>{t('ie.total.cetak', { n: tC, rp: formatRupiah(hargaCetak) })}</span>
               <span className="income-total-val">
                 {formatRupiah(inc.incomeCetak)}
               </span>
@@ -962,14 +945,14 @@ export function IncomeEntryModal({
           )}
           {inc.potonganHarga > 0 && (
             <div className="income-total-row">
-              <span>🏷️ Potongan harga</span>
+              <span>{t('ie.total.potongan')}</span>
               <span className="income-total-val">
                 −{formatRupiah(inc.potonganHarga)}
               </span>
             </div>
           )}
           <div className="income-total-row income-total-grand">
-            <span>TOTAL INCOME</span>
+            <span>{t('ie.total.grand')}</span>
             <span className="income-total-val">{formatRupiah(inc.total)}</span>
           </div>
         </div>
@@ -981,7 +964,7 @@ export function IncomeEntryModal({
           disabled={!canSave}
           onClick={simpan}
         >
-          <Icons.check /> {existing ? 'Simpan Perubahan' : 'Simpan Laporan'}
+          <Icons.check /> {existing ? t('ie.save.edit') : t('ie.save.add')}
         </button>
       </div>
     </Modal>
@@ -1053,6 +1036,7 @@ function ItemGroup({
   getValue,
   onChange,
 }: GroupProps) {
+  const { t } = useLang()
   return (
     <div className="income-group">
       <div className="income-group-head">
@@ -1061,7 +1045,10 @@ function ItemGroup({
           <div className="income-group-judul">{title}</div>
           {showMoney && (
             <div className="income-group-sub">
-              Tiket {formatRupiah(hargaTiket)} · Cetak {formatRupiah(hargaCetak)}
+              {t('ie.grp.tiketCetak', {
+                tiket: formatRupiah(hargaTiket),
+                cetak: formatRupiah(hargaCetak),
+              })}
             </div>
           )}
         </div>
@@ -1079,13 +1066,13 @@ function ItemGroup({
                 {locked && <Icons.lock />}
               </div>
               <NumberCell
-                label="Tiket"
+                label={t('ie.cell.tiket')}
                 value={getValue(emp.id, 'tiket')}
                 disabled={locked}
                 onChange={(v) => onChange(emp.id, 'tiket', v)}
               />
               <NumberCell
-                label="(+) Cetak"
+                label={t('ie.cell.cetak')}
                 value={getValue(emp.id, 'cetak')}
                 disabled={locked}
                 onChange={(v) => onChange(emp.id, 'cetak', v)}
@@ -1119,6 +1106,7 @@ function UpgradeGroup({
   getValue,
   onChange,
 }: UpgradeGroupProps) {
+  const { t } = useLang()
   return (
     <div className="upgrade-group">
       <div className="upgrade-group-head">
@@ -1126,7 +1114,9 @@ function UpgradeGroup({
         <div className="upgrade-group-info">
           <div className="upgrade-group-judul">{title}</div>
           {showMoney && (
-            <div className="upgrade-group-harga">{formatRupiah(harga)} / item</div>
+            <div className="upgrade-group-harga">
+              {t('ie.grp.perItem', { rp: formatRupiah(harga) })}
+            </div>
           )}
         </div>
       </div>
@@ -1143,7 +1133,7 @@ function UpgradeGroup({
                 {locked && <Icons.lock />}
               </div>
               <NumberCell
-                label="Jumlah"
+                label={t('ie.cell.jumlah')}
                 value={getValue(emp.id)}
                 disabled={locked}
                 onChange={(v) => onChange(emp.id, v)}

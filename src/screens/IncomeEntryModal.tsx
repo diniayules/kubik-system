@@ -11,6 +11,7 @@ import type {
 import { todayKey } from '../storage'
 import { Modal, ModalHead } from '../components/Modal'
 import { Icons } from '../components/Icons'
+import RupiahInput from '../components/RupiahInput'
 import {
   formatRupiah,
   hitungIncome,
@@ -817,17 +818,9 @@ export function IncomeEntryModal({
                 — diskon, dikurangkan dari total income
               </span>
             </label>
-            <input
-              type="number"
-              inputMode="numeric"
-              min={0}
-              step={1000}
-              value={potonganHarga === 0 ? '' : String(potonganHarga)}
-              placeholder="0"
-              onChange={(e) =>
-                setPotonganHarga(Math.max(0, parseInt(e.target.value, 10) || 0))
-              }
-              style={selStyle}
+            <RupiahInput
+              value={potonganHarga}
+              onChange={setPotonganHarga}
             />
             <div className="form-hint">
               Mis. diskon promo atau potongan khusus customer. Tidak memengaruhi
@@ -857,34 +850,12 @@ export function IncomeEntryModal({
               catatan — tidak memengaruhi total income maupun bonus karyawan. */}
           <div className="field">
             <label>💵 Tunai (Rp)</label>
-            <input
-              type="number"
-              inputMode="numeric"
-              min={0}
-              step={1000}
-              value={tunai === 0 ? '' : String(tunai)}
-              placeholder="0"
-              onChange={(e) =>
-                setTunai(Math.max(0, parseInt(e.target.value, 10) || 0))
-              }
-              style={selStyle}
-            />
+            <RupiahInput value={tunai} onChange={setTunai} />
           </div>
 
           <div className="field">
             <label>📱 QRIS (Rp)</label>
-            <input
-              type="number"
-              inputMode="numeric"
-              min={0}
-              step={1000}
-              value={qris === 0 ? '' : String(qris)}
-              placeholder="0"
-              onChange={(e) =>
-                setQris(Math.max(0, parseInt(e.target.value, 10) || 0))
-              }
-              style={selStyle}
-            />
+            <RupiahInput value={qris} onChange={setQris} />
           </div>
           <div className="form-hint">
             Catatan metode pembayaran yang diterima. Tidak memengaruhi total
@@ -902,34 +873,12 @@ export function IncomeEntryModal({
               pembayaran tunai. Total uang besar murni catatan. */}
           <div className="field">
             <label>💵 Uang besar (Rp)</label>
-            <input
-              type="number"
-              inputMode="numeric"
-              min={0}
-              step={1000}
-              value={uangBesar === 0 ? '' : String(uangBesar)}
-              placeholder="0"
-              onChange={(e) =>
-                setUangBesar(Math.max(0, parseInt(e.target.value, 10) || 0))
-              }
-              style={selStyle}
-            />
+            <RupiahInput value={uangBesar} onChange={setUangBesar} />
           </div>
 
           <div className="field">
             <label>🪙 Uang kecil (Rp)</label>
-            <input
-              type="number"
-              inputMode="numeric"
-              min={0}
-              step={1000}
-              value={uangKecil === 0 ? '' : String(uangKecil)}
-              placeholder="0"
-              onChange={(e) =>
-                setUangKecil(Math.max(0, parseInt(e.target.value, 10) || 0))
-              }
-              style={selStyle}
-            />
+            <RupiahInput value={uangKecil} onChange={setUangKecil} />
           </div>
 
           {/* Indikator BALANCE / TIDAK BALANCE. BALANCE = sisa di laci setelah

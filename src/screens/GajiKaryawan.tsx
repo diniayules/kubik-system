@@ -12,6 +12,7 @@ import {
 } from '../gaji'
 import { todayKey } from '../storage'
 import { Icons } from '../components/Icons'
+import RupiahInput from '../components/RupiahInput'
 
 type Props = {
   data: AppData
@@ -459,22 +460,14 @@ function SlipCard({
       {!readOnly && (
         <label className="gaji-pokok-field">
           <span>Gaji pokok / bulan</span>
-          <div className="gaji-pokok-input">
-            <span className="gaji-pokok-rp">Rp</span>
-            <input
-              type="number"
-              inputMode="numeric"
-              min={0}
-              step={50000}
-              value={draft}
-              placeholder="0"
-              onChange={(e) => setDraft(e.target.value)}
-              onBlur={commit}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
-              }}
-            />
-          </div>
+          <RupiahInput
+            value={parseInt(draft, 10) || 0}
+            onChange={(n) => setDraft(n === 0 ? '' : String(n))}
+            onBlur={commit}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+            }}
+          />
           {slip.gajiPokok > 0 && (
             <span className="gaji-pokok-tarif">
               {formatTarif(slip.tarifPerMenit)} (÷{HARI_KERJA_SEBULAN} hari ÷

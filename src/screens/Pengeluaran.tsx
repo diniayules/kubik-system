@@ -12,6 +12,7 @@ import {
 import { Icons } from '../components/Icons'
 import { Modal, ModalHead } from '../components/Modal'
 import { useToast } from '../components/Toast'
+import RupiahInput from '../components/RupiahInput'
 
 type Props = {
   data: AppData
@@ -343,20 +344,10 @@ function PengeluaranModal({
         </div>
         <div className="field">
           <label>Jumlah (Rp)</label>
-          <input
-            type="number"
-            inputMode="numeric"
-            min={0}
-            step={1000}
-            value={jumlah}
-            onChange={(e) => setJumlah(e.target.value)}
-            placeholder="0"
+          <RupiahInput
+            value={j}
+            onChange={(n) => setJumlah(n === 0 ? '' : String(n))}
           />
-          {j > 0 && (
-            <div className="form-hint" style={{ marginTop: 8 }}>
-              = {formatRupiah(j)}
-            </div>
-          )}
         </div>
         <div className="field">
           <label>Catatan (opsional)</label>

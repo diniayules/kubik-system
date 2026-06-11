@@ -30,6 +30,7 @@ import { Icons } from '../components/Icons'
 import { IncomeEntryModal } from './IncomeEntryModal'
 import { Modal, ModalHead } from '../components/Modal'
 import { useToast } from '../components/Toast'
+import RupiahInput from '../components/RupiahInput'
 import { usePrefs } from '../lib/prefs'
 
 type Props = {
@@ -604,17 +605,13 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
                     placeholder="Nama layanan"
                     aria-label="Nama layanan"
                   />
-                  <input
-                    type="number"
-                    inputMode="numeric"
-                    min={0}
-                    step={1000}
+                  <RupiahInput
                     className="harga-cat-harga"
-                    value={draftHargaTiket[def.id] ?? ''}
-                    onChange={(e) =>
+                    value={Number(draftHargaTiket[def.id]) || 0}
+                    onChange={(n) =>
                       setDraftHargaTiket((m) => ({
                         ...m,
-                        [def.id]: e.target.value,
+                        [def.id]: n === 0 ? '' : String(n),
                       }))
                     }
                     placeholder="Harga tiket"
@@ -642,13 +639,9 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
 
             <div className="field" style={{ margin: '14px 0' }}>
               <label>(+) Harga Cetak (Rp) — berlaku untuk semua layanan</label>
-              <input
-                type="number"
-                inputMode="numeric"
-                min={0}
-                step={1000}
-                value={draftCetak}
-                onChange={(e) => setDraftCetak(e.target.value)}
+              <RupiahInput
+                value={Number(draftCetak) || 0}
+                onChange={(n) => setDraftCetak(n === 0 ? '' : String(n))}
               />
             </div>
 
@@ -674,17 +667,13 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
                     placeholder="Nama upgrade"
                     aria-label="Nama upgrade"
                   />
-                  <input
-                    type="number"
-                    inputMode="numeric"
-                    min={0}
-                    step={500}
+                  <RupiahInput
                     className="harga-cat-harga"
-                    value={draftHargaUpgrade[def.id] ?? ''}
-                    onChange={(e) =>
+                    value={Number(draftHargaUpgrade[def.id]) || 0}
+                    onChange={(n) =>
                       setDraftHargaUpgrade((m) => ({
                         ...m,
-                        [def.id]: e.target.value,
+                        [def.id]: n === 0 ? '' : String(n),
                       }))
                     }
                     placeholder="Harga / item"
@@ -734,17 +723,13 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
                     placeholder="Nama produk (cth: Frame foto, T-shirt)"
                     aria-label="Nama produk"
                   />
-                  <input
-                    type="number"
-                    inputMode="numeric"
-                    min={0}
-                    step={1000}
+                  <RupiahInput
                     className="harga-cat-harga"
-                    value={draftHargaProduk[def.id] ?? ''}
-                    onChange={(e) =>
+                    value={Number(draftHargaProduk[def.id]) || 0}
+                    onChange={(n) =>
                       setDraftHargaProduk((m) => ({
                         ...m,
-                        [def.id]: e.target.value,
+                        [def.id]: n === 0 ? '' : String(n),
                       }))
                     }
                     placeholder="Harga / item"
@@ -1076,19 +1061,10 @@ function AmbilUangBesarModal({
         <div className="field">
           <label>💵 Jumlah diambil (Rp)</label>
           <div style={{ display: 'flex', gap: 8 }}>
-            <input
-              type="number"
-              inputMode="numeric"
-              min={0}
+            <RupiahInput
+              value={jumlah}
               max={saldo}
-              step={1000}
-              value={jumlah === 0 ? '' : String(jumlah)}
-              placeholder="0"
-              onChange={(e) =>
-                setJumlah(
-                  Math.max(0, Math.min(saldo, parseInt(e.target.value, 10) || 0)),
-                )
-              }
+              onChange={setJumlah}
               style={{ flex: 1 }}
             />
             <button
@@ -1260,17 +1236,7 @@ function PenyesuaianUangKecilModal({
           <label>
             🪙 Jumlah {tipe === 'tambah' ? 'ditambah' : 'dipakai'} (Rp)
           </label>
-          <input
-            type="number"
-            inputMode="numeric"
-            min={0}
-            step={1000}
-            value={jumlah === 0 ? '' : String(jumlah)}
-            placeholder="0"
-            onChange={(e) =>
-              setJumlah(Math.max(0, parseInt(e.target.value, 10) || 0))
-            }
-          />
+          <RupiahInput value={jumlah} onChange={setJumlah} />
         </div>
 
         <div className="field">

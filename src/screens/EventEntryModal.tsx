@@ -4,6 +4,7 @@ import type { EventKategori, LaporanEvent, SewaTipe } from '../types'
 import { todayKey } from '../storage'
 import { Modal, ModalHead } from '../components/Modal'
 import { Icons } from '../components/Icons'
+import RupiahInput from '../components/RupiahInput'
 import { formatRupiah } from '../income'
 import { hitungEvent, labelEventKategori } from '../event'
 
@@ -238,26 +239,33 @@ function NumField({
   onChange: (v: number) => void
   allowDecimal?: boolean
 }) {
+  // Field bernominal Rupiah (label memuat "(Rp)") pakai kolom mata uang
+  // berformat ribuan; sisanya (durasi jam, jumlah voucher, dll) tetap angka biasa.
+  const money = !allowDecimal && label.includes('(Rp)')
   return (
     <label className="field" style={{ marginBottom: 0 }}>
       <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink-soft)' }}>
         {label}
       </span>
-      <input
-        type="number"
-        inputMode={allowDecimal ? 'decimal' : 'numeric'}
-        min={0}
-        step={allowDecimal ? 0.5 : 1000}
-        value={value === 0 ? '' : String(value)}
-        placeholder="0"
-        onChange={(e) => {
-          const v = allowDecimal
-            ? parseFloat(e.target.value)
-            : parseInt(e.target.value, 10)
-          onChange(Number.isFinite(v) ? Math.max(0, v) : 0)
-        }}
-        style={inputStyle}
-      />
+      {money ? (
+        <RupiahInput value={value} onChange={onChange} />
+      ) : (
+        <input
+          type="number"
+          inputMode={allowDecimal ? 'decimal' : 'numeric'}
+          min={0}
+          step={allowDecimal ? 0.5 : 1000}
+          value={value === 0 ? '' : String(value)}
+          placeholder="0"
+          onChange={(e) => {
+            const v = allowDecimal
+              ? parseFloat(e.target.value)
+              : parseInt(e.target.value, 10)
+            onChange(Number.isFinite(v) ? Math.max(0, v) : 0)
+          }}
+          style={inputStyle}
+        />
+      )}
     </label>
   )
 }

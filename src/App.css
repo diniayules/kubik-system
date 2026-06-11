@@ -392,6 +392,22 @@
 }
 .gaji-pokok-tarif { font-size: 11.5px; color: var(--ink-soft); font-weight: 600; }
 
+/* Kolom isian Rupiah (komponen RupiahInput) — awalan "Rp" + format ribuan */
+.rupiah-input {
+  display: flex; align-items: center; gap: 6px; width: 100%;
+  background: var(--surface-2); border: 1.8px solid var(--line);
+  border-radius: var(--radius-sm); padding: 0 15px;
+}
+.rupiah-input:focus-within { border-color: var(--primary-2, var(--mint-deep)); }
+.rupiah-input.is-disabled { opacity: .55; }
+.rupiah-input-rp { font-weight: 800; color: var(--ink-soft); font-size: 14px; }
+.rupiah-input input {
+  flex: 1; min-width: 0; border: none; background: transparent; padding: 13px 0;
+  font-size: 15px; font-weight: 600; color: var(--ink);
+  font-variant-numeric: tabular-nums; outline: none;
+}
+.rupiah-input input::placeholder { color: var(--ink-soft); opacity: .6; }
+
 /* Slip gaji: pilih metode pembayaran + nomor rekening/e-wallet (admin & karyawan) */
 .gaji-bayar-via-edit select,
 .gaji-bayar-via-edit input {
@@ -1141,6 +1157,11 @@
   color: var(--ink); font-size: 14px; font-weight: 600; width: 100%;
 }
 .harga-cat-row input:focus { outline: none; border-color: var(--primary-2); }
+.harga-cat-row .rupiah-input { padding: 0 10px; background: var(--surface); }
+.harga-cat-row .rupiah-input-rp { font-size: 12.5px; }
+.harga-cat-row .rupiah-input input {
+  padding: 10px 0; font-size: 14px; border: none; background: transparent;
+}
 .harga-cat-ikon { text-align: center; }
 .harga-cat-del {
   display: inline-flex; align-items: center; justify-content: center;

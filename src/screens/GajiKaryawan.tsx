@@ -516,20 +516,23 @@ function SlipCard({
             </select>
           </label>
 
-          <label className="gaji-pokok-field gaji-bayar-via-edit">
-            <span>No. rekening / e-wallet</span>
-            <input
-              type="text"
-              inputMode="numeric"
-              value={nomorDraft}
-              placeholder="mis. 1234567890 (BCA) / 08xx (OVO)"
-              onChange={(e) => setNomorDraft(e.target.value)}
-              onBlur={commitNomor}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
-              }}
-            />
-          </label>
+          {/* Kolom nomor rekening / e-wallet baru tampil setelah metode dipilih. */}
+          {metode && (
+            <label className="gaji-pokok-field gaji-bayar-via-edit">
+              <span>No. rekening / e-wallet</span>
+              <input
+                type="text"
+                inputMode="numeric"
+                value={nomorDraft}
+                placeholder="mis. 1234567890 (BCA) / 08xx (OVO)"
+                onChange={(e) => setNomorDraft(e.target.value)}
+                onBlur={commitNomor}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+                }}
+              />
+            </label>
+          )}
         </>
       )}
 

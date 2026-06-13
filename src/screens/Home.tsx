@@ -214,6 +214,7 @@ export function Home({
                   <Avatar
                     name={emp?.nama ?? '?'}
                     colorIndex={colorIndexForName(r.employeeId)}
+                    foto={emp?.foto}
                   />
                   <div className="emp-row-info">
                     <div className="emp-row-nama">{emp?.nama ?? 'Karyawan'}</div>
@@ -282,6 +283,7 @@ export function Home({
                 <Avatar
                   name={emp.nama}
                   colorIndex={colorIndexForName(emp.id)}
+                  foto={emp.foto}
                 />
                 <div className="emp-row-info">
                   <div className="emp-row-nama">{emp.nama}</div>
@@ -391,7 +393,11 @@ function EmployeeCard({
     <div className="emp-card">
       <div className="accent-strip" />
       <div className="emp-top">
-        <Avatar name={employee.nama} colorIndex={colorIndexForName(employee.id)} />
+        <Avatar
+          name={employee.nama}
+          colorIndex={colorIndexForName(employee.id)}
+          foto={employee.foto}
+        />
         <div className="emp-id">
           <div className="nm">{employee.nama}</div>
           <div className="role">{employee.jabatan || '—'}</div>
@@ -565,7 +571,11 @@ function EmployeeRow({
 
   return (
     <div className={`emp-row status-${status}`}>
-      <Avatar name={employee.nama} colorIndex={colorIndexForName(employee.id)} />
+      <Avatar
+        name={employee.nama}
+        colorIndex={colorIndexForName(employee.id)}
+        foto={employee.foto}
+      />
       <div className="emp-row-info">
         <div className="emp-row-nama">{employee.nama}</div>
         <div className="emp-row-meta">

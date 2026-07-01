@@ -209,6 +209,11 @@ export function Pengeluaran({ data, setData }: Props) {
                         <span className="pengeluaran-kat">
                           {p.kategori || 'Lainnya'}
                         </span>{' '}
+                        <span className="pengeluaran-sumber">
+                          {(p.sumber ?? 'cash') === 'rekening'
+                            ? '🏦 Rekening'
+                            : '💵 Cash'}
+                        </span>{' '}
                         {p.deskripsi}
                       </div>
                       {p.catatan && (
@@ -284,6 +289,9 @@ function PengeluaranModal({
     existing?.jumlah ? String(existing.jumlah) : '',
   )
   const [catatan, setCatatan] = useState(existing?.catatan ?? '')
+  const [sumber, setSumber] = useState<'cash' | 'rekening'>(
+    existing?.sumber ?? 'cash',
+  )
 
   const j = parseInt(jumlah, 10) || 0
   const canSave = !!tanggal && !!deskripsi.trim() && j > 0
@@ -296,6 +304,7 @@ function PengeluaranModal({
       deskripsi: deskripsi.trim(),
       jumlah: j,
       catatan: catatan.trim(),
+      sumber,
     })
   }
 
@@ -348,6 +357,33 @@ function PengeluaranModal({
             value={j}
             onChange={(n) => setJumlah(n === 0 ? '' : String(n))}
           />
+        </div>
+        <div className="field">
+          <label>Sumber dana</label>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              type="button"
+              className={'btn ' + (sumber === 'cash' ? 'btn--pink' : 'btn--ghost')}
+              onClick={() => setSumber('cash')}
+              style={{ flex: 1 }}
+            >
+              💵 Cash
+            </button>
+            <button
+              type="button"
+              className={
+                'btn ' + (sumber === 'rekening' ? 'btn--pink' : 'btn--ghost')
+              }
+              onClick={() => setSumber('rekening')}
+              style={{ flex: 1 }}
+            >
+              🏦 Rekening
+            </button>
+          </div>
+          <div className="form-hint">
+            Dari mana uang ini dibayar — memengaruhi rekonsiliasi saldo di
+            Rangkuman Akhir Bulan.
+          </div>
         </div>
         <div className="field">
           <label>Catatan (opsional)</label>

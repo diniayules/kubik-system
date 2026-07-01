@@ -8,6 +8,7 @@ import { LaporanIncome } from './screens/LaporanIncome'
 import { Event } from './screens/Event'
 import { Inventaris } from './screens/Inventaris'
 import { Pengeluaran } from './screens/Pengeluaran'
+import { Promosi } from './screens/Promosi'
 import { GajiKaryawan } from './screens/GajiKaryawan'
 import { Pengaturan } from './screens/Pengaturan'
 import { Login } from './screens/Login'
@@ -36,6 +37,7 @@ type Screen =
   | { name: 'event-game' }
   | { name: 'inventaris' }
   | { name: 'pengeluaran' }
+  | { name: 'promosi' }
   | { name: 'gaji' }
   | { name: 'pengaturan' }
 
@@ -357,6 +359,15 @@ function Inner() {
 
             {screen.name === 'pengeluaran' && (
               <Pengeluaran data={data} setData={setData} />
+            )}
+
+            {screen.name === 'promosi' && (
+              <Promosi
+                data={data}
+                setData={setData}
+                isAdmin={isAdmin}
+                currentUserId={currentUserId}
+              />
             )}
 
             {screen.name === 'gaji' && (

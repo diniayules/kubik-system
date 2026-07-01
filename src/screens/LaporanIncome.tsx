@@ -7,6 +7,7 @@ import type {
   PenyesuaianUangKecil,
   PenarikanUangBesar,
   ProdukDef,
+  SetoranRekening,
   UpgradeDef,
 } from '../types'
 import { todayKey, uid } from '../storage'
@@ -61,6 +62,8 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
   const [showAmbil, setShowAmbil] = useState(false)
   // Modal "Penyesuaian uang kecil" (tambah/pakai float laci; admin & karyawan).
   const [showPenyesuaian, setShowPenyesuaian] = useState(false)
+  // Modal "Setoran tunai → rekening" (admin) untuk rekonsiliasi rangkuman.
+  const [showSetoran, setShowSetoran] = useState(false)
   // Laporan yang sedang dibuka detailnya dari tampilan kalender.
   const [detail, setDetail] = useState<Laporan | null>(null)
 
@@ -261,8 +264,120 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
     setData({ ...data, saldoAktual: next })
   }
 
-  const selisihDompet = dompetDraft - rekapBulan.tunai
-  const selisihRekening = rekeningDraft - rekapBulan.qris
+  // Saldo awal (opening balance) saat sistem mulai — draft lokal, commit on blur.
+  const [awalDompetDraft, setAwalDompetDraft] = useState(0)
+  const [awalRekeningDraft, setAwalRekeningDraft] = useState(0)
+  useEffect(() => {
+    setAwalDompetDraft(data.saldoAwal?.dompet ?? 0)
+    setAwalRekeningDraft(data.saldoAwal?.rekening ?? 0)
+  }, [data.saldoAwal])
+
+  function simpanSaldoAwal(patch: Partial<{ dompet: number; rekening: number }>) {
+    const cur = data.saldoAwal ?? { dompet: 0, rekening: 0 }
+    const merged = {
+      dompet: patch.dompet ?? cur.dompet,
+      rekening: patch.rekening ?? cur.rekening,
+    }
+    if (merged.dompet === cur.dompet && merged.rekening === cur.rekening) return
+    setData({ ...data, saldoAwal: merged })
+  }
+
+  // Rekonsiliasi KUMULATIF s/d akhir bulan terpilih (bulan YYYY-MM comparable):
+  // uang di dompet/rekening menumpuk antar bulan, jadi dibandingkan dengan
+  // saldo awal + akumulasi seluruh income & setoran sampai bulan itu.
+  //   dompet diharapkan   = saldoAwal.dompet   + Σ tunai − Σ setoran − Σ pengeluaran(cash)
+  //   rekening diharapkan = saldoAwal.rekening + Σ QRIS  + Σ setoran − Σ pengeluaran(rekening)
+  const kumulatif = useMemo(() => {
+    const sampai = (tgl: string) => tgl.slice(0, 7) <= rekapAktif
+    const tunai = data.laporanIncome
+      .filter((l) => sampai(l.tanggal))
+      .reduce((s, l) => s + (l.tunai ?? 0), 0)
+    const qris = data.laporanIncome
+      .filter((l) => sampai(l.tanggal))
+      .reduce((s, l) => s + (l.qris ?? 0), 0)
+    const setoran = (data.setoranRekening ?? [])
+      .filter((s) => sampai(s.tanggal))
+      .reduce((sum, s) => sum + (s.jumlah || 0), 0)
+    // Pengeluaran dipotong dari saldo sesuai sumber dananya (cash → dompet,
+    // rekening → rekening). Data lama tanpa sumber dianggap 'cash'.
+    const pengMasuk = data.pengeluaran.filter((p) => sampai(p.tanggal))
+    const pengeluaranCash = pengMasuk
+      .filter((p) => (p.sumber ?? 'cash') === 'cash')
+      .reduce((s, p) => s + (p.jumlah || 0), 0)
+    const pengeluaranRek = pengMasuk
+      .filter((p) => p.sumber === 'rekening')
+      .reduce((s, p) => s + (p.jumlah || 0), 0)
+    return { tunai, qris, setoran, pengeluaranCash, pengeluaranRek }
+  }, [data.laporanIncome, data.setoranRekening, data.pengeluaran, rekapAktif])
+
+  // Gaji yang SUDAH dibayar (uangnya benar-benar keluar) — dipotong dari saldo
+  // sesuai "Pembayaran via" tiap slip: 'Tunai' → dompet, selain itu (Transfer /
+  // e-Wallet / kosong) → rekening. Kumulatif s/d bulan terpilih. Slip yang belum
+  // ditandai dibayar tidak dipotong (masih jadi utang, uang belum keluar).
+  const gajiKumulatif = useMemo(() => {
+    let gajiCash = 0
+    let gajiRek = 0
+    const karyawan = data.employees.filter((e) => e.role !== 'admin')
+    for (const [key, paid] of Object.entries(data.gajiDibayar ?? {})) {
+      if (!paid) continue
+      const [empId, bulan] = key.split('::')
+      if (!bulan || bulan > rekapAktif) continue
+      const emp = karyawan.find((e) => e.id === empId)
+      if (!emp) continue
+      const recordsBulan = data.records.filter((r) => r.tanggal.startsWith(bulan))
+      const laporanBulan = data.laporanIncome.filter((l) =>
+        l.tanggal.startsWith(bulan),
+      )
+      const slip = hitungSlipGaji(
+        emp,
+        data.gajiPokok[emp.id] ?? 0,
+        recordsBulan,
+        laporanBulan,
+        hariSeharusnyaBulan(bulan, hariIni),
+      )
+      const metode = (data.gajiPembayaranVia[key]?.metode ?? '').toLowerCase()
+      const dariCash = metode.includes('tunai') || metode.includes('cash')
+      if (dariCash) gajiCash += slip.total
+      else gajiRek += slip.total
+    }
+    return { gajiCash, gajiRek }
+  }, [
+    data.gajiDibayar,
+    data.employees,
+    data.records,
+    data.laporanIncome,
+    data.gajiPokok,
+    data.gajiPembayaranVia,
+    rekapAktif,
+    hariIni,
+  ])
+
+  const dompetDiharapkan =
+    (data.saldoAwal?.dompet ?? 0) +
+    kumulatif.tunai -
+    kumulatif.setoran -
+    kumulatif.pengeluaranCash -
+    gajiKumulatif.gajiCash
+  const rekeningDiharapkan =
+    (data.saldoAwal?.rekening ?? 0) +
+    kumulatif.qris +
+    kumulatif.setoran -
+    kumulatif.pengeluaranRek -
+    gajiKumulatif.gajiRek
+  const selisihDompet = dompetDraft - dompetDiharapkan
+  const selisihRekening = rekeningDraft - rekeningDiharapkan
+
+  function catatSetoran(s: SetoranRekening) {
+    setData({ ...data, setoranRekening: [...(data.setoranRekening ?? []), s] })
+    toast('ok', t('inc.setor.toastTambah', { rp: formatRupiah(s.jumlah) }))
+  }
+  function hapusSetoran(id: string) {
+    setData({
+      ...data,
+      setoranRekening: (data.setoranRekening ?? []).filter((s) => s.id !== id),
+    })
+    toast('warn', t('inc.setor.toastHapus'))
+  }
 
   // ---- Buku kas "uang besar" (admin & karyawan) --------------------------
   // Saldo berjalan = Σ(uangBesar tiap laporan) − Σ(pengambilan/setoran).
@@ -1030,9 +1145,60 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
             </span>
           </div>
 
-          {/* Rekonsiliasi: cek income tunai/QRIS balance dengan dompet/rekening */}
+          {/* Rekonsiliasi: cek saldo dompet/rekening (kumulatif s/d bulan ini) */}
           <div className="rekap-rekon">
-            <div className="rekap-rekon-head">{t('inc.rekap.rekonTitle')}</div>
+            <div className="rekap-rekon-topbar">
+              <div className="rekap-rekon-head">
+                {t('inc.rekap.rekonTitle')}
+                <span className="rekap-rekon-sd">
+                  {t('inc.rekap.rekonSd', { bulan: labelBulan(rekapAktif) })}
+                </span>
+              </div>
+              <button
+                type="button"
+                className="btn btn--ghost btn--sm"
+                onClick={() => setShowSetoran(true)}
+              >
+                <Icons.download /> {t('inc.setor.tombol')}
+              </button>
+            </div>
+
+            {/* Saldo awal (opening balance) — diisi sekali saat sistem mulai. */}
+            <div className="rekap-rekon-awal">
+              <div className="rekap-rekon-awal-head">{t('inc.awal.title')}</div>
+              <div className="rekap-rekon-grid">
+                <label className="rekap-rekon-field">
+                  <span>💵 {t('inc.awal.dompet')}</span>
+                  <RupiahInput
+                    value={awalDompetDraft}
+                    onChange={setAwalDompetDraft}
+                    onBlur={() => simpanSaldoAwal({ dompet: awalDompetDraft })}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+                    }}
+                  />
+                </label>
+                <label className="rekap-rekon-field">
+                  <span>🏦 {t('inc.awal.rekening')}</span>
+                  <RupiahInput
+                    value={awalRekeningDraft}
+                    onChange={setAwalRekeningDraft}
+                    onBlur={() => simpanSaldoAwal({ rekening: awalRekeningDraft })}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+                    }}
+                  />
+                </label>
+              </div>
+              <div className="rekap-rekon-awal-hint">{t('inc.awal.hint')}</div>
+            </div>
+
+            {/* Total setoran tunai → rekening (kumulatif s/d bulan ini). */}
+            <div className="rekap-row rekap-rekon-setoran">
+              <span className="rekap-lbl">🔄 {t('inc.setor.total')}</span>
+              <span className="rekap-val">{formatRupiah(kumulatif.setoran)}</span>
+            </div>
+
             <div className="rekap-rekon-grid">
               <div className="rekap-rekon-item">
                 <label className="rekap-rekon-field">
@@ -1046,6 +1212,11 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
                     }}
                   />
                 </label>
+                <div className="rekap-rekon-expect">
+                  {t('inc.setor.dompetHarap', {
+                    rp: formatRupiah(dompetDiharapkan),
+                  })}
+                </div>
                 <div
                   className={
                     'rekap-rekon-status' +
@@ -1072,6 +1243,11 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
                     }}
                   />
                 </label>
+                <div className="rekap-rekon-expect">
+                  {t('inc.setor.rekeningHarap', {
+                    rp: formatRupiah(rekeningDiharapkan),
+                  })}
+                </div>
                 <div
                   className={
                     'rekap-rekon-status' +
@@ -1230,7 +1406,157 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
           onClose={() => setShowPenyesuaian(false)}
         />
       )}
+
+      {showSetoran && (
+        <SetoranRekeningModal
+          riwayat={data.setoranRekening ?? []}
+          bulan={rekapAktif}
+          bulanLabel={labelBulan(rekapAktif)}
+          totalSampai={kumulatif.setoran}
+          hariIni={hariIni}
+          onSimpan={catatSetoran}
+          onHapus={hapusSetoran}
+          onClose={() => setShowSetoran(false)}
+        />
+      )}
     </>
+  )
+}
+
+// Modal admin: catat setoran uang tunai (dompet) → rekening bank + riwayat.
+// Dipakai rekonsiliasi rangkuman: income tunai yang sudah disetor pindah ke
+// sisi rekening. Riwayat difilter ke bulan yang sedang dilihat di rangkuman.
+function SetoranRekeningModal({
+  riwayat,
+  bulan,
+  bulanLabel,
+  totalSampai,
+  hariIni,
+  onSimpan,
+  onHapus,
+  onClose,
+}: {
+  riwayat: SetoranRekening[]
+  bulan: string
+  bulanLabel: string
+  totalSampai: number
+  hariIni: string
+  onSimpan: (s: SetoranRekening) => void
+  onHapus: (id: string) => void
+  onClose: () => void
+}) {
+  const { t } = useLang()
+  // Default tanggal: hari ini kalau masih di bulan yang dilihat, kalau tidak
+  // pakai tanggal 1 bulan tsb (mis. saat mengoreksi setoran bulan lampau).
+  const [jumlah, setJumlah] = useState<number>(0)
+  const [tanggal, setTanggal] = useState<string>(
+    hariIni.startsWith(bulan) ? hariIni : `${bulan}-01`,
+  )
+  const [catatan, setCatatan] = useState<string>('')
+
+  const valid = jumlah > 0
+  // Rekonsiliasi kumulatif: tampilkan semua setoran s/d bulan terpilih.
+  const riwayatSampai = riwayat
+    .filter((s) => s.tanggal.slice(0, 7) <= bulan)
+    .sort((a, b) => b.tanggal.localeCompare(a.tanggal))
+
+  function simpan() {
+    if (!valid) return
+    onSimpan({
+      id: uid(),
+      tanggal,
+      jumlah: Math.floor(jumlah),
+      catatan: catatan.trim(),
+    })
+    setJumlah(0)
+    setCatatan('')
+  }
+
+  return (
+    <Modal onClose={onClose}>
+      <ModalHead
+        icon={<Icons.download />}
+        color="var(--primary-2)"
+        title={t('inc.setor.title')}
+        sub={t('inc.setor.sub', { bulan: bulanLabel })}
+        onClose={onClose}
+      />
+      <div className="modal-body">
+        <div className="income-card-total" style={{ marginBottom: 14 }}>
+          <div className="income-card-total-num">{formatRupiah(totalSampai)}</div>
+          <div className="income-card-total-lbl">{t('inc.setor.totalSd')}</div>
+        </div>
+
+        <div className="field">
+          <label>{t('inc.setor.jumlah')}</label>
+          <RupiahInput value={jumlah} onChange={setJumlah} />
+        </div>
+
+        <div className="field">
+          <label>{t('inc.field.tanggal')}</label>
+          <input
+            type="date"
+            value={tanggal}
+            onChange={(e) => setTanggal(e.target.value || hariIni)}
+          />
+        </div>
+
+        <div className="field">
+          <label>{t('inc.field.catatan')}</label>
+          <input
+            type="text"
+            value={catatan}
+            placeholder={t('inc.setor.catatanPh')}
+            onChange={(e) => setCatatan(e.target.value)}
+          />
+        </div>
+
+        <div className="form-hint">{t('inc.setor.hint')}</div>
+
+        <button
+          type="button"
+          className="btn btn--primary btn--lg"
+          disabled={!valid}
+          onClick={simpan}
+          style={{ width: '100%' }}
+        >
+          <Icons.download /> {t('inc.setor.catat')}
+        </button>
+
+        {riwayatSampai.length > 0 && (
+          <div className="penarikan-riwayat">
+            <div className="harga-cat-head">{t('inc.setor.riwayat')}</div>
+            {riwayatSampai.map((s) => (
+              <div key={s.id} className="penarikan-row">
+                <div className="penarikan-row-info">
+                  <span className="penarikan-row-tgl">
+                    {formatTanggalPanjang(s.tanggal)}
+                  </span>
+                  {s.catatan && (
+                    <span className="penarikan-row-cat">{s.catatan}</span>
+                  )}
+                </div>
+                <span
+                  className="penarikan-row-val"
+                  style={{ color: 'var(--primary-2)' }}
+                >
+                  {formatRupiah(s.jumlah)}
+                </span>
+                <button
+                  type="button"
+                  className="emp-row-icon emp-row-danger"
+                  aria-label={t('inc.setor.hapus')}
+                  title={t('inc.setor.hapus')}
+                  onClick={() => onHapus(s.id)}
+                >
+                  <Icons.trash />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </Modal>
   )
 }
 

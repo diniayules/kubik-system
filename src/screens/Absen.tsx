@@ -4,10 +4,14 @@ import type {
   AbsenHari,
   AbsenStatus,
   AppData,
+  ChecklistPulangItem,
+  ClosingTask,
   DayType,
   EventTipe,
+  Shift,
 } from '../types'
 import { todayKey, uid } from '../storage'
+import { Modal, ModalHead } from '../components/Modal'
 import {
   DAY_TYPE_LIST,
   EVENT_IKON,
@@ -88,6 +92,9 @@ export function Absen({
   const [now, setNow] = useState(() => new Date())
   const [editingTipe, setEditingTipe] = useState<EventTipe | null>(null)
   const [editValue, setEditValue] = useState('')
+  // Modal closing checklist: tampil saat karyawan menekan "Catat Pulang" secara
+  // real-time (bukan entri manual) dan admin sudah mengonfigurasi daftar task.
+  const [showClosing, setShowClosing] = useState(false)
 
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 1000)
@@ -153,39 +160,21 @@ export function Absen({
 
   function catatEvent(tipe: EventTipe) {
     if (!record || !isHariKerja(record.shift)) return
-    const waktu = new Date().toISOString()
 
-    // Auto-prompt: kalau klik pulang tapi belum ada catatan istirahat sama sekali
+    // Clock out real-time: kalau admin mengonfigurasi closing checklist, tampilkan
+    // modalnya dulu — pulang baru dicatat setelah semua task dicentang. Entri
+    // manual (tanggal lampau) dilewati, karena itu backfill, bukan closing nyata.
     if (tipe === 'pulang') {
-      const istirahatTipes = SHIFT_URUTAN[record.shift].filter(
-        (s) => s.startsWith('istirahat-'),
-      )
-      const adaIstirahat = istirahatTipes.some((s) => getEvent(record, s))
-      if (istirahatTipes.length > 0 && !adaIstirahat) {
-        const lewati = confirm(
-          'Belum ada catatan istirahat hari ini. Hari ini tanpa istirahat?\n\nOK = Tandai istirahat dilewati & catat pulang\nCancel = Batalkan (catat istirahat dulu)',
-        )
-        if (!lewati) return
-        // Mark all unlogged break events as dilewati at current time
-        const skipped: AbsenEvent[] = istirahatTipes.map((s) => ({
-          tipe: s,
-          waktu,
-          dilewati: true,
-        }))
-        const updated: AbsenHari = {
-          ...record,
-          status: recordStatus,
-          events: [...record.events, ...skipped, { tipe, waktu }],
-        }
-        setData({
-          ...data,
-          records: data.records.map((r) => (r.id === record.id ? updated : r)),
-        })
-        toast('info', `Istirahat dilewati · Pulang ${formatJam(waktu)}`)
+      const tasks = closingTasksUntuk(data.closingChecklist, record.shift)
+      if (!isManual && tasks.length > 0) {
+        setShowClosing(true)
         return
       }
+      simpanPulang()
+      return
     }
 
+    const waktu = new Date().toISOString()
     const ada = record.events.some((e) => e.tipe === tipe)
     let updated: AbsenHari
     if (ada) {
@@ -213,6 +202,66 @@ export function Absen({
       records: data.records.map((r) => (r.id === record.id ? updated : r)),
     })
     toast('ok', `${EVENT_LABEL[tipe]} ${formatJam(waktu)}`)
+  }
+
+  // Mencatat clock out (dipanggil langsung, atau dari modal closing checklist
+  // dengan bukti task yang dicentang). Tetap menangani auto-prompt istirahat yang
+  // belum tercatat, sama seperti sebelum ada fitur checklist.
+  function simpanPulang(checklistPulang?: ChecklistPulangItem[]) {
+    if (!record || !isHariKerja(record.shift)) return
+    const waktu = new Date().toISOString()
+    let events = record.events
+
+    const istirahatTipes = SHIFT_URUTAN[record.shift].filter((s) =>
+      s.startsWith('istirahat-'),
+    )
+    const adaIstirahat = istirahatTipes.some((s) => getEvent(record, s))
+    let istirahatDilewati = false
+    if (istirahatTipes.length > 0 && !adaIstirahat) {
+      const lewati = confirm(
+        'Belum ada catatan istirahat hari ini. Hari ini tanpa istirahat?\n\nOK = Tandai istirahat dilewati & catat pulang\nCancel = Batalkan (catat istirahat dulu)',
+      )
+      if (!lewati) return
+      const skipped: AbsenEvent[] = istirahatTipes.map((s) => ({
+        tipe: s,
+        waktu,
+        dilewati: true,
+      }))
+      events = [...events, ...skipped]
+      istirahatDilewati = true
+    }
+
+    const ada = events.some((e) => e.tipe === 'pulang')
+    if (ada) {
+      if (
+        !confirm(
+          `Sudah pernah dicatat "${EVENT_LABEL.pulang}". Timpa dengan waktu sekarang?`,
+        )
+      ) {
+        return
+      }
+      events = events.map((e) => (e.tipe === 'pulang' ? { tipe: 'pulang', waktu } : e))
+    } else {
+      events = [...events, { tipe: 'pulang', waktu }]
+    }
+
+    const updated: AbsenHari = {
+      ...record,
+      status: recordStatus,
+      events,
+      checklistPulang: checklistPulang ?? record.checklistPulang,
+    }
+    setData({
+      ...data,
+      records: data.records.map((r) => (r.id === record.id ? updated : r)),
+    })
+    setShowClosing(false)
+    toast(
+      'ok',
+      istirahatDilewati
+        ? `Istirahat dilewati · Pulang ${formatJam(waktu)}`
+        : `${EVENT_LABEL.pulang} ${formatJam(waktu)}`,
+    )
   }
 
   function lewatiIstirahat(mulaiTipe: EventTipe) {
@@ -804,7 +853,122 @@ export function Absen({
           </button>
         )}
       </div>
+
+      {showClosing && record && (
+        <ClosingChecklistModal
+          tasks={closingTasksUntuk(data.closingChecklist, record.shift)}
+          shift={record.shift}
+          onClose={() => setShowClosing(false)}
+          onConfirm={(items) => simpanPulang(items)}
+        />
+      )}
     </>
+  )
+}
+
+// Task closing yang berlaku untuk sebuah shift. `shifts` kosong/undefined
+// dianggap berlaku untuk SEMUA shift (kompatibilitas data lama).
+function closingTasksUntuk(list: ClosingTask[], shift: DayType): ClosingTask[] {
+  return list.filter(
+    (t) =>
+      !t.shifts || t.shifts.length === 0 || t.shifts.includes(shift as Shift),
+  )
+}
+
+// Modal daftar tugas closing yang wajib dicentang sebelum clock out. Tombol
+// "Selesai & Pulang" terkunci sampai SEMUA task dicentang. Saat dikonfirmasi,
+// tiap task disnapshot (id + label + waktu centang) sebagai bukti audit.
+function ClosingChecklistModal({
+  tasks,
+  shift,
+  onClose,
+  onConfirm,
+}: {
+  tasks: ClosingTask[]
+  shift: DayType
+  onClose: () => void
+  onConfirm: (items: ChecklistPulangItem[]) => void
+}) {
+  const [checked, setChecked] = useState<Record<string, string>>({})
+  const semua = tasks.every((t) => checked[t.id])
+  const sisa = tasks.filter((t) => !checked[t.id]).length
+
+  function toggle(id: string) {
+    setChecked((c) => {
+      const next = { ...c }
+      if (next[id]) delete next[id]
+      else next[id] = new Date().toISOString()
+      return next
+    })
+  }
+
+  function konfirmasi() {
+    if (!semua) return
+    onConfirm(
+      tasks.map((t) => ({
+        id: t.id,
+        label: t.label,
+        waktu: checked[t.id],
+      })),
+    )
+  }
+
+  return (
+    <Modal onClose={onClose}>
+      <ModalHead
+        icon="🌙"
+        color="var(--primary)"
+        title="Checklist Sebelum Pulang"
+        sub={`${SHIFT_LABEL[shift]} · centang semua tugas closing dulu, baru bisa clock out.`}
+        onClose={onClose}
+      />
+      <div className="closing-body">
+        <ul className="closing-list">
+          {tasks.map((t) => {
+            const done = !!checked[t.id]
+            return (
+              <li key={t.id}>
+                <label className={`closing-item${done ? ' done' : ''}`}>
+                  <input
+                    type="checkbox"
+                    checked={done}
+                    onChange={() => toggle(t.id)}
+                  />
+                  <span className="closing-item-label">{t.label}</span>
+                  {done && (
+                    <span className="closing-item-time">
+                      ✓ {formatJam(checked[t.id])}
+                    </span>
+                  )}
+                </label>
+              </li>
+            )
+          })}
+        </ul>
+        <div className="closing-foot">
+          {semua ? (
+            <span className="closing-status ok">✅ Semua tugas selesai</span>
+          ) : (
+            <span className="closing-status">
+              Sisa {sisa} tugas belum dicentang
+            </span>
+          )}
+          <div className="closing-actions">
+            <button type="button" className="btn btn--ghost" onClick={onClose}>
+              Batal
+            </button>
+            <button
+              type="button"
+              className="btn btn--primary"
+              disabled={!semua}
+              onClick={konfirmasi}
+            >
+              <Icons.check /> Selesai &amp; Pulang
+            </button>
+          </div>
+        </div>
+      </div>
+    </Modal>
   )
 }
 

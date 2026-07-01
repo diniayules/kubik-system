@@ -523,6 +523,19 @@ export function Riwayat({
                         ➕ Extra {formatDurasi(r.extraMenit ?? 0)}
                       </div>
                     )}
+                    {r.checklistPulang && r.checklistPulang.length > 0 && (
+                      <div
+                        className="audit-badge audit-closing"
+                        title={
+                          'Closing checklist saat pulang:\n' +
+                          r.checklistPulang
+                            .map((c) => `✓ ${c.label} (${formatJam(c.waktu)})`)
+                            .join('\n')
+                        }
+                      >
+                        🌙 Closing {r.checklistPulang.length}
+                      </div>
+                    )}
                   </div>
                   <div>
                     {ring.sudahPulang ? formatDurasi(ring.kerjaBersihMenit) : '—'}

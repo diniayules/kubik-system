@@ -1,5 +1,14 @@
 import { useState } from 'react'
-import type { AppData, FontPair, FontSize, TampilanMode } from '../types'
+import type {
+  AppData,
+  ClosingTask,
+  FontPair,
+  FontSize,
+  Shift,
+  TampilanMode,
+} from '../types'
+import { uid } from '../storage'
+import { SHIFT_LABEL, SHIFT_LIST } from '../attendance'
 import {
   DEFAULTS,
   FONT_PAIRS,
@@ -64,6 +73,59 @@ export function Pengaturan({
   const [incomeSub, setIncomeSub] = useState(
     data.incomeSub ?? DEFAULTS.incomeSub,
   )
+
+  // Draft lokal daftar closing checklist (task sebelum clock out). Diedit di sini
+  // lalu disimpan sekaligus ke app_config, sama polanya seperti Teks & Branding.
+  const [closingTasks, setClosingTasks] = useState<ClosingTask[]>(
+    data.closingChecklist,
+  )
+  function tambahTask() {
+    setClosingTasks((ts) => [
+      ...ts,
+      { id: uid(), label: '', shifts: [...SHIFT_LIST] },
+    ])
+  }
+  function ubahTaskLabel(id: string, label: string) {
+    setClosingTasks((ts) => ts.map((t) => (t.id === id ? { ...t, label } : t)))
+  }
+  function toggleTaskShift(id: string, shift: Shift) {
+    setClosingTasks((ts) =>
+      ts.map((t) => {
+        if (t.id !== id) return t
+        const cur = t.shifts ?? [...SHIFT_LIST]
+        const shifts = cur.includes(shift)
+          ? cur.filter((s) => s !== shift)
+          : [...cur, shift]
+        return { ...t, shifts }
+      }),
+    )
+  }
+  function hapusTask(id: string) {
+    setClosingTasks((ts) => ts.filter((t) => t.id !== id))
+  }
+  function pindahTask(id: string, arah: -1 | 1) {
+    setClosingTasks((ts) => {
+      const i = ts.findIndex((t) => t.id === id)
+      const j = i + arah
+      if (i < 0 || j < 0 || j >= ts.length) return ts
+      const next = [...ts]
+      ;[next[i], next[j]] = [next[j], next[i]]
+      return next
+    })
+  }
+  function simpanChecklist() {
+    const bersih = closingTasks
+      .map((t) => ({ ...t, label: t.label.trim() }))
+      .filter((t) => t.label)
+    setClosingTasks(bersih)
+    setData({ ...data, closingChecklist: bersih })
+    toast(
+      'ok',
+      bersih.length
+        ? `Checklist tersimpan (${bersih.length} tugas)`
+        : 'Checklist dikosongkan — clock out tanpa checklist',
+    )
+  }
 
   function setFontPair(p: FontPair) {
     setPref('fontPair', p)
@@ -518,6 +580,114 @@ export function Pengaturan({
         >
           <Icons.check /> Simpan Teks
         </button>
+      </section>
+      )}
+
+      {isAdmin && (
+      <section className="settings-card">
+        <div className="settings-head">
+          <div className="settings-head-ikon">🌙</div>
+          <div>
+            <h2 className="settings-title">Checklist Sebelum Pulang</h2>
+            <p className="settings-sub">
+              Daftar tugas closing yang wajib dicentang karyawan sebelum clock
+              out (mis. mematikan lampu studio, mengisi laporan keuangan, kirim
+              laporan via WhatsApp). Pilih di shift mana tiap tugas muncul —
+              shift pagi & sore bisa punya tugas berbeda. Kosongkan untuk
+              mematikan fitur.
+            </p>
+          </div>
+        </div>
+
+        <div className="settings-section">
+          <div className="closing-cfg-list">
+            {closingTasks.length === 0 && (
+              <div className="form-hint">
+                Belum ada tugas. Tambahkan minimal satu untuk mengaktifkan
+                checklist saat clock out.
+              </div>
+            )}
+            {closingTasks.map((t, i) => {
+              const shifts = t.shifts ?? [...SHIFT_LIST]
+              return (
+                <div key={t.id} className="closing-cfg-row">
+                  <div className="closing-cfg-main">
+                    <span className="closing-cfg-num">{i + 1}.</span>
+                    <input
+                      type="text"
+                      value={t.label}
+                      onChange={(e) => ubahTaskLabel(t.id, e.target.value)}
+                      placeholder="mis. Mematikan lampu studio"
+                    />
+                    <button
+                      type="button"
+                      className="btn-mini btn-mini-ghost"
+                      onClick={() => pindahTask(t.id, -1)}
+                      disabled={i === 0}
+                      title="Naikkan"
+                    >
+                      ↑
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-mini btn-mini-ghost"
+                      onClick={() => pindahTask(t.id, 1)}
+                      disabled={i === closingTasks.length - 1}
+                      title="Turunkan"
+                    >
+                      ↓
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-mini btn-mini-skip"
+                      onClick={() => hapusTask(t.id)}
+                      title="Hapus tugas"
+                    >
+                      <Icons.trash />
+                    </button>
+                  </div>
+                  <div className="closing-cfg-shifts">
+                    <span className="closing-cfg-shifts-label">
+                      Tampil di shift:
+                    </span>
+                    {SHIFT_LIST.map((s) => (
+                      <button
+                        key={s}
+                        type="button"
+                        className={`shift-toggle${shifts.includes(s) ? ' on' : ''}`}
+                        onClick={() => toggleTaskShift(t.id, s)}
+                      >
+                        {SHIFT_LABEL[s].replace('Shift ', '')}
+                      </button>
+                    ))}
+                    {shifts.length === 0 && (
+                      <span className="closing-cfg-warn">
+                        ⚠️ tak muncul di shift mana pun
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          <div className="closing-cfg-actions">
+            <button
+              type="button"
+              className="btn btn--ghost"
+              onClick={tambahTask}
+            >
+              + Tambah Tugas
+            </button>
+            <button
+              type="button"
+              className="btn btn--primary btn--lg"
+              onClick={simpanChecklist}
+            >
+              <Icons.check /> Simpan Checklist
+            </button>
+          </div>
+        </div>
       </section>
       )}
 

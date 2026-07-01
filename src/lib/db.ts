@@ -13,6 +13,7 @@ import { supabase } from './supabase'
 import type {
   AbsenHari,
   AppData,
+  ClosingTask,
   Employee,
   EventKategori,
   HargaProduk,
@@ -26,7 +27,9 @@ import type {
   PenyesuaianUangKecil,
   PenarikanUangBesar,
   Pengeluaran,
+  SetoranRekening,
   ProdukDef,
+  PromoProgram,
   DayType,
   SalahCetak,
   SewaTipe,
@@ -72,6 +75,7 @@ type AbsenRow = {
   status: AbsenHari['status']
   extra_menit: number | null
   extra_catatan: string | null
+  checklist_pulang: AbsenHari['checklistPulang'] | null
 }
 type LaporanRow = {
   id: string
@@ -118,6 +122,18 @@ type PengeluaranRow = {
   deskripsi: string
   jumlah: number
   catatan: string
+  sumber: 'cash' | 'rekening' | null
+}
+type PromoRow = {
+  id: string
+  judul: string | null
+  deskripsi: string | null
+  tahap: PromoProgram['tahap']
+  status: PromoProgram['status']
+  tanggal_mulai: string | null
+  tanggal_selesai: string | null
+  created_by: string | null
+  desain: string | null
 }
 type PenarikanUangBesarRow = {
   id: string
@@ -154,6 +170,7 @@ type ConfigRow = {
   layanan_catalog: LayananDef[] | null
   upgrade_catalog: UpgradeDef[] | null
   produk_catalog: ProdukDef[] | null
+  closing_checklist: ClosingTask[] | null
   harga_tiket: HargaTiket
   harga_cetak: number
   harga_upgrade: HargaUpgrade
@@ -161,6 +178,8 @@ type ConfigRow = {
   gaji_pokok: Record<string, number> | null
   gaji_dibayar: Record<string, boolean> | null
   saldo_aktual: Record<string, { dompet: number; rekening: number }> | null
+  setoran_rekening: SetoranRekening[] | null
+  saldo_awal: { dompet: number; rekening: number } | null
   brand_kicker: string | null
   brand_name: string | null
   dash_judul: string | null
@@ -196,13 +215,14 @@ export async function fetchAppData(): Promise<AppData> {
     salahRes,
     configRes,
     inactiveRes,
+    promoRes,
   ] = await Promise.all([
     supabase
       .from('profiles')
       .select('id, nama, jabatan, pin_hash, role, nomor_induk, no_hp, foto, nama_lengkap, tempat_lahir, tanggal_lahir, pendidikan, tanggal_diterima')
       .eq('active', true)
       .order('created_at', { ascending: true }),
-    supabase.from('absen_records').select('id, employee_id, tanggal, shift, events, status, extra_menit, extra_catatan'),
+    supabase.from('absen_records').select('id, employee_id, tanggal, shift, events, status, extra_menit, extra_catatan, checklist_pulang'),
     supabase
       .from('laporan_income')
       .select(
@@ -214,7 +234,7 @@ export async function fetchAppData(): Promise<AppData> {
         'id, tanggal, kategori, tipe, keterangan, jam, tarif_per_jam, biaya_kertas, biaya_tinta, biaya_listrik, upah_operator, voucher, cetak, harga_voucher, harga_cetak',
       ),
     // pengeluaran: semua user login (admin & karyawan) boleh lihat via RLS.
-    supabase.from('pengeluaran').select('id, tanggal, kategori, deskripsi, jumlah, catatan'),
+    supabase.from('pengeluaran').select('id, tanggal, kategori, deskripsi, jumlah, catatan, sumber'),
     // penarikan uang besar: semua user login (admin & karyawan) lihat via RLS.
     supabase
       .from('penarikan_uang_besar')
@@ -238,6 +258,12 @@ export async function fetchAppData(): Promise<AppData> {
       .from('profiles')
       .select('id, nama, jabatan, pin_hash, role, nomor_induk, no_hp, foto, nama_lengkap, tempat_lahir, tanggal_lahir, pendidikan, tanggal_diterima')
       .eq('active', false)
+      .order('created_at', { ascending: true }),
+    // Papan Promosi: RLS memfilter baris yang boleh dilihat (admin semua;
+    // karyawan hanya yang tayang + miliknya sendiri). Lihat migration 0035.
+    supabase
+      .from('promo_programs')
+      .select('id, judul, deskripsi, tahap, status, tanggal_mulai, tanggal_selesai, created_by, desain')
       .order('created_at', { ascending: true }),
   ])
 
@@ -266,6 +292,10 @@ export async function fetchAppData(): Promise<AppData> {
   const salah = orErr(salahRes) as SalahCetakRow[]
   const config = orErr(configRes) as ConfigRow | null
   const inactiveProfiles = orErr(inactiveRes) as ProfileRow[]
+  // Toleran kalau tabel `promo_programs` belum ada (migrasi 0035 belum
+  // dijalankan) — fallback [] agar app tetap jalan; fitur aktif begitu migrasi
+  // diterapkan.
+  const promo = (promoRes.error ? [] : (promoRes.data ?? [])) as PromoRow[]
 
   const toEmployee = (p: ProfileRow): Employee => ({
     id: p.id,
@@ -294,6 +324,9 @@ export async function fetchAppData(): Promise<AppData> {
     status: r.status === 'menunggu' ? 'menunggu' : 'disetujui',
     extraMenit: r.extra_menit ?? 0,
     extraCatatan: r.extra_catatan ?? undefined,
+    checklistPulang: Array.isArray(r.checklist_pulang)
+      ? r.checklist_pulang
+      : undefined,
   }))
 
   const laporanIncome: LaporanIncome[] = laporan.map((l) => {
@@ -358,6 +391,7 @@ export async function fetchAppData(): Promise<AppData> {
     deskripsi: p.deskripsi,
     jumlah: p.jumlah,
     catatan: p.catatan ?? '',
+    sumber: p.sumber ?? 'cash',
   }))
 
   const penarikanUangBesar: PenarikanUangBesar[] = penarikan.map((p) => ({
@@ -406,6 +440,18 @@ export async function fetchAppData(): Promise<AppData> {
     alasan: s.alasan ?? '',
   }))
 
+  const promoPrograms: PromoProgram[] = promo.map((p) => ({
+    id: p.id,
+    judul: p.judul ?? '',
+    deskripsi: p.deskripsi ?? '',
+    tahap: p.tahap,
+    status: p.status,
+    tanggalMulai: p.tanggal_mulai ?? undefined,
+    tanggalSelesai: p.tanggal_selesai ?? undefined,
+    dibuatOleh: p.created_by ?? undefined,
+    desain: p.desain ?? undefined,
+  }))
+
   return {
     employees,
     inactiveEmployees,
@@ -425,6 +471,9 @@ export async function fetchAppData(): Promise<AppData> {
     produkCatalog: Array.isArray(config?.produk_catalog)
       ? config.produk_catalog
       : structuredClone(PRODUK_CATALOG_DEFAULT),
+    closingChecklist: Array.isArray(config?.closing_checklist)
+      ? config.closing_checklist
+      : [],
     hargaTiket: config?.harga_tiket ?? { ...HARGA_TIKET_DEFAULT },
     hargaCetak: config?.harga_cetak ?? HARGA_CETAK_DEFAULT,
     hargaUpgrade: config?.harga_upgrade ?? { ...HARGA_UPGRADE_DEFAULT },
@@ -432,6 +481,13 @@ export async function fetchAppData(): Promise<AppData> {
     gajiPokok: config?.gaji_pokok ?? {},
     gajiDibayar: config?.gaji_dibayar ?? {},
     saldoAktual: config?.saldo_aktual ?? {},
+    setoranRekening: Array.isArray(config?.setoran_rekening)
+      ? config.setoran_rekening
+      : [],
+    saldoAwal: {
+      dompet: config?.saldo_awal?.dompet ?? 0,
+      rekening: config?.saldo_awal?.rekening ?? 0,
+    },
     gajiPembayaranVia: Object.fromEntries(
       pembayaranVia.map((r) => [
         `${r.employee_id}::${r.periode}`,
@@ -444,6 +500,7 @@ export async function fetchAppData(): Promise<AppData> {
     stokAmplop: amplop?.stok ?? 0,
     salahCetak,
     pengeluaran,
+    promoPrograms,
     brandKicker: config?.brand_kicker ?? undefined,
     brandName: config?.brand_name ?? undefined,
     dashJudul: config?.dash_judul ?? undefined,
@@ -483,6 +540,7 @@ export async function persistChanges(
       status: r.status ?? 'disetujui',
       extra_menit: r.extraMenit ?? 0,
       extra_catatan: r.extraCatatan ?? null,
+      checklist_pulang: r.checklistPulang ?? null,
     }),
   )
 
@@ -560,6 +618,28 @@ export async function persistChanges(
       deskripsi: p.deskripsi,
       jumlah: p.jumlah,
       catatan: p.catatan,
+      sumber: p.sumber ?? 'cash',
+    }),
+    userId,
+  )
+
+  // ---- promo_programs (created_by stamped on insert; admin & karyawan).
+  // tahap/status yang boleh diubah karyawan dibatasi trigger protect_promo_status. ----
+  syncRows(
+    jobs,
+    'promo_programs',
+    prev.promoPrograms,
+    next.promoPrograms,
+    (p) => p.id,
+    (p) => ({
+      id: p.id,
+      judul: p.judul,
+      deskripsi: p.deskripsi,
+      tahap: p.tahap,
+      status: p.status,
+      tanggal_mulai: p.tanggalMulai ?? null,
+      tanggal_selesai: p.tanggalSelesai ?? null,
+      desain: p.desain ?? null,
     }),
     userId,
   )
@@ -745,6 +825,7 @@ export async function persistChanges(
     'layananCatalog',
     'upgradeCatalog',
     'produkCatalog',
+    'closingChecklist',
     'hargaTiket',
     'hargaCetak',
     'hargaUpgrade',
@@ -752,6 +833,8 @@ export async function persistChanges(
     'gajiPokok',
     'gajiDibayar',
     'saldoAktual',
+    'setoranRekening',
+    'saldoAwal',
     'brandKicker',
     'brandName',
     'dashJudul',
@@ -770,6 +853,7 @@ export async function persistChanges(
             layanan_catalog: next.layananCatalog,
             upgrade_catalog: next.upgradeCatalog,
             produk_catalog: next.produkCatalog,
+            closing_checklist: next.closingChecklist ?? [],
             harga_tiket: next.hargaTiket,
             harga_cetak: next.hargaCetak,
             harga_upgrade: next.hargaUpgrade,
@@ -777,6 +861,8 @@ export async function persistChanges(
             gaji_pokok: next.gajiPokok ?? {},
             gaji_dibayar: next.gajiDibayar ?? {},
             saldo_aktual: next.saldoAktual ?? {},
+            setoran_rekening: next.setoranRekening ?? [],
+            saldo_awal: next.saldoAwal ?? { dompet: 0, rekening: 0 },
             brand_kicker: next.brandKicker ?? null,
             brand_name: next.brandName ?? null,
             dash_judul: next.dashJudul ?? null,

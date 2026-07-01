@@ -65,6 +65,32 @@ export type AbsenEvent = {
 }
 
 /**
+ * Satu task dalam "closing checklist" yang dikonfigurasi admin (mis. mematikan
+ * lampu studio, mengisi laporan keuangan, kirim laporan via WhatsApp). Disimpan
+ * di `app_config.closing_checklist`. Urutan array = urutan tampil di modal.
+ *
+ * `shifts` menentukan di shift mana task ini muncul (pagi/sore/full berbeda
+ * karena tugas closing-nya beda). `undefined`/kosong dianggap "semua shift"
+ * demi kompatibilitas data lama.
+ */
+export type ClosingTask = {
+  id: string
+  label: string
+  shifts?: Shift[]
+}
+
+/**
+ * Bukti satu task closing yang sudah dicentang karyawan saat clock out. Disimpan
+ * per hari di `absen_records.checklist_pulang`. `label` disnapshot saat pulang
+ * supaya riwayat tetap benar meski admin kelak mengubah/menghapus task-nya.
+ */
+export type ChecklistPulangItem = {
+  id: string
+  label: string
+  waktu: string
+}
+
+/**
  * Status persetujuan satu hari absensi.
  *  - 'disetujui' : absensi resmi (real-time hari ini, atau manual yang sudah
  *                  di-ACC admin). Dihitung & ditampilkan sebagai kehadiran.
@@ -90,6 +116,12 @@ export type AbsenHari = {
    */
   extraMenit?: number
   extraCatatan?: string
+  /**
+   * Bukti closing checklist yang dicentang saat clock out (audit trail). Hanya
+   * terisi untuk clock out real-time yang melewati checklist. `undefined` =
+   * hari tanpa checklist (data lama, entri manual, atau checklist belum diatur).
+   */
+  checklistPulang?: ChecklistPulangItem[]
 }
 
 // Layanan & Upgrade are dynamic now: ids are admin-defined (see layananCatalog /
@@ -231,6 +263,21 @@ export type PenyesuaianUangKecil = {
   catatan: string
 }
 
+/**
+ * Satu setoran uang tunai dari dompet/laci ke rekening bank. Dipakai di
+ * rekonsiliasi rangkuman akhir bulan: income tunai yang sudah disetor tidak
+ * lagi dianggap ada di dompet, melainkan pindah ke rekening. Per bulan,
+ * saldo dompet yang diharapkan = income tunai − Σ setoran, dan saldo rekening
+ * yang diharapkan = income QRIS + Σ setoran. `jumlah` selalu > 0 (Rupiah);
+ * menghapus baris membatalkan setoran itu. Admin-only.
+ */
+export type SetoranRekening = {
+  id: string
+  tanggal: string
+  jumlah: number
+  catatan: string
+}
+
 // ---------- Event (Photobooth & Photo Game) ----------
 // Laporan event berdiri SENDIRI, terpisah penuh dari laporan_income (Photo
 // Studio): tidak menyentuh stok, gaji, maupun dashboard income.
@@ -305,6 +352,59 @@ export type Pengeluaran = {
   deskripsi: string
   jumlah: number
   catatan: string
+  /**
+   * Sumber dana pengeluaran ini: dibayar dari uang tunai (`cash`, dompet/laci)
+   * atau dari `rekening` (transfer/debit bank). Dipakai rekonsiliasi rangkuman
+   * untuk memotong saldo yang tepat: dompet berkurang oleh pengeluaran cash,
+   * rekening oleh pengeluaran rekening. `undefined` (data lama) dianggap `cash`.
+   */
+  sumber?: 'cash' | 'rekening'
+}
+
+/**
+ * Tahap satu program promosi di "Papan Promosi" (kanban marketing).
+ * Dua tahap pertama masih rahasia (hanya admin & pengusul); tiga tahap terakhir
+ * tampil ke karyawan begitu `status` = 'disetujui'.
+ *  - 'ide'        : usulan mentah (draft), belum tentu dijalankan.
+ *  - 'rencana'    : sedang direncanakan admin, belum diumumkan.
+ *  - 'comingsoon' : akan datang, boleh diumumkan ke karyawan.
+ *  - 'berjalan'   : promo sedang aktif.
+ *  - 'selesai'    : promo sudah berakhir / diarsipkan.
+ */
+export type PromoTahap = 'ide' | 'rencana' | 'comingsoon' | 'berjalan' | 'selesai'
+
+/**
+ * Status persetujuan satu kartu promosi (pola sama dengan [AbsenStatus]).
+ *  - 'menunggu'  : ide yang diusulkan karyawan, belum di-ACC admin. Hanya admin
+ *                  & si pengusul yang melihatnya.
+ *  - 'disetujui' : kartu resmi milik papan. Kalau tahap-nya sudah tayang
+ *                  (comingsoon/berjalan/selesai) ia tampil ke semua karyawan.
+ */
+export type PromoStatus = 'menunggu' | 'disetujui'
+
+/**
+ * Satu program promosi. Visibilitas ke karyawan diturunkan dari `tahap` + `status`
+ * (bukan kolom terpisah): tampil kalau `status='disetujui'` dan tahap termasuk
+ * comingsoon/berjalan/selesai, atau kalau kartu itu milik karyawan sendiri.
+ * Dikuatkan di sisi server lewat RLS (migration 0035).
+ */
+export type PromoProgram = {
+  id: string
+  judul: string
+  deskripsi: string
+  tahap: PromoTahap
+  status: PromoStatus
+  /** Periode promo (opsional untuk ide/rencana). Format YYYY-MM-DD. */
+  tanggalMulai?: string
+  tanggalSelesai?: string
+  /** Pengusul / pembuat (profiles.id). Distempel otomatis saat insert. */
+  dibuatOleh?: string
+  /**
+   * Desain promo untuk sosial media (data URL JPEG, di-resize di client).
+   * Diunggah admin; karyawan yang bisa melihat promo dapat mengunduhnya untuk
+   * diposting. `undefined` = belum ada desain. Lihat migration 0036.
+   */
+  desain?: string
 }
 
 export type FontPair = 'playful' | 'editorial' | 'modern' | 'minimal' | 'oui'
@@ -337,6 +437,12 @@ export type AppData = {
   layananCatalog: LayananDef[]
   upgradeCatalog: UpgradeDef[]
   produkCatalog: ProdukDef[]
+  /**
+   * Daftar task closing yang wajib dicentang karyawan sebelum clock out.
+   * Dikonfigurasi admin di Pengaturan, disimpan di `app_config.closing_checklist`.
+   * Array kosong = fitur nonaktif (clock out langsung tanpa checklist).
+   */
+  closingChecklist: ClosingTask[]
   hargaTiket: HargaTiket
   hargaCetak: number
   hargaUpgrade: HargaUpgrade
@@ -364,6 +470,22 @@ export type AppData = {
    */
   saldoAktual: Record<string, { dompet: number; rekening: number }>
   /**
+   * Riwayat setoran uang tunai ke rekening. Dipakai rekonsiliasi rangkuman
+   * akhir bulan agar income tunai yang sudah disetor pindah ke sisi rekening
+   * (tidak lagi terbaca sebagai cash di dompet). Disimpan di
+   * `app_config.setoran_rekening` (JSONB array). Lihat [SetoranRekening].
+   */
+  setoranRekening: SetoranRekening[]
+  /**
+   * Saldo awal (opening balance) dompet & rekening saat sistem MULAI mencatat —
+   * kas/uang yang sudah ada dari penjualan sebelum sistem dibangun. Dipakai
+   * rekonsiliasi rangkuman yang dihitung KUMULATIF: saldo rekening seharusnya =
+   * saldoAwal.rekening + Σ QRIS + Σ setoran (s/d bulan terpilih); dompet =
+   * saldoAwal.dompet + Σ tunai − Σ setoran. Diisi sekali. Disimpan di
+   * `app_config.saldo_awal` (JSONB). Default 0/0 = belum diisi.
+   */
+  saldoAwal: { dompet: number; rekening: number }
+  /**
    * Info pembayaran per slip gaji, key = `${employeeId}::${YYYY-MM}`:
    *  - `metode` : "Pembayaran via" — label bebas (mis. "Transfer Bank", "Tunai").
    *  - `nomor`  : nomor rekening / e-wallet (isian manual karyawan).
@@ -385,6 +507,8 @@ export type AppData = {
   stokAmplop: number
   salahCetak: SalahCetak[]
   pengeluaran: Pengeluaran[]
+  /** Papan Promosi (kanban marketing). Lihat [PromoProgram] & migration 0035. */
+  promoPrograms: PromoProgram[]
   headerJudul?: string
   headerSub?: string
   incomeJudul?: string

@@ -11,6 +11,7 @@ export type NavId =
   | 'event-game'
   | 'inventaris'
   | 'pengeluaran'
+  | 'promosi'
   | 'gaji'
   | 'pengaturan'
 
@@ -29,6 +30,8 @@ const NAV_ITEMS: Item[] = [
   { id: 'profil', label: 'Profil Karyawan', icon: Icons.user, group: 'Operasional' },
   { id: 'absensi', label: 'Presensi Karyawan', icon: Icons.clock, group: 'Operasional' },
   { id: 'inventaris', label: 'Inventaris & Stok', icon: Icons.box, group: 'Operasional' },
+  // Karyawan boleh lihat menu Promosi — konten difilter per peran + RLS.
+  { id: 'promosi', label: 'Papan Promosi', icon: Icons.sun, group: 'Operasional' },
   { id: 'laporan', label: 'Studio', icon: Icons.wallet, group: 'Keuangan' },
   { id: 'pengeluaran', label: 'Pengeluaran', icon: Icons.cart, group: 'Keuangan' },
   // Karyawan boleh lihat gaji — tapi hanya slip miliknya sendiri (difilter di layar).

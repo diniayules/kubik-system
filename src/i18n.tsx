@@ -108,8 +108,13 @@ const ID: Dict = {
   'inc.rekap.gaji': 'Pengeluaran Gaji',
   'inc.rekap.lain': 'Pengeluaran Lain-lain',
   'inc.rekap.bersih': 'Bersih',
+  'inc.rekap.rekonTitle': 'Cek saldo — dompet & rekening',
+  'inc.rekap.dompet': 'Saldo dompet (aktual)',
+  'inc.rekap.rekening': 'Saldo rekening (aktual)',
+  'inc.rekap.balance': '✓ Balance dengan income',
+  'inc.rekap.selisih': 'Selisih {rp}',
   'inc.rekap.hint':
-    'Tunai + QRIS diambil dari metode pembayaran tiap laporan; gaji dihitung dari slip semua karyawan bulan ini; lain-lain dari halaman Pengeluaran.',
+    'Tunai + QRIS diambil dari metode pembayaran tiap laporan; gaji dihitung dari slip semua karyawan bulan ini; lain-lain dari halaman Pengeluaran. Isi saldo dompet & rekening yang sebenarnya untuk mengecek: dompet dibandingkan income tunai, rekening dibandingkan income QRIS (selisih = aktual − income).',
   // Uang besar / kecil bar
   'inc.ub.label': '💰 Total uang besar di laci',
   'inc.ub.hint': 'bertambah otomatis dari uang besar tiap laporan',
@@ -389,8 +394,13 @@ const EN: Dict = {
   'inc.rekap.gaji': 'Salary Expense',
   'inc.rekap.lain': 'Other Expenses',
   'inc.rekap.bersih': 'Net',
+  'inc.rekap.rekonTitle': 'Balance check — wallet & account',
+  'inc.rekap.dompet': 'Cash wallet (actual)',
+  'inc.rekap.rekening': 'Bank account (actual)',
+  'inc.rekap.balance': '✓ Balanced with income',
+  'inc.rekap.selisih': 'Difference {rp}',
   'inc.rekap.hint':
-    'Cash + QRIS come from each report’s payment method; salary is computed from all employees’ slips this month; other expenses from the Expenses page.',
+    'Cash + QRIS come from each report’s payment method; salary is computed from all employees’ slips this month; other expenses from the Expenses page. Enter the actual wallet & account balances to check: wallet vs cash income, account vs QRIS income (difference = actual − income).',
   // Big / small cash bar
   'inc.ub.label': '💰 Total large cash in drawer',
   'inc.ub.hint': 'increases automatically from the large cash of each report',

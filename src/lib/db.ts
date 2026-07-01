@@ -160,6 +160,7 @@ type ConfigRow = {
   harga_produk: HargaProduk | null
   gaji_pokok: Record<string, number> | null
   gaji_dibayar: Record<string, boolean> | null
+  saldo_aktual: Record<string, { dompet: number; rekening: number }> | null
   brand_kicker: string | null
   brand_name: string | null
   dash_judul: string | null
@@ -430,6 +431,7 @@ export async function fetchAppData(): Promise<AppData> {
     hargaProduk: config?.harga_produk ?? { ...HARGA_PRODUK_DEFAULT },
     gajiPokok: config?.gaji_pokok ?? {},
     gajiDibayar: config?.gaji_dibayar ?? {},
+    saldoAktual: config?.saldo_aktual ?? {},
     gajiPembayaranVia: Object.fromEntries(
       pembayaranVia.map((r) => [
         `${r.employee_id}::${r.periode}`,
@@ -749,6 +751,7 @@ export async function persistChanges(
     'hargaProduk',
     'gajiPokok',
     'gajiDibayar',
+    'saldoAktual',
     'brandKicker',
     'brandName',
     'dashJudul',
@@ -773,6 +776,7 @@ export async function persistChanges(
             harga_produk: next.hargaProduk,
             gaji_pokok: next.gajiPokok ?? {},
             gaji_dibayar: next.gajiDibayar ?? {},
+            saldo_aktual: next.saldoAktual ?? {},
             brand_kicker: next.brandKicker ?? null,
             brand_name: next.brandName ?? null,
             dash_judul: next.dashJudul ?? null,

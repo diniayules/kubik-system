@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import type {
   AppData,
@@ -234,6 +234,35 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
       year: 'numeric',
     })
   }
+
+  // ---- Rekonsiliasi saldo aktual (dompet cash & rekening bank) -----------
+  // Admin memasukkan nominal uang yang BENAR-BENAR ada di dompet & rekening;
+  // dibandingkan dengan income tunai (→ dompet) & QRIS (→ rekening) bulan itu.
+  // Selisih = aktual − income. Draft lokal supaya tidak menulis DB tiap ketukan
+  // (commit saat blur / Enter), dan disinkron ulang saat ganti periode.
+  const [dompetDraft, setDompetDraft] = useState(0)
+  const [rekeningDraft, setRekeningDraft] = useState(0)
+  useEffect(() => {
+    const s = data.saldoAktual[rekapAktif] ?? { dompet: 0, rekening: 0 }
+    setDompetDraft(s.dompet)
+    setRekeningDraft(s.rekening)
+  }, [rekapAktif, data.saldoAktual])
+
+  function simpanSaldo(patch: Partial<{ dompet: number; rekening: number }>) {
+    const cur = data.saldoAktual[rekapAktif] ?? { dompet: 0, rekening: 0 }
+    const merged = {
+      dompet: patch.dompet ?? cur.dompet,
+      rekening: patch.rekening ?? cur.rekening,
+    }
+    if (merged.dompet === cur.dompet && merged.rekening === cur.rekening) return
+    const next = { ...data.saldoAktual }
+    if (merged.dompet === 0 && merged.rekening === 0) delete next[rekapAktif]
+    else next[rekapAktif] = merged
+    setData({ ...data, saldoAktual: next })
+  }
+
+  const selisihDompet = dompetDraft - rekapBulan.tunai
+  const selisihRekening = rekeningDraft - rekapBulan.qris
 
   // ---- Buku kas "uang besar" (admin & karyawan) --------------------------
   // Saldo berjalan = Σ(uangBesar tiap laporan) − Σ(pengambilan/setoran).
@@ -1000,6 +1029,65 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
               {formatRupiah(rekapBulan.bersih)}
             </span>
           </div>
+
+          {/* Rekonsiliasi: cek income tunai/QRIS balance dengan dompet/rekening */}
+          <div className="rekap-rekon">
+            <div className="rekap-rekon-head">{t('inc.rekap.rekonTitle')}</div>
+            <div className="rekap-rekon-grid">
+              <div className="rekap-rekon-item">
+                <label className="rekap-rekon-field">
+                  <span>💵 {t('inc.rekap.dompet')}</span>
+                  <RupiahInput
+                    value={dompetDraft}
+                    onChange={setDompetDraft}
+                    onBlur={() => simpanSaldo({ dompet: dompetDraft })}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+                    }}
+                  />
+                </label>
+                <div
+                  className={
+                    'rekap-rekon-status' +
+                    (selisihDompet === 0 ? ' is-ok' : ' is-off')
+                  }
+                >
+                  {selisihDompet === 0
+                    ? t('inc.rekap.balance')
+                    : t('inc.rekap.selisih', {
+                        rp: formatRupiah(selisihDompet),
+                      })}
+                </div>
+              </div>
+
+              <div className="rekap-rekon-item">
+                <label className="rekap-rekon-field">
+                  <span>🏦 {t('inc.rekap.rekening')}</span>
+                  <RupiahInput
+                    value={rekeningDraft}
+                    onChange={setRekeningDraft}
+                    onBlur={() => simpanSaldo({ rekening: rekeningDraft })}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+                    }}
+                  />
+                </label>
+                <div
+                  className={
+                    'rekap-rekon-status' +
+                    (selisihRekening === 0 ? ' is-ok' : ' is-off')
+                  }
+                >
+                  {selisihRekening === 0
+                    ? t('inc.rekap.balance')
+                    : t('inc.rekap.selisih', {
+                        rp: formatRupiah(selisihRekening),
+                      })}
+                </div>
+              </div>
+            </div>
+          </div>
+
           <p className="rekap-hint">{t('inc.rekap.hint')}</p>
         </section>
       )}

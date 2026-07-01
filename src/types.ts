@@ -355,6 +355,15 @@ export type AppData = {
    */
   gajiDibayar: Record<string, boolean>
   /**
+   * Saldo aktual per bulan untuk rekonsiliasi rangkuman akhir bulan, key =
+   * `YYYY-MM`. `dompet` = uang tunai fisik yang benar-benar ada di dompet/laci,
+   * `rekening` = saldo bank hasil terima QRIS. Dipakai admin untuk mengecek
+   * apakah income tunai balance dengan dompet & income QRIS balance dengan
+   * rekening (selisih = aktual − income). Disimpan di `app_config.saldo_aktual`
+   * (JSONB), pola sama seperti gajiDibayar. Key tidak ada = belum diisi.
+   */
+  saldoAktual: Record<string, { dompet: number; rekening: number }>
+  /**
    * Info pembayaran per slip gaji, key = `${employeeId}::${YYYY-MM}`:
    *  - `metode` : "Pembayaran via" — label bebas (mis. "Transfer Bank", "Tunai").
    *  - `nomor`  : nomor rekening / e-wallet (isian manual karyawan).

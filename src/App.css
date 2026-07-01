@@ -419,6 +419,18 @@
 .rekap-bersih.is-negatif .rekap-bersih-val { color: var(--pink); }
 .rekap-hint { font-size: 11.5px; color: var(--ink-soft); font-weight: 600; line-height: 1.5; margin: 12px 0 0; }
 
+/* Rekonsiliasi saldo aktual (dompet & rekening) di kartu rangkuman */
+.rekap-rekon { margin-top: 16px; padding-top: 14px; border-top: 1.5px dashed var(--line); }
+.rekap-rekon-head { font-size: 13px; font-weight: 800; color: var(--ink); text-transform: uppercase; letter-spacing: .03em; margin-bottom: 12px; }
+.rekap-rekon-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+@media (max-width: 560px) { .rekap-rekon-grid { grid-template-columns: 1fr; } }
+.rekap-rekon-item { display: flex; flex-direction: column; gap: 6px; }
+.rekap-rekon-field { display: flex; flex-direction: column; gap: 5px; }
+.rekap-rekon-field > span { font-size: 12.5px; font-weight: 700; color: var(--ink-soft); }
+.rekap-rekon-status { font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.rekap-rekon-status.is-ok { color: var(--mint-deep); }
+.rekap-rekon-status.is-off { color: var(--pink); }
+
 /* Slip gaji: input gaji pokok */
 .gaji-pokok-field { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
 .gaji-pokok-field > span { font-size: 12.5px; font-weight: 700; color: var(--ink-soft); }

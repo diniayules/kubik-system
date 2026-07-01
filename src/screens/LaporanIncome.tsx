@@ -26,6 +26,7 @@ import {
   totalTiketPerLayanan,
   totalUpgradePerTipe,
 } from '../income'
+import { hariSeharusnyaBulan, hitungSlipGaji } from '../gaji'
 import { Icons } from '../components/Icons'
 import { IncomeEntryModal } from './IncomeEntryModal'
 import { Modal, ModalHead } from '../components/Modal'
@@ -163,6 +164,76 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
   const monthKey = hariIni.slice(0, 7)
   const monthData = sorted.filter((l) => l.tanggal.startsWith(monthKey))
   const totalBulanIni = monthData.reduce((s, l) => s + hitungIncome(l).total, 0)
+
+  // ---- Rangkuman akhir bulan (admin only) --------------------------------
+  // Periode yang bisa dipilih di rangkuman: bulan berjalan + semua bulan yang
+  // punya data (laporan income atau pengeluaran), terbaru di atas. Admin bisa
+  // melihat rangkuman bulan-bulan sebelumnya, bukan hanya bulan berjalan.
+  const rekapBulanTersedia = useMemo(() => {
+    const set = new Set<string>([monthKey])
+    for (const l of data.laporanIncome) set.add(l.tanggal.slice(0, 7))
+    for (const p of data.pengeluaran) set.add(p.tanggal.slice(0, 7))
+    return [...set].sort().reverse()
+  }, [data.laporanIncome, data.pengeluaran, monthKey])
+
+  // Bulan yang sedang ditampilkan di rangkuman (default: bulan berjalan).
+  const [rekapKey, setRekapKey] = useState(monthKey)
+  // Jaga-jaga kalau bulan terpilih tak lagi ada di daftar (mis. data berubah).
+  const rekapAktif = rekapBulanTersedia.includes(rekapKey) ? rekapKey : monthKey
+
+  // Pemasukan dipecah per metode bayar (tunai/QRIS) dari laporan bulan terpilih,
+  // dikurangi dua kelompok pengeluaran: gaji (dihitung dari slip semua karyawan
+  // bulan itu, memakai logika yang sama dengan layar Gaji) dan pengeluaran
+  // lain-lain (halaman Pengeluaran). Bersih = pemasukan − gaji − lain-lain.
+  const rekapBulan = useMemo(() => {
+    const laporanBulan = data.laporanIncome.filter((l) =>
+      l.tanggal.startsWith(rekapAktif),
+    )
+    const tunai = laporanBulan.reduce((s, l) => s + (l.tunai ?? 0), 0)
+    const qris = laporanBulan.reduce((s, l) => s + (l.qris ?? 0), 0)
+    const pemasukan = tunai + qris
+
+    const recordsBulan = data.records.filter((r) =>
+      r.tanggal.startsWith(rekapAktif),
+    )
+    const hariSeharusnya = hariSeharusnyaBulan(rekapAktif, hariIni)
+    const gaji = data.employees
+      .filter((e) => e.role !== 'admin')
+      .reduce(
+        (s, emp) =>
+          s +
+          hitungSlipGaji(
+            emp,
+            data.gajiPokok[emp.id] ?? 0,
+            recordsBulan,
+            laporanBulan,
+            hariSeharusnya,
+          ).total,
+        0,
+      )
+
+    const lain = data.pengeluaran
+      .filter((p) => p.tanggal.startsWith(rekapAktif))
+      .reduce((s, p) => s + (p.jumlah || 0), 0)
+
+    return { tunai, qris, pemasukan, gaji, lain, bersih: pemasukan - gaji - lain }
+  }, [
+    rekapAktif,
+    hariIni,
+    data.records,
+    data.laporanIncome,
+    data.employees,
+    data.gajiPokok,
+    data.pengeluaran,
+  ])
+
+  function labelBulan(key: string): string {
+    const [y, m] = key.split('-').map(Number)
+    return new Date(y, m - 1, 1).toLocaleDateString('id-ID', {
+      month: 'long',
+      year: 'numeric',
+    })
+  }
 
   // ---- Buku kas "uang besar" (admin & karyawan) --------------------------
   // Saldo berjalan = Σ(uangBesar tiap laporan) − Σ(pengambilan/setoran).
@@ -864,6 +935,74 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
           </button>
         </div>
       </section>
+
+      {/* Rangkuman akhir bulan — khusus admin (menampilkan nominal & gaji). */}
+      {showMoney && (
+        <section className="rekap-bulan">
+          <div className="rekap-head">
+            <div>
+              <h2>{t('inc.rekap.title')}</h2>
+              <p className="rekap-sub">
+                {t('inc.rekap.sub', { bulan: labelBulan(rekapAktif) })}
+              </p>
+            </div>
+            <label className="rekap-periode">
+              <span>{t('inc.rekap.periode')}</span>
+              <select
+                value={rekapAktif}
+                onChange={(e) => setRekapKey(e.target.value)}
+              >
+                {rekapBulanTersedia.map((b) => (
+                  <option key={b} value={b}>
+                    {labelBulan(b)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <div className="rekap-rows">
+            <div className="rekap-row">
+              <span className="rekap-lbl">💵 {t('inc.rekap.tunai')}</span>
+              <span className="rekap-val is-plus">
+                {formatRupiah(rekapBulan.tunai)}
+              </span>
+            </div>
+            <div className="rekap-row">
+              <span className="rekap-lbl">📱 {t('inc.rekap.qris')}</span>
+              <span className="rekap-val is-plus">
+                {formatRupiah(rekapBulan.qris)}
+              </span>
+            </div>
+            <div className="rekap-row rekap-row--subtotal">
+              <span className="rekap-lbl">{t('inc.rekap.pemasukan')}</span>
+              <span className="rekap-val">{formatRupiah(rekapBulan.pemasukan)}</span>
+            </div>
+            <div className="rekap-row">
+              <span className="rekap-lbl">👥 {t('inc.rekap.gaji')}</span>
+              <span className="rekap-val is-minus">
+                − {formatRupiah(rekapBulan.gaji)}
+              </span>
+            </div>
+            <div className="rekap-row">
+              <span className="rekap-lbl">🛒 {t('inc.rekap.lain')}</span>
+              <span className="rekap-val is-minus">
+                − {formatRupiah(rekapBulan.lain)}
+              </span>
+            </div>
+          </div>
+          <div
+            className={
+              'rekap-bersih' + (rekapBulan.bersih < 0 ? ' is-negatif' : '')
+            }
+          >
+            <span className="rekap-bersih-lbl">{t('inc.rekap.bersih')}</span>
+            <span className="rekap-bersih-val">
+              {formatRupiah(rekapBulan.bersih)}
+            </span>
+          </div>
+          <p className="rekap-hint">{t('inc.rekap.hint')}</p>
+        </section>
+      )}
 
       <div className="section-head">
         <h2>

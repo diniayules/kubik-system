@@ -98,6 +98,18 @@ const ID: Dict = {
   'inc.stat.minggu': '7 hari terakhir',
   'inc.stat.rata': 'Rata-rata / hari',
   'inc.stat.bulan': 'Bulan ini ({n} hari)',
+
+  'inc.rekap.title': '🧾 Rangkuman Akhir Bulan',
+  'inc.rekap.sub': 'Ringkasan keuangan {bulan} — hanya terlihat oleh admin',
+  'inc.rekap.periode': 'Periode',
+  'inc.rekap.tunai': 'Income Tunai',
+  'inc.rekap.qris': 'Income QRIS',
+  'inc.rekap.pemasukan': 'Total Pemasukan',
+  'inc.rekap.gaji': 'Pengeluaran Gaji',
+  'inc.rekap.lain': 'Pengeluaran Lain-lain',
+  'inc.rekap.bersih': 'Bersih',
+  'inc.rekap.hint':
+    'Tunai + QRIS diambil dari metode pembayaran tiap laporan; gaji dihitung dari slip semua karyawan bulan ini; lain-lain dari halaman Pengeluaran.',
   // Uang besar / kecil bar
   'inc.ub.label': '💰 Total uang besar di laci',
   'inc.ub.hint': 'bertambah otomatis dari uang besar tiap laporan',
@@ -367,6 +379,18 @@ const EN: Dict = {
   'inc.stat.minggu': 'Last 7 days',
   'inc.stat.rata': 'Average / day',
   'inc.stat.bulan': 'This month ({n} days)',
+
+  'inc.rekap.title': '🧾 End-of-Month Summary',
+  'inc.rekap.sub': '{bulan} financial summary — visible to admin only',
+  'inc.rekap.periode': 'Period',
+  'inc.rekap.tunai': 'Cash Income',
+  'inc.rekap.qris': 'QRIS Income',
+  'inc.rekap.pemasukan': 'Total Income',
+  'inc.rekap.gaji': 'Salary Expense',
+  'inc.rekap.lain': 'Other Expenses',
+  'inc.rekap.bersih': 'Net',
+  'inc.rekap.hint':
+    'Cash + QRIS come from each report’s payment method; salary is computed from all employees’ slips this month; other expenses from the Expenses page.',
   // Big / small cash bar
   'inc.ub.label': '💰 Total large cash in drawer',
   'inc.ub.hint': 'increases automatically from the large cash of each report',

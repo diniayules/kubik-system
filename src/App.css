@@ -1639,6 +1639,8 @@
   border-color: color-mix(in srgb, var(--mint) 45%, transparent);
 }
 .overlap-banner.extra-banner strong { color: var(--mint-deep); }
+.overlap-banner.opening-reminder { margin-top: 12px; }
+.overlap-banner.opening-reminder .btn { margin-top: 10px; }
 .absen-tanggal-pick {
   display: flex; flex-direction: column; gap: 4px; align-items: flex-start;
   margin-left: auto;
@@ -1692,6 +1694,7 @@
 .audit-skip { background: var(--pink-bg); color: var(--pink-deep); border: 1.5px solid color-mix(in srgb, var(--pink) 40%, transparent); }
 .audit-extra { background: var(--mint-bg, color-mix(in srgb, var(--mint) 18%, transparent)); color: var(--mint-deep); border: 1.5px solid color-mix(in srgb, var(--mint) 45%, transparent); }
 .audit-closing { background: color-mix(in srgb, var(--primary) 14%, transparent); color: var(--primary); border: 1.5px solid color-mix(in srgb, var(--primary) 32%, transparent); cursor: help; }
+.audit-opening { background: var(--yellow-bg); color: var(--yellow-deep); border: 1.5px solid color-mix(in srgb, var(--yellow) 45%, transparent); cursor: help; }
 
 /* ---- Closing checklist: modal saat clock out ---- */
 .closing-body { padding: 20px 24px 24px; }

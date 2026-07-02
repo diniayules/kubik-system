@@ -95,6 +95,21 @@ export function Absen({
   // Modal closing checklist: tampil saat karyawan menekan "Catat Pulang" secara
   // real-time (bukan entri manual) dan admin sudah mengonfigurasi daftar task.
   const [showClosing, setShowClosing] = useState(false)
+  // Modal checklist pagi: muncul otomatis SETELAH clock in (non-blok — jam masuk
+  // sudah tercatat) dan bisa dibuka lagi lewat pengingat kalau belum diisi.
+  const [showOpening, setShowOpening] = useState(false)
+
+  // Tugas checklist pagi yang berlaku untuk shift hari ini, plus penanda apakah
+  // karyawan sudah clock in tapi belum mengisi checklist-nya (untuk pengingat).
+  const tugasPagi = record
+    ? checklistTasksUntuk(data.openingChecklist, record.shift)
+    : []
+  const belumChecklistPagi =
+    !isManual &&
+    !!record &&
+    !!getEvent(record, 'masuk') &&
+    tugasPagi.length > 0 &&
+    !(record.checklistMasuk && record.checklistMasuk.length > 0)
 
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 1000)
@@ -165,7 +180,7 @@ export function Absen({
     // modalnya dulu — pulang baru dicatat setelah semua task dicentang. Entri
     // manual (tanggal lampau) dilewati, karena itu backfill, bukan closing nyata.
     if (tipe === 'pulang') {
-      const tasks = closingTasksUntuk(data.closingChecklist, record.shift)
+      const tasks = checklistTasksUntuk(data.closingChecklist, record.shift)
       if (!isManual && tasks.length > 0) {
         setShowClosing(true)
         return
@@ -202,6 +217,15 @@ export function Absen({
       records: data.records.map((r) => (r.id === record.id ? updated : r)),
     })
     toast('ok', `${EVENT_LABEL[tipe]} ${formatJam(waktu)}`)
+
+    // Setelah clock in real-time: kalau admin mengatur checklist pagi & belum
+    // diisi hari ini, tampilkan modalnya sebagai pengingat. NON-blok — jam masuk
+    // di atas sudah tercatat lebih dulu, tak peduli checklist dicentang atau tidak.
+    if (tipe === 'masuk' && !isManual) {
+      const tugas = checklistTasksUntuk(data.openingChecklist, record.shift)
+      const sudahDiisi = !!record.checklistMasuk && record.checklistMasuk.length > 0
+      if (tugas.length > 0 && !sudahDiisi) setShowOpening(true)
+    }
   }
 
   // Mencatat clock out (dipanggil langsung, atau dari modal closing checklist
@@ -262,6 +286,19 @@ export function Absen({
         ? `Istirahat dilewati · Pulang ${formatJam(waktu)}`
         : `${EVENT_LABEL.pulang} ${formatJam(waktu)}`,
     )
+  }
+
+  // Menyimpan bukti checklist pagi yang dicentang (audit trail). Tidak menyentuh
+  // events sama sekali — jam masuk sudah dicatat terpisah saat clock in.
+  function simpanChecklistMasuk(items: ChecklistPulangItem[]) {
+    if (!record) return
+    const updated: AbsenHari = { ...record, checklistMasuk: items }
+    setData({
+      ...data,
+      records: data.records.map((r) => (r.id === record.id ? updated : r)),
+    })
+    setShowOpening(false)
+    toast('ok', `Checklist pagi selesai (${items.length} tugas)`)
   }
 
   function lewatiIstirahat(mulaiTipe: EventTipe) {
@@ -577,6 +614,22 @@ export function Absen({
         <>
           <section className="detail-card">
             <ShiftBadge shift={record.shift} onChange={gantiShift} />
+            {belumChecklistPagi && (
+              <div className="overlap-banner opening-reminder">
+                ☀️ <strong>Checklist pagi belum diisi</strong>
+                <div className="overlap-sub">
+                  Absen pagi kamu sudah tercatat. Isi {tugasPagi.length} tugas
+                  persiapan buka sebagai catatan.
+                </div>
+                <button
+                  type="button"
+                  className="btn btn--primary btn--sm"
+                  onClick={() => setShowOpening(true)}
+                >
+                  ☀️ Isi Checklist Pagi
+                </button>
+              </div>
+            )}
             {isManual ? (
               <div className="next-action">
                 <div className="next-label">Isi jam manual</div>
@@ -855,37 +908,60 @@ export function Absen({
       </div>
 
       {showClosing && record && (
-        <ClosingChecklistModal
-          tasks={closingTasksUntuk(data.closingChecklist, record.shift)}
-          shift={record.shift}
+        <ChecklistModal
+          tasks={checklistTasksUntuk(data.closingChecklist, record.shift)}
+          icon="🌙"
+          title="Checklist Sebelum Pulang"
+          sub={`${SHIFT_LABEL[record.shift]} · centang semua tugas closing dulu, baru bisa clock out.`}
+          confirmLabel="Selesai & Pulang"
           onClose={() => setShowClosing(false)}
           onConfirm={(items) => simpanPulang(items)}
+        />
+      )}
+
+      {showOpening && record && (
+        <ChecklistModal
+          tasks={checklistTasksUntuk(data.openingChecklist, record.shift)}
+          icon="☀️"
+          title="Checklist Pagi"
+          sub={`${SHIFT_LABEL[record.shift]} · absen pagi sudah tercatat, centang tugas persiapan buka.`}
+          confirmLabel="Selesai"
+          onClose={() => setShowOpening(false)}
+          onConfirm={(items) => simpanChecklistMasuk(items)}
         />
       )}
     </>
   )
 }
 
-// Task closing yang berlaku untuk sebuah shift. `shifts` kosong/undefined
-// dianggap berlaku untuk SEMUA shift (kompatibilitas data lama).
-function closingTasksUntuk(list: ClosingTask[], shift: DayType): ClosingTask[] {
+// Task checklist (opening/closing) yang berlaku untuk sebuah shift. `shifts`
+// kosong/undefined dianggap berlaku untuk SEMUA shift (kompatibilitas data lama).
+function checklistTasksUntuk(list: ClosingTask[], shift: DayType): ClosingTask[] {
   return list.filter(
     (t) =>
       !t.shifts || t.shifts.length === 0 || t.shifts.includes(shift as Shift),
   )
 }
 
-// Modal daftar tugas closing yang wajib dicentang sebelum clock out. Tombol
-// "Selesai & Pulang" terkunci sampai SEMUA task dicentang. Saat dikonfirmasi,
-// tiap task disnapshot (id + label + waktu centang) sebagai bukti audit.
-function ClosingChecklistModal({
+// Modal daftar tugas checklist (dipakai untuk closing sebelum pulang & opening
+// pagi). Tombol konfirmasi terkunci sampai SEMUA task dicentang. Saat
+// dikonfirmasi, tiap task disnapshot (id + label + waktu centang) sebagai bukti
+// audit. Modal selalu bisa ditutup (Batal) — pemanggil yang menentukan apakah
+// menutup tanpa menyelesaikan berdampak (closing memblokir, opening tidak).
+function ChecklistModal({
   tasks,
-  shift,
+  icon,
+  title,
+  sub,
+  confirmLabel,
   onClose,
   onConfirm,
 }: {
   tasks: ClosingTask[]
-  shift: DayType
+  icon: string
+  title: string
+  sub: string
+  confirmLabel: string
   onClose: () => void
   onConfirm: (items: ChecklistPulangItem[]) => void
 }) {
@@ -916,10 +992,10 @@ function ClosingChecklistModal({
   return (
     <Modal onClose={onClose}>
       <ModalHead
-        icon="🌙"
+        icon={icon}
         color="var(--primary)"
-        title="Checklist Sebelum Pulang"
-        sub={`${SHIFT_LABEL[shift]} · centang semua tugas closing dulu, baru bisa clock out.`}
+        title={title}
+        sub={sub}
         onClose={onClose}
       />
       <div className="closing-body">
@@ -963,7 +1039,7 @@ function ClosingChecklistModal({
               disabled={!semua}
               onClick={konfirmasi}
             >
-              <Icons.check /> Selesai &amp; Pulang
+              <Icons.check /> {confirmLabel}
             </button>
           </div>
         </div>

@@ -91,6 +91,19 @@ export type ChecklistPulangItem = {
 }
 
 /**
+ * Task "checklist pagi" (opening) — struktur sama persis dengan {@link ClosingTask},
+ * dikonfigurasi admin & disimpan di `app_config.opening_checklist`. Muncul SETELAH
+ * absen pagi. Alias supaya intent-nya jelas walau bentuknya identik.
+ */
+export type OpeningTask = ClosingTask
+
+/**
+ * Bukti satu task pagi yang dicentang setelah clock in. Disimpan per hari di
+ * `absen_records.checklist_masuk`. Struktur sama dengan {@link ChecklistPulangItem}.
+ */
+export type ChecklistMasukItem = ChecklistPulangItem
+
+/**
  * Status persetujuan satu hari absensi.
  *  - 'disetujui' : absensi resmi (real-time hari ini, atau manual yang sudah
  *                  di-ACC admin). Dihitung & ditampilkan sebagai kehadiran.
@@ -122,6 +135,12 @@ export type AbsenHari = {
    * hari tanpa checklist (data lama, entri manual, atau checklist belum diatur).
    */
   checklistPulang?: ChecklistPulangItem[]
+  /**
+   * Bukti checklist pagi yang dicentang setelah clock in (audit trail). NON-blok:
+   * jam masuk tetap tercatat walau ini kosong. `undefined` = hari tanpa checklist
+   * pagi (data lama, entri manual, checklist belum diatur, atau belum diisi).
+   */
+  checklistMasuk?: ChecklistMasukItem[]
 }
 
 // Layanan & Upgrade are dynamic now: ids are admin-defined (see layananCatalog /
@@ -443,6 +462,13 @@ export type AppData = {
    * Array kosong = fitur nonaktif (clock out langsung tanpa checklist).
    */
   closingChecklist: ClosingTask[]
+  /**
+   * Daftar task checklist pagi yang muncul SETELAH karyawan clock in. Berbeda dari
+   * closing: TIDAK memblokir absen — hanya pengingat + audit trail. Dikonfigurasi
+   * admin di Pengaturan, disimpan di `app_config.opening_checklist`. Array kosong
+   * = fitur nonaktif.
+   */
+  openingChecklist: OpeningTask[]
   hargaTiket: HargaTiket
   hargaCetak: number
   hargaUpgrade: HargaUpgrade

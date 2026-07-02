@@ -127,6 +127,59 @@ export function Pengaturan({
     )
   }
 
+  // Draft lokal checklist pagi (task setelah clock in). Pola sama seperti closing,
+  // hanya beda field tujuan (openingChecklist) — non-blok, cuma pengingat.
+  const [openingTasks, setOpeningTasks] = useState<ClosingTask[]>(
+    data.openingChecklist,
+  )
+  function tambahTaskPagi() {
+    setOpeningTasks((ts) => [
+      ...ts,
+      { id: uid(), label: '', shifts: [...SHIFT_LIST] },
+    ])
+  }
+  function ubahTaskPagiLabel(id: string, label: string) {
+    setOpeningTasks((ts) => ts.map((t) => (t.id === id ? { ...t, label } : t)))
+  }
+  function toggleTaskPagiShift(id: string, shift: Shift) {
+    setOpeningTasks((ts) =>
+      ts.map((t) => {
+        if (t.id !== id) return t
+        const cur = t.shifts ?? [...SHIFT_LIST]
+        const shifts = cur.includes(shift)
+          ? cur.filter((s) => s !== shift)
+          : [...cur, shift]
+        return { ...t, shifts }
+      }),
+    )
+  }
+  function hapusTaskPagi(id: string) {
+    setOpeningTasks((ts) => ts.filter((t) => t.id !== id))
+  }
+  function pindahTaskPagi(id: string, arah: -1 | 1) {
+    setOpeningTasks((ts) => {
+      const i = ts.findIndex((t) => t.id === id)
+      const j = i + arah
+      if (i < 0 || j < 0 || j >= ts.length) return ts
+      const next = [...ts]
+      ;[next[i], next[j]] = [next[j], next[i]]
+      return next
+    })
+  }
+  function simpanChecklistPagi() {
+    const bersih = openingTasks
+      .map((t) => ({ ...t, label: t.label.trim() }))
+      .filter((t) => t.label)
+    setOpeningTasks(bersih)
+    setData({ ...data, openingChecklist: bersih })
+    toast(
+      'ok',
+      bersih.length
+        ? `Checklist pagi tersimpan (${bersih.length} tugas)`
+        : 'Checklist pagi dikosongkan — tanpa pengingat pagi',
+    )
+  }
+
   function setFontPair(p: FontPair) {
     setPref('fontPair', p)
     toast('ok', `Font diubah ke ${FONT_PAIRS[p].label}`)
@@ -685,6 +738,115 @@ export function Pengaturan({
               onClick={simpanChecklist}
             >
               <Icons.check /> Simpan Checklist
+            </button>
+          </div>
+        </div>
+      </section>
+      )}
+
+      {isAdmin && (
+      <section className="settings-card">
+        <div className="settings-head">
+          <div className="settings-head-ikon">☀️</div>
+          <div>
+            <h2 className="settings-title">Checklist Pagi</h2>
+            <p className="settings-sub">
+              Daftar tugas persiapan buka yang muncul SETELAH karyawan absen pagi
+              (mis. menyalakan lampu &amp; AC, menyapu, cek stok kertas, buka
+              pintu). Berbeda dari checklist pulang — ini <strong>tidak
+              memblokir</strong>: jam masuk tetap tercatat walau tugas belum
+              dicentang. Pilih di shift mana tiap tugas muncul. Kosongkan untuk
+              mematikan fitur.
+            </p>
+          </div>
+        </div>
+
+        <div className="settings-section">
+          <div className="closing-cfg-list">
+            {openingTasks.length === 0 && (
+              <div className="form-hint">
+                Belum ada tugas. Tambahkan minimal satu untuk mengaktifkan
+                checklist pagi setelah clock in.
+              </div>
+            )}
+            {openingTasks.map((t, i) => {
+              const shifts = t.shifts ?? [...SHIFT_LIST]
+              return (
+                <div key={t.id} className="closing-cfg-row">
+                  <div className="closing-cfg-main">
+                    <span className="closing-cfg-num">{i + 1}.</span>
+                    <input
+                      type="text"
+                      value={t.label}
+                      onChange={(e) => ubahTaskPagiLabel(t.id, e.target.value)}
+                      placeholder="mis. Menyalakan lampu & AC studio"
+                    />
+                    <button
+                      type="button"
+                      className="btn-mini btn-mini-ghost"
+                      onClick={() => pindahTaskPagi(t.id, -1)}
+                      disabled={i === 0}
+                      title="Naikkan"
+                    >
+                      ↑
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-mini btn-mini-ghost"
+                      onClick={() => pindahTaskPagi(t.id, 1)}
+                      disabled={i === openingTasks.length - 1}
+                      title="Turunkan"
+                    >
+                      ↓
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-mini btn-mini-skip"
+                      onClick={() => hapusTaskPagi(t.id)}
+                      title="Hapus tugas"
+                    >
+                      <Icons.trash />
+                    </button>
+                  </div>
+                  <div className="closing-cfg-shifts">
+                    <span className="closing-cfg-shifts-label">
+                      Tampil di shift:
+                    </span>
+                    {SHIFT_LIST.map((s) => (
+                      <button
+                        key={s}
+                        type="button"
+                        className={`shift-toggle${shifts.includes(s) ? ' on' : ''}`}
+                        onClick={() => toggleTaskPagiShift(t.id, s)}
+                      >
+                        {SHIFT_LABEL[s].replace('Shift ', '')}
+                      </button>
+                    ))}
+                    {shifts.length === 0 && (
+                      <span className="closing-cfg-warn">
+                        ⚠️ tak muncul di shift mana pun
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          <div className="closing-cfg-actions">
+            <button
+              type="button"
+              className="btn btn--ghost"
+              onClick={tambahTaskPagi}
+            >
+              + Tambah Tugas
+            </button>
+            <button
+              type="button"
+              className="btn btn--primary btn--lg"
+              onClick={simpanChecklistPagi}
+            >
+              <Icons.check /> Simpan Checklist Pagi
             </button>
           </div>
         </div>

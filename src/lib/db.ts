@@ -76,6 +76,7 @@ type AbsenRow = {
   extra_menit: number | null
   extra_catatan: string | null
   checklist_pulang: AbsenHari['checklistPulang'] | null
+  checklist_masuk: AbsenHari['checklistMasuk'] | null
 }
 type LaporanRow = {
   id: string
@@ -171,6 +172,7 @@ type ConfigRow = {
   upgrade_catalog: UpgradeDef[] | null
   produk_catalog: ProdukDef[] | null
   closing_checklist: ClosingTask[] | null
+  opening_checklist: ClosingTask[] | null
   harga_tiket: HargaTiket
   harga_cetak: number
   harga_upgrade: HargaUpgrade
@@ -222,7 +224,7 @@ export async function fetchAppData(): Promise<AppData> {
       .select('id, nama, jabatan, pin_hash, role, nomor_induk, no_hp, foto, nama_lengkap, tempat_lahir, tanggal_lahir, pendidikan, tanggal_diterima')
       .eq('active', true)
       .order('created_at', { ascending: true }),
-    supabase.from('absen_records').select('id, employee_id, tanggal, shift, events, status, extra_menit, extra_catatan, checklist_pulang'),
+    supabase.from('absen_records').select('id, employee_id, tanggal, shift, events, status, extra_menit, extra_catatan, checklist_pulang, checklist_masuk'),
     supabase
       .from('laporan_income')
       .select(
@@ -326,6 +328,9 @@ export async function fetchAppData(): Promise<AppData> {
     extraCatatan: r.extra_catatan ?? undefined,
     checklistPulang: Array.isArray(r.checklist_pulang)
       ? r.checklist_pulang
+      : undefined,
+    checklistMasuk: Array.isArray(r.checklist_masuk)
+      ? r.checklist_masuk
       : undefined,
   }))
 
@@ -474,6 +479,9 @@ export async function fetchAppData(): Promise<AppData> {
     closingChecklist: Array.isArray(config?.closing_checklist)
       ? config.closing_checklist
       : [],
+    openingChecklist: Array.isArray(config?.opening_checklist)
+      ? config.opening_checklist
+      : [],
     hargaTiket: config?.harga_tiket ?? { ...HARGA_TIKET_DEFAULT },
     hargaCetak: config?.harga_cetak ?? HARGA_CETAK_DEFAULT,
     hargaUpgrade: config?.harga_upgrade ?? { ...HARGA_UPGRADE_DEFAULT },
@@ -541,6 +549,7 @@ export async function persistChanges(
       extra_menit: r.extraMenit ?? 0,
       extra_catatan: r.extraCatatan ?? null,
       checklist_pulang: r.checklistPulang ?? null,
+      checklist_masuk: r.checklistMasuk ?? null,
     }),
   )
 
@@ -826,6 +835,7 @@ export async function persistChanges(
     'upgradeCatalog',
     'produkCatalog',
     'closingChecklist',
+    'openingChecklist',
     'hargaTiket',
     'hargaCetak',
     'hargaUpgrade',
@@ -854,6 +864,7 @@ export async function persistChanges(
             upgrade_catalog: next.upgradeCatalog,
             produk_catalog: next.produkCatalog,
             closing_checklist: next.closingChecklist ?? [],
+            opening_checklist: next.openingChecklist ?? [],
             harga_tiket: next.hargaTiket,
             harga_cetak: next.hargaCetak,
             harga_upgrade: next.hargaUpgrade,

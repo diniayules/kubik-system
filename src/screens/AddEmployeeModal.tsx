@@ -1,41 +1,53 @@
 import { useState } from 'react'
 import { Modal, ModalHead } from '../components/Modal'
 import { Icons } from '../components/Icons'
-import { hashPin } from '../storage'
-
-const PIN_LENGTH = 4
+import { createKaryawanAccount } from '../lib/db'
 
 export const ROLES = ['Operator', 'Editor', 'Kasir', 'Manajer']
 
 type Props = {
-  onAdd: (data: { nama: string; jabatan: string; pinHash: string }) => void
+  /** Dipanggil setelah akun berhasil dibuat (untuk reload daftar karyawan). */
+  onCreated: (nama: string) => void
   onClose: () => void
 }
 
-export function AddEmployeeModal({ onAdd, onClose }: Props) {
+export function AddEmployeeModal({ onCreated, onClose }: Props) {
   const [nama, setNama] = useState('')
   const [jabatan, setJabatan] = useState(ROLES[0])
-  const [pin, setPin] = useState('')
-  const [konfirmasi, setKonfirmasi] = useState('')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
-
-  const can = nama.trim().length >= 2
+  const [loading, setLoading] = useState(false)
 
   async function submit() {
-    if (!can) {
+    setError('')
+    if (nama.trim().length < 2) {
       setError('Nama minimal 2 huruf')
       return
     }
-    if (!/^\d+$/.test(pin) || pin.length !== PIN_LENGTH) {
-      setError(`PIN harus ${PIN_LENGTH} digit angka`)
+    if (!/^\S+@\S+\.\S+$/.test(email.trim())) {
+      setError('Email tidak valid')
       return
     }
-    if (pin !== konfirmasi) {
-      setError('Konfirmasi PIN tidak cocok')
+    if (password.length < 6) {
+      setError('Password minimal 6 karakter')
       return
     }
-    const hash = await hashPin(pin)
-    onAdd({ nama: nama.trim(), jabatan, pinHash: hash })
+    setLoading(true)
+    try {
+      await createKaryawanAccount({
+        email: email.trim().toLowerCase(),
+        password,
+        nama: nama.trim(),
+        jabatan,
+      })
+      onCreated(nama.trim())
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Gagal membuat akun')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -44,7 +56,7 @@ export function AddEmployeeModal({ onAdd, onClose }: Props) {
         icon={<Icons.user />}
         color="var(--pink)"
         title="Tambah Karyawan"
-        sub="Kartu absen baru"
+        sub="Buatkan akun login baru"
         onClose={onClose}
       />
       <div className="modal-body">
@@ -76,53 +88,35 @@ export function AddEmployeeModal({ onAdd, onClose }: Props) {
         </div>
 
         <div className="field">
-          <label>PIN pribadi karyawan ({PIN_LENGTH} digit)</label>
-          <div className="pin-form-grid">
+          <label>Email login</label>
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="email@kubik.id"
+          />
+        </div>
+
+        <div className="field">
+          <label>Password awal (min. 6 karakter)</label>
+          <input
+            type={showPassword ? 'text' : 'password'}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="••••••••"
+            minLength={6}
+          />
+          <label className="show-password">
             <input
-              type="password"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              maxLength={PIN_LENGTH}
-              className="pin-input"
-              style={{
-                width: '100%',
-                padding: '13px 15px',
-                borderRadius: 'var(--radius-sm)',
-                border: '1.8px solid var(--line)',
-                background: 'var(--surface-2)',
-                color: 'var(--ink)',
-              }}
-              value={pin}
-              onChange={(e) =>
-                setPin(e.target.value.replace(/\D/g, '').slice(0, PIN_LENGTH))
-              }
-              placeholder="••••"
+              type="checkbox"
+              checked={showPassword}
+              onChange={(e) => setShowPassword(e.target.checked)}
             />
-            <input
-              type="password"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              maxLength={PIN_LENGTH}
-              className="pin-input"
-              style={{
-                width: '100%',
-                padding: '13px 15px',
-                borderRadius: 'var(--radius-sm)',
-                border: '1.8px solid var(--line)',
-                background: 'var(--surface-2)',
-                color: 'var(--ink)',
-              }}
-              value={konfirmasi}
-              onChange={(e) =>
-                setKonfirmasi(
-                  e.target.value.replace(/\D/g, '').slice(0, PIN_LENGTH),
-                )
-              }
-              placeholder="ulangi"
-            />
-          </div>
+            Tampilkan password
+          </label>
           <div className="form-hint" style={{ marginTop: 10 }}>
-            🔒 PIN dipegang masing-masing karyawan untuk mencegah titip absen.
+            🔒 Berikan email &amp; password ini ke karyawan. Mereka bisa
+            menggantinya nanti.
           </div>
         </div>
 
@@ -131,10 +125,10 @@ export function AddEmployeeModal({ onAdd, onClose }: Props) {
         <button
           type="button"
           className="btn btn--pink btn--block btn--lg"
-          disabled={!can}
+          disabled={loading}
           onClick={() => void submit()}
         >
-          <Icons.plus /> Tambah ke Daftar
+          <Icons.plus /> {loading ? 'Membuat akun…' : 'Buat Akun Karyawan'}
         </button>
       </div>
     </Modal>

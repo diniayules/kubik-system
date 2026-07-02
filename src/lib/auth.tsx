@@ -21,12 +21,6 @@ type AuthState = {
 
 type AuthCtx = AuthState & {
   signIn: (email: string, password: string) => Promise<{ error: string | null }>
-  signUp: (
-    email: string,
-    password: string,
-    nama: string,
-    jabatan: string,
-  ) => Promise<{ error: string | null }>
   signOut: () => Promise<void>
   refreshProfile: () => Promise<void>
 }
@@ -99,19 +93,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error: error?.message ?? null }
   }
 
-  async function signUp(
-    email: string,
-    password: string,
-    nama: string,
-    jabatan: string,
-  ) {
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: { data: { nama, jabatan } },
-    })
-    return { error: error?.message ?? null }
-  }
+  // Pendaftaran mandiri ditutup: akun baru dibuat admin lewat edge function
+  // `create-karyawan` (lihat createKaryawanAccount di lib/db). Tidak ada signUp
+  // di sini agar tidak ada jalur publik membuat akun.
 
   async function signOut() {
     await supabase.auth.signOut()
@@ -135,7 +119,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isAdmin: profile?.role === 'admin',
       isKaryawan: profile?.role === 'karyawan',
       signIn,
-      signUp,
       signOut,
       refreshProfile,
     }),

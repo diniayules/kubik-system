@@ -12,6 +12,7 @@ import { Promosi } from './screens/Promosi'
 import { GajiKaryawan } from './screens/GajiKaryawan'
 import { Pengaturan } from './screens/Pengaturan'
 import { Login } from './screens/Login'
+import { AddEmployeeModal } from './screens/AddEmployeeModal'
 import { ClockChip } from './components/ClockChip'
 import { Sidebar, type NavId } from './components/Sidebar'
 import { type Theme } from './components/ThemeSwitcher'
@@ -68,6 +69,7 @@ function Inner() {
   const [screen, setScreen] = useState<Screen>({ name: 'landing' })
   const [theme, setTheme] = useState<Theme>(() => loadTheme())
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [showAddEmp, setShowAddEmp] = useState(false)
   const prefs = usePrefs()
 
   useEffect(() => {
@@ -203,11 +205,9 @@ function Inner() {
     toast('warn', `Absensi ${emp?.nama ?? 'karyawan'} (${rec.tanggal}) ditolak`)
   }
 
-  function infoTambahKaryawan() {
-    toast(
-      'info',
-      'Karyawan baru mendaftar sendiri di halaman login. Setelah itu admin mengatur jabatan & perannya di sini.',
-    )
+  function bukaTambahKaryawan() {
+    if (!auth.isAdmin) return
+    setShowAddEmp(true)
   }
 
   const meta = {
@@ -287,7 +287,7 @@ function Inner() {
                 onRename={(id) => renameKaryawan(id)}
                 onHapus={(id) => nonaktifkanKaryawan(id)}
                 onAktifkan={(id) => aktifkanKaryawan(id)}
-                onTambah={infoTambahKaryawan}
+                onTambah={bukaTambahKaryawan}
                 onSetujuiAbsen={setujuiAbsen}
                 onTolakAbsen={tolakAbsen}
               />
@@ -391,6 +391,17 @@ function Inner() {
           </main>
         </div>
       </div>
+
+      {showAddEmp && auth.isAdmin && (
+        <AddEmployeeModal
+          onClose={() => setShowAddEmp(false)}
+          onCreated={(nama) => {
+            setShowAddEmp(false)
+            toast('ok', `Akun ${nama} berhasil dibuat`)
+            reload()
+          }}
+        />
+      )}
     </>
   )
 }

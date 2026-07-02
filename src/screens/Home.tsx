@@ -137,7 +137,7 @@ export function Home({
         </h2>
         {isAdmin && (
           <button type="button" className="btn btn--add" onClick={onTambah}>
-            <Icons.info /> Cara Tambah Karyawan
+            <Icons.plus /> Tambah Karyawan
           </button>
         )}
       </div>
@@ -147,8 +147,8 @@ export function Home({
           <div className="ee-emoji">📸</div>
           <h3>Belum ada karyawan</h3>
           <p>
-            Karyawan baru mendaftar sendiri di halaman login. Setelah itu
-            kartunya muncul di sini.
+            Klik <strong>Tambah Karyawan</strong> untuk membuatkan akun login.
+            Kartunya langsung muncul di sini.
           </p>
         </div>
       ) : tampilan === 'list' ? (

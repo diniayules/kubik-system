@@ -970,3 +970,35 @@ export async function setEmployeeActive(
     .eq('id', id)
   if (error) throw new Error(error.message)
 }
+
+/**
+ * Membuat akun karyawan baru via edge function `create-karyawan`.
+ * Pendaftaran mandiri sudah ditutup — hanya admin (diverifikasi di server)
+ * yang bisa membuat akun. Password dipilih admin lalu diberikan ke karyawan.
+ */
+export async function createKaryawanAccount(input: {
+  email: string
+  password: string
+  nama: string
+  jabatan: string
+}): Promise<void> {
+  const { data, error } = await supabase.functions.invoke('create-karyawan', {
+    body: input,
+  })
+  if (error) {
+    // Non-2xx dari fungsi datang sebagai FunctionsHttpError; pesan asli ada di
+    // response body (error.context adalah Response).
+    let msg = error.message
+    const ctx = (error as { context?: Response }).context
+    if (ctx && typeof ctx.json === 'function') {
+      try {
+        const b = await ctx.json()
+        if (b?.error) msg = b.error
+      } catch {
+        /* biarkan pesan default */
+      }
+    }
+    throw new Error(msg)
+  }
+  if (data?.error) throw new Error(data.error)
+}

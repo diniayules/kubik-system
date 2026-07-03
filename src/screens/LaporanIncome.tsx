@@ -181,6 +181,8 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
 
   // Bulan yang sedang ditampilkan di rangkuman (default: bulan berjalan).
   const [rekapKey, setRekapKey] = useState(monthKey)
+  // Kartu rangkuman tampil ringkas (hanya laba bersih); detail muncul saat diklik.
+  const [rekapTerbuka, setRekapTerbuka] = useState(false)
   // Jaga-jaga kalau bulan terpilih tak lagi ada di daftar (mis. data berubah).
   const rekapAktif = rekapBulanTersedia.includes(rekapKey) ? rekapKey : monthKey
 
@@ -1082,28 +1084,56 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
 
       {/* Rangkuman akhir bulan — khusus admin (menampilkan nominal & gaji). */}
       {showMoney && (
-        <section className="rekap-bulan">
-          <div className="rekap-head">
-            <div>
+        <section className={'rekap-bulan' + (rekapTerbuka ? ' is-open' : '')}>
+          {/* Kepala kartu selalu tampil & bisa diklik: ringkas menampilkan
+              laba bersih; detail (rincian + rekonsiliasi) muncul saat dibuka. */}
+          <button
+            type="button"
+            className="rekap-toggle"
+            onClick={() => setRekapTerbuka((o) => !o)}
+            aria-expanded={rekapTerbuka}
+          >
+            <div className="rekap-toggle-info">
               <h2>{t('inc.rekap.title')}</h2>
               <p className="rekap-sub">
                 {t('inc.rekap.sub', { bulan: labelBulan(rekapAktif) })}
               </p>
             </div>
-            <label className="rekap-periode">
-              <span>{t('inc.rekap.periode')}</span>
-              <select
-                value={rekapAktif}
-                onChange={(e) => setRekapKey(e.target.value)}
+            <div className="rekap-toggle-right">
+              <div
+                className={
+                  'rekap-toggle-bersih' +
+                  (rekapBulan.bersih < 0 ? ' is-negatif' : '')
+                }
               >
-                {rekapBulanTersedia.map((b) => (
-                  <option key={b} value={b}>
-                    {labelBulan(b)}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
+                <span className="rekap-toggle-bersih-lbl">
+                  {t('inc.rekap.bersih')}
+                </span>
+                <span className="rekap-toggle-bersih-val">
+                  {formatRupiah(rekapBulan.bersih)}
+                </span>
+              </div>
+              <span className="rekap-chevron">
+                <Icons.chevron />
+              </span>
+            </div>
+          </button>
+
+          {rekapTerbuka && (
+            <div className="rekap-body">
+              <label className="rekap-periode">
+                <span>{t('inc.rekap.periode')}</span>
+                <select
+                  value={rekapAktif}
+                  onChange={(e) => setRekapKey(e.target.value)}
+                >
+                  {rekapBulanTersedia.map((b) => (
+                    <option key={b} value={b}>
+                      {labelBulan(b)}
+                    </option>
+                  ))}
+                </select>
+              </label>
           <div className="rekap-rows">
             <div className="rekap-row">
               <span className="rekap-lbl">💵 {t('inc.rekap.tunai')}</span>
@@ -1264,7 +1294,9 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
             </div>
           </div>
 
-          <p className="rekap-hint">{t('inc.rekap.hint')}</p>
+              <p className="rekap-hint">{t('inc.rekap.hint')}</p>
+            </div>
+          )}
         </section>
       )}
 

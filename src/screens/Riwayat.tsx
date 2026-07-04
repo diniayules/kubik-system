@@ -107,6 +107,7 @@ export function Riwayat({
     let overlap = 0
     let cuti = 0
     let libur = 0
+    let bersih = 0
     let extra = 0
     const perShift = { pagi: 0, sore: 0, full: 0 } as Record<string, number>
     for (const r of records) {
@@ -121,6 +122,10 @@ export function Riwayat({
         libur += 1
         continue
       }
+      if (r.shift === 'bersih') {
+        bersih += 1
+        continue
+      }
       const ring = hitungRingkasan(r, cariTakeover(r, data.records))
       kerja += ring.kerjaBersihMenit
       terlambat += ring.terlambatMenit
@@ -131,7 +136,7 @@ export function Riwayat({
         perShift[r.shift] = (perShift[r.shift] ?? 0) + 1
       }
     }
-    return { kerja, terlambat, lembur, hari, perShift, overlap, cuti, libur, extra }
+    return { kerja, terlambat, lembur, hari, perShift, overlap, cuti, libur, bersih, extra }
   }, [records, data.records])
 
   function bukaEdit(r: AbsenHari) {
@@ -372,12 +377,18 @@ export function Riwayat({
             <div className="ringkasan-label">Total lembur</div>
             <div className="ringkasan-value">{formatDurasi(total.lembur)}</div>
           </div>
-          {(total.cuti > 0 || total.libur > 0) && (
+          {(total.cuti > 0 || total.libur > 0 || total.bersih > 0) && (
             <div className="ringkasan-item tone-muted">
               <div className="ringkasan-label">Cuti &amp; Libur</div>
               <div className="ringkasan-value">
                 {SHIFT_IKON.cuti} {total.cuti} cuti · {SHIFT_IKON.libur}{' '}
                 {total.libur} libur
+                {total.bersih > 0 && (
+                  <>
+                    {' '}
+                    · {SHIFT_IKON.bersih} {total.bersih} cleaning
+                  </>
+                )}
               </div>
               <div className="ringkasan-hint">tidak dihitung sebagai absen</div>
             </div>

@@ -26,6 +26,7 @@ type Profil = {
   lemburMenit: number
   hariCuti: number
   hariLibur: number
+  hariBersih: number
   jumlahItem: number
   totalPenjualan: number
 }
@@ -37,6 +38,7 @@ const PROFIL_KOSONG: Profil = {
   lemburMenit: 0,
   hariCuti: 0,
   hariLibur: 0,
+  hariBersih: 0,
   jumlahItem: 0,
   totalPenjualan: 0,
 }
@@ -87,6 +89,10 @@ export function ProfilKaryawan({ data, setData, isAdmin, currentUserId }: Props)
       }
       if (rec.shift === 'libur') {
         p.hariLibur += 1
+        continue
+      }
+      if (rec.shift === 'bersih') {
+        p.hariBersih += 1
         continue
       }
       const ring = hitungRingkasan(rec, cariTakeover(rec, data.records))
@@ -272,6 +278,7 @@ function ProfilSheet({
           <Row label="Lembur" val={formatDurasi(profil.lemburMenit)} />
           <Row label="Cuti" val={`${profil.hariCuti} hari`} />
           <Row label="Libur studio" val={`${profil.hariLibur} hari`} />
+          <Row label="General cleaning" val={`${profil.hariBersih} kali`} />
         </section>
 
         {showPenjualanGaji && (

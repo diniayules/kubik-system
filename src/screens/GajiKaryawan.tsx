@@ -544,6 +544,9 @@ function SlipCard({
         {slip.hariLibur > 0 && (
           <Chip label="Libur studio" val={`${slip.hariLibur} hr`} />
         )}
+        {slip.hariBersih > 0 && (
+          <Chip label="General cleaning" val={`${slip.hariBersih}×`} />
+        )}
       </div>
 
       {/* Rincian gaji */}

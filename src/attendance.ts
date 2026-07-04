@@ -25,6 +25,7 @@ export const SHIFT_LABEL: Record<DayType, string> = {
   full: 'Shift Penuh',
   cuti: 'Cuti',
   libur: 'Libur Studio',
+  bersih: 'General Cleaning',
 }
 
 export const SHIFT_IKON: Record<DayType, string> = {
@@ -33,6 +34,7 @@ export const SHIFT_IKON: Record<DayType, string> = {
   full: '🌞',
   cuti: '🌴',
   libur: '🏖️',
+  bersih: '🧹',
 }
 
 export const SHIFT_RENTANG: Record<DayType, string> = {
@@ -41,6 +43,7 @@ export const SHIFT_RENTANG: Record<DayType, string> = {
   full: '09:00 – 21:00 WIB',
   cuti: 'Tidak masuk',
   libur: 'Studio tutup',
+  bersih: 'Kerja bakti bersama',
 }
 
 export const SHIFT_DESKRIPSI: Record<DayType, string> = {
@@ -49,13 +52,25 @@ export const SHIFT_DESKRIPSI: Record<DayType, string> = {
   full: 'Istirahat 12:00–13:00 & 18:00–19:00 (kerja bersih 10 jam)',
   cuti: 'Cuti pribadi · jatah 2 hari/bln (lebih dari itu dipotong)',
   libur: 'Studio tutup / libur bersama · gaji tetap penuh',
+  bersih: 'Ikut general cleaning · sudah termasuk gaji bulanan (tidak menambah gaji)',
 }
 
-/** Penanda hari tidak bekerja yang dipilih lewat tombol (bukan shift kerja). */
-export const TIDAK_KERJA_LIST: ('cuti' | 'libur')[] = ['cuti', 'libur']
+/** Penanda hari tidak dihitung gaji yang dipilih lewat tombol (bukan shift kerja). */
+export const TIDAK_KERJA_LIST: ('cuti' | 'libur' | 'bersih')[] = [
+  'cuti',
+  'libur',
+  'bersih',
+]
 
-/** Daftar lengkap jenis hari (3 shift kerja + cuti + libur). */
-export const DAY_TYPE_LIST: DayType[] = ['pagi', 'sore', 'full', 'cuti', 'libur']
+/** Daftar lengkap jenis hari (3 shift kerja + cuti + libur + bersih). */
+export const DAY_TYPE_LIST: DayType[] = [
+  'pagi',
+  'sore',
+  'full',
+  'cuti',
+  'libur',
+  'bersih',
+]
 
 /** Apakah `s` adalah shift kerja (punya jadwal & event), bukan cuti/libur. */
 export function isHariKerja(s: DayType): s is Shift {

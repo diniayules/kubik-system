@@ -1109,7 +1109,14 @@ function ShiftPicker({ onPick }: { onPick: (s: DayType) => void }) {
   )
 }
 
-function CutiLiburInfo({ shift }: { shift: 'cuti' | 'libur' }) {
+function CutiLiburInfo({ shift }: { shift: 'cuti' | 'libur' | 'bersih' }) {
+  const penjelasan: Record<'cuti' | 'libur' | 'bersih', string> = {
+    cuti: 'Cuti pribadi — jatah 2 hari/bulan tidak memotong gaji. Cuti ke-3 dan seterusnya memotong 1 hari kerja.',
+    libur:
+      'Studio tutup / libur bersama — gaji tetap penuh dan tidak memakai jatah cuti.',
+    bersih:
+      'Ikut general cleaning padahal tidak sedang shift — kehadiran tercatat sebagai bukti ikut serta, tapi tidak menambah gaji karena sudah termasuk gaji bulanan.',
+  }
   return (
     <div className="next-action selesai">
       <div className="next-label">
@@ -1117,10 +1124,7 @@ function CutiLiburInfo({ shift }: { shift: 'cuti' | 'libur' }) {
         <strong>{SHIFT_LABEL[shift]}</strong>
       </div>
       <div className="next-value">
-        {shift === 'cuti'
-          ? 'Cuti pribadi — jatah 2 hari/bulan tidak memotong gaji. Cuti ke-3 dan seterusnya memotong 1 hari kerja.'
-          : 'Studio tutup / libur bersama — gaji tetap penuh dan tidak memakai jatah cuti.'}{' '}
-        Tidak ada jam kerja yang perlu dicatat. Gunakan{' '}
+        {penjelasan[shift]} Tidak ada jam kerja yang perlu dicatat. Gunakan{' '}
         <strong>Ganti shift</strong> di atas bila ingin mengubahnya.
       </div>
     </div>

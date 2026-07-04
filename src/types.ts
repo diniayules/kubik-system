@@ -38,14 +38,18 @@ export type Employee = {
 export type Shift = 'pagi' | 'sore' | 'full'
 
 /**
- * Jenis hari pada satu kartu absensi. Selain 3 shift kerja, ada 2 hari "tidak
- * bekerja" yang dicatat eksplisit lewat tombol di pemilih shift:
- *  - 'cuti'  : cuti pribadi karyawan. Jatah 2 hari/bulan tidak memotong gaji;
- *              cuti ke-3 dst memotong 1 hari penuh.
- *  - 'libur' : studio tutup / libur bersama (karyawan terpaksa ikut libur).
- *              Tidak pernah memotong gaji dan tidak memakai jatah cuti.
+ * Jenis hari pada satu kartu absensi. Selain 3 shift kerja, ada 3 hari "tidak
+ * dihitung gaji" yang dicatat eksplisit lewat tombol di pemilih shift:
+ *  - 'cuti'   : cuti pribadi karyawan. Jatah 2 hari/bulan tidak memotong gaji;
+ *               cuti ke-3 dst memotong 1 hari penuh.
+ *  - 'libur'  : studio tutup / libur bersama (karyawan terpaksa ikut libur).
+ *               Tidak pernah memotong gaji dan tidak memakai jatah cuti.
+ *  - 'bersih' : ikut general cleaning sebulan sekali padahal tidak sedang shift.
+ *               Kehadiran dicatat sebagai bukti ikut serta, tapi TIDAK menambah
+ *               gaji (sudah termasuk gaji bulanan). Cukup ditandai hadir, tanpa
+ *               jam masuk/pulang.
  */
-export type DayType = Shift | 'cuti' | 'libur'
+export type DayType = Shift | 'cuti' | 'libur' | 'bersih'
 
 export type EventTipe =
   | 'masuk'

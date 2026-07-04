@@ -1395,6 +1395,7 @@
 .badge--none { background: var(--surface-2); color: var(--muted); }
 .badge--cuti { background: var(--mint-bg); color: var(--mint-deep); }
 .badge--libur { background: var(--surface-2); color: var(--ink-soft); border: 1px dashed var(--line); }
+.badge--bersih { background: color-mix(in srgb,var(--warn,#f0a500) 14%, transparent); color: var(--warn-deep,#8a6d00); }
 .badge--working { background: var(--mint-bg); color: var(--mint-deep); }
 .badge--done { background: color-mix(in srgb,var(--primary-2) 14%, transparent); color: var(--primary); }
 .badge--idle { background: var(--surface-2); color: var(--ink-soft); }
@@ -1525,6 +1526,7 @@
 .shift-opt:hover { border-color: var(--primary-2); }
 .shift-opt--cuti:hover { border-color: var(--mint); }
 .shift-opt--libur:hover { border-color: var(--ink-soft); }
+.shift-opt--bersih:hover { border-color: var(--warn,#f0a500); }
 
 /* Pemisah antara shift kerja & opsi cuti/libur di pemilih shift. */
 .shift-pick-sep {

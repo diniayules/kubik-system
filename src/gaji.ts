@@ -52,6 +52,7 @@ export type SlipGaji = {
   hariTidakHadir: number
   hariCuti: number
   hariLibur: number
+  hariBersih: number
   terlambatMenit: number
   lemburMenit: number
   coverageMenit: number
@@ -114,6 +115,7 @@ export function hitungSlipGaji(
   let hariHadir = 0
   let hariCuti = 0
   let hariLibur = 0
+  let hariBersih = 0
   for (const r of records) {
     if (r.employeeId !== emp.id) continue
     // Waktu ekstra manual (backup datang cepat / meeting) dibayar di hari apa
@@ -126,6 +128,12 @@ export function hitungSlipGaji(
     }
     if (r.shift === 'libur') {
       hariLibur += 1
+      continue
+    }
+    // General cleaning: kehadiran dicatat sebagai bukti ikut serta, tapi tidak
+    // menambah gaji (sudah termasuk gaji bulanan) — persis seperti libur.
+    if (r.shift === 'bersih') {
+      hariBersih += 1
       continue
     }
     const ring = hitungRingkasan(r)
@@ -145,7 +153,7 @@ export function hitungSlipGaji(
   // TIDAK menambah maupun memotong gaji.
   const hariTidakHadir = Math.max(
     0,
-    hariSeharusnya - hariHadir - hariCuti - hariLibur,
+    hariSeharusnya - hariHadir - hariCuti - hariLibur - hariBersih,
   )
 
   let tiket = 0
@@ -194,6 +202,7 @@ export function hitungSlipGaji(
     hariTidakHadir,
     hariCuti,
     hariLibur,
+    hariBersih,
     terlambatMenit,
     lemburMenit,
     coverageMenit,

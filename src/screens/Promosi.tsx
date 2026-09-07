@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState, type ReactNode } from 'react'
-import type { AppData, PromoProgram, PromoTahap } from '../types'
+import type { AppData, PromoJenis, PromoProgram, PromoTahap } from '../types'
 import { uid, todayKey } from '../storage'
 import { formatTanggalPanjang } from '../attendance'
 import { Icons } from '../components/Icons'
@@ -16,6 +16,31 @@ type Props = {
 
 /** Urutan tahap (juga urutan tampil grup list). */
 const TAHAP_ORDER: PromoTahap[] = ['ide', 'rencana', 'comingsoon', 'berjalan', 'selesai']
+/** Label jenis kartu. Hanya 'campaign' yang dihitung untuk KPI 2/bulan. */
+const JENIS_LABEL: Record<PromoJenis, string> = {
+  campaign: 'Campaign',
+  konten: 'Konten rutin',
+  promo: 'Promo / diskon',
+}
+
+/**
+ * Hari eksekusi konten Kubik: Rabu, Sabtu, Minggu. Dipakai untuk tombol cepat
+ * deadline supaya irama mingguan itu tidak perlu dihitung manual tiap kali.
+ */
+const HARI_KONTEN: { label: string; dow: number }[] = [
+  { label: 'Rabu', dow: 3 },
+  { label: 'Sabtu', dow: 6 },
+  { label: 'Minggu', dow: 0 },
+]
+
+/** Tanggal terdekat (>= hari ini) yang jatuh pada hari `dow`. */
+function konteBerikutnya(dow: number, hariIni: string): string {
+  const d = new Date(`${hariIni}T00:00:00`)
+  const maju = (dow - d.getDay() + 7) % 7
+  d.setDate(d.getDate() + maju)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 /** Tahap yang tampil ke karyawan (sisanya rahasia — dikuatkan RLS 0035). */
 const TAHAP_KARYAWAN: PromoTahap[] = ['comingsoon', 'berjalan']
 
@@ -153,6 +178,7 @@ export function Promosi({ data, setData, isAdmin, currentUserId }: Props) {
       ) : (
         <KaryawanView
           promos={promos}
+          namaById={namaById}
           currentUserId={currentUserId}
           onUsulkan={bukaTambah}
           onEdit={bukaEdit}
@@ -165,6 +191,7 @@ export function Promosi({ data, setData, isAdmin, currentUserId }: Props) {
           existing={editing ?? undefined}
           isAdmin={isAdmin}
           currentUserId={currentUserId}
+          karyawan={data.employees}
           onSave={simpan}
           onClose={() => {
             setShowForm(false)
@@ -312,12 +339,15 @@ function AdminView({
 // ======================================================================
 function KaryawanView({
   promos,
+  namaById,
   currentUserId,
   onUsulkan,
   onEdit,
   onHapus,
 }: {
   promos: PromoProgram[]
+  /** Untuk menampilkan nama PIC — operator perlu tahu kartu mana tugasnya. */
+  namaById: Map<string, string>
   currentUserId: string
   onUsulkan: () => void
   onEdit: (p: PromoProgram) => void
@@ -365,6 +395,7 @@ function KaryawanView({
                   <PromoRow
                     key={p.id}
                     p={p}
+                    namaById={namaById}
                     hideTahapChip
                     actions={p.desain ? <DownloadDesainBtn p={p} /> : undefined}
                   />
@@ -388,6 +419,7 @@ function KaryawanView({
               <PromoRow
                 key={p.id}
                 p={p}
+                namaById={namaById}
                 actions={
                   <>
                     <DownloadDesainBtn p={p} />
@@ -426,6 +458,18 @@ function PromoRow({
   const { t } = useLang()
   const [open, setOpen] = useState(false)
   const nama = p.dibuatOleh ? namaById?.get(p.dibuatOleh) : undefined
+  const namaPic = p.pic ? namaById?.get(p.pic) : undefined
+  // Status deadline: telat kalau sudah selesai lewat batas, atau menunggak
+  // kalau batasnya sudah lewat tapi kartunya belum selesai.
+  const deadlineNada = !p.deadline
+    ? null
+    : p.tahap === 'selesai'
+      ? p.selesaiPada && p.selesaiPada > p.deadline
+        ? 'telat'
+        : 'tepat'
+      : p.deadline < todayKey()
+        ? 'menunggak'
+        : 'menunggu'
   const periode =
     p.tanggalMulai || p.tanggalSelesai
       ? [p.tanggalMulai, p.tanggalSelesai]
@@ -453,6 +497,19 @@ function PromoRow({
             {periode && (
               <span className="promo-item-flag">
                 <Icons.sun /> {periode}
+              </span>
+            )}
+            {namaPic && (
+              <span className="promo-item-flag">
+                <Icons.user /> {namaPic}
+              </span>
+            )}
+            {p.deadline && (
+              <span className={`promo-deadline promo-deadline--${deadlineNada}`}>
+                <Icons.clock /> {formatTanggalPanjang(p.deadline)}
+                {deadlineNada === 'menunggak' && ' · lewat'}
+                {deadlineNada === 'telat' && ' · telat'}
+                {deadlineNada === 'tepat' && ' · tepat'}
               </span>
             )}
             {p.desain && (
@@ -503,12 +560,15 @@ function PromoModal({
   existing,
   isAdmin,
   currentUserId,
+  karyawan,
   onSave,
   onClose,
 }: {
   existing?: PromoProgram
   isAdmin: boolean
   currentUserId: string
+  /** Kandidat PIC — hanya diisi/ditampilkan untuk admin. */
+  karyawan: AppData['employees']
   onSave: (p: PromoProgram) => void
   onClose: () => void
 }) {
@@ -519,6 +579,9 @@ function PromoModal({
   const [tahap, setTahap] = useState<PromoTahap>(existing?.tahap ?? 'ide')
   const [mulai, setMulai] = useState(existing?.tanggalMulai ?? '')
   const [selesai, setSelesai] = useState(existing?.tanggalSelesai ?? '')
+  const [jenis, setJenis] = useState<PromoJenis>(existing?.jenis ?? 'campaign')
+  const [pic, setPic] = useState(existing?.pic ?? '')
+  const [deadline, setDeadline] = useState(existing?.deadline ?? '')
   const [desain, setDesain] = useState<string | undefined>(existing?.desain)
   const [desainError, setDesainError] = useState<string>()
   const fileRef = useRef<HTMLInputElement>(null)
@@ -552,6 +615,13 @@ function PromoModal({
       status: isAdmin ? 'disetujui' : 'menunggu',
       tanggalMulai: mulai || undefined,
       tanggalSelesai: selesai || undefined,
+      jenis,
+      // PIC & deadline adalah alat pengelola untuk menugaskan; usulan karyawan
+      // belum punya penanggung jawab sampai admin menetapkannya.
+      pic: isAdmin ? pic || undefined : existing?.pic,
+      deadline: isAdmin ? deadline || undefined : existing?.deadline,
+      // `selesaiPada` distempel database (0046) — jangan pernah dikirim client.
+      selesaiPada: existing?.selesaiPada,
       dibuatOleh: existing?.dibuatOleh ?? currentUserId,
       desain: desain || undefined,
     }
@@ -598,6 +668,67 @@ function PromoModal({
               ))}
             </select>
           </div>
+        )}
+        <div className="field">
+          <label>Jenis</label>
+          <select value={jenis} onChange={(e) => setJenis(e.target.value as PromoJenis)}>
+            {(Object.keys(JENIS_LABEL) as PromoJenis[]).map((j) => (
+              <option key={j} value={j}>
+                {JENIS_LABEL[j]}
+              </option>
+            ))}
+          </select>
+          <span className="promo-desain-hint">
+            Hanya <b>Campaign</b> yang dihitung untuk KPI “2 campaign per bulan”.
+          </span>
+        </div>
+        {isAdmin && (
+          <>
+            <div className="field">
+              <label>Dikerjakan oleh (PIC)</label>
+              <select value={pic} onChange={(e) => setPic(e.target.value)}>
+                <option value="">— belum ditugaskan —</option>
+                {karyawan.map((e) => (
+                  <option key={e.id} value={e.id}>
+                    {e.nama}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="field">
+              <label>Deadline</label>
+              <input
+                type="date"
+                value={deadline}
+                onChange={(e) => setDeadline(e.target.value)}
+              />
+              <div className="promo-deadline-cepat">
+                {HARI_KONTEN.map((h) => (
+                  <button
+                    key={h.label}
+                    type="button"
+                    className="btn btn--ghost btn-mini-ghost"
+                    onClick={() => setDeadline(konteBerikutnya(h.dow, todayKey()))}
+                  >
+                    {h.label} ini
+                  </button>
+                ))}
+                {deadline && (
+                  <button
+                    type="button"
+                    className="btn btn--ghost btn-mini-ghost"
+                    onClick={() => setDeadline('')}
+                  >
+                    Hapus
+                  </button>
+                )}
+              </div>
+              <span className="promo-desain-hint">
+                Ketepatan terhadap deadline dinilai otomatis saat kartu masuk
+                tahap “selesai”.
+              </span>
+            </div>
+          </>
         )}
         <div className="promo-form-dates">
           <div className="field">

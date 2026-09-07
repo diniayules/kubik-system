@@ -10,6 +10,7 @@ import { formatRupiah, ringkasanPerKaryawan } from '../income'
 import { Avatar, colorIndexForName } from '../components/Avatar'
 import { Modal, ModalHead } from '../components/Modal'
 import { Icons } from '../components/Icons'
+import { asRole, ROLE_EMOJI, ROLE_LABEL, type Role } from '../lib/roles'
 
 type Props = {
   data: AppData
@@ -56,13 +57,16 @@ function formatTanggalID(iso?: string): string {
 }
 
 export function ProfilKaryawan({ data, setData, isAdmin, currentUserId }: Props) {
-  // Admin = pengelola: lihat profil semua karyawan.
-  // Karyawan: hanya profil miliknya sendiri.
+  // Pengelola (owner & manajer) melihat SEMUA profil — termasuk akun pengelola
+  // lain — supaya data kepegawaian mereka bisa dilihat & diedit dari sini.
+  // Karyawan biasa hanya melihat profilnya sendiri, jadi kartu pengelola tidak
+  // pernah tampil ke staf.
+  //
+  // Ini sengaja beda dari roster Beranda, statistik kehadiran, dan gaji yang
+  // tetap menyaring pengelola lewat `isPengelola`: mereka tidak ikut absen,
+  // jadi kalau ikut terdaftar di sana angkanya jadi salah.
   const karyawan = useMemo(
-    () =>
-      data.employees.filter((e) =>
-        isAdmin ? e.role !== 'admin' : e.id === currentUserId,
-      ),
+    () => data.employees.filter((e) => isAdmin || e.id === currentUserId),
     [data.employees, isAdmin, currentUserId],
   )
 
@@ -166,7 +170,7 @@ export function ProfilKaryawan({ data, setData, isAdmin, currentUserId }: Props)
   const profil = profilById.get(selected!.id) ?? PROFIL_KOSONG
   const gajiPokok = data.gajiPokok[selected!.id] ?? 0
   const canEdit = isAdmin || selected!.id === currentUserId
-  const role = selected!.role ?? 'karyawan'
+  const role = asRole(selected!.role)
 
   return (
     <>
@@ -218,7 +222,7 @@ function ProfilSheet({
   profil: Profil
   gajiPokok: number
   canEdit: boolean
-  role: 'admin' | 'karyawan'
+  role: Role
   showPenjualanGaji: boolean
   onEdit: () => void
 }) {
@@ -238,7 +242,7 @@ function ProfilSheet({
               NIK · {selected.nomorInduk || '—'}
             </div>
             <span className={`role-pill role-${role}`} style={{ marginTop: 6, display: 'inline-flex' }}>
-              {role === 'admin' ? '🛡️ Admin' : '👤 Karyawan'}
+              {ROLE_EMOJI[role]} {ROLE_LABEL[role]}
             </span>
           </div>
           {canEdit && (
@@ -305,7 +309,7 @@ function ProfilKartu({
   profil: Profil
   onOpen: () => void
 }) {
-  const role = employee.role ?? 'karyawan'
+  const role = asRole(employee.role)
   return (
     <button type="button" className="profil-card" onClick={onOpen}>
       <div className="profil-card-top">
@@ -322,7 +326,7 @@ function ProfilKartu({
             className={`role-pill role-${role}`}
             style={{ marginTop: 5, display: 'inline-flex' }}
           >
-            {role === 'admin' ? '🛡️ Admin' : '👤 Karyawan'}
+            {ROLE_EMOJI[role]} {ROLE_LABEL[role]}
           </span>
         </div>
       </div>

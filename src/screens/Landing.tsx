@@ -12,6 +12,7 @@ import {
 } from '../inventory'
 import { Icons } from '../components/Icons'
 import { DEFAULTS } from '../appearance'
+import { isPengelola } from '../lib/roles'
 
 type Props = {
   data: AppData
@@ -37,7 +38,7 @@ export function Landing({
   const sub = data.dashSub ?? DEFAULTS.dashSub
 
   // Absensi stats — admin (pengelola) tidak ikut absen, jadi tidak dihitung.
-  const karyawan = data.employees.filter((e) => e.role !== 'admin')
+  const karyawan = data.employees.filter((e) => !isPengelola(e.role))
   let working = 0
   let selesai = 0
   for (const emp of karyawan) {

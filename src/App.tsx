@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Landing } from './screens/Landing'
+import { Manajemen } from './screens/Manajemen'
 import { Home } from './screens/Home'
+import { Jadwal } from './screens/Jadwal'
+import { Leads } from './screens/Leads'
 import { Absen } from './screens/Absen'
 import { Riwayat } from './screens/Riwayat'
 import { ProfilKaryawan } from './screens/ProfilKaryawan'
@@ -29,7 +32,9 @@ import './App.css'
 
 type Screen =
   | { name: 'landing' }
+  | { name: 'manajemen' }
   | { name: 'absensi' }
+  | { name: 'jadwal' }
   | { name: 'absen'; employeeId: string; tanggal?: string }
   | { name: 'riwayat'; employeeId: string }
   | { name: 'profil' }
@@ -39,6 +44,7 @@ type Screen =
   | { name: 'inventaris' }
   | { name: 'pengeluaran' }
   | { name: 'promosi' }
+  | { name: 'leads' }
   | { name: 'gaji' }
   | { name: 'pengaturan' }
 
@@ -81,16 +87,21 @@ function Inner() {
     applyAppearance(prefs.fontPair, prefs.fontSize)
   }, [prefs.fontPair, prefs.fontSize])
 
-  // Restrict karyawan dari screen yang tidak diizinkan.
-  // Pengaturan kini terbuka untuk karyawan (bagian sensitif difilter di dalam layar).
+  // Jaring pengaman peran. Menu-nya sudah disaring di Sidebar; ini menangani
+  // kasus state `screen` terlanjur menunjuk ke layar yang tidak boleh dibuka.
+  // Pengaturan sengaja terbuka untuk semua (bagian sensitif difilter di layar).
   useEffect(() => {
     if (!auth.profile) return
-    if (auth.isAdmin) return
-    const forbidden: Screen['name'][] = []
-    if (forbidden.includes(screen.name)) {
+    // Dashboard Manajemen: pengelola saja (owner & manajer).
+    if (!auth.isAdmin && screen.name === 'manajemen') {
+      setScreen({ name: 'landing' })
+      return
+    }
+    // Gaji: owner (semua slip) & karyawan (slip sendiri). Manajer tidak.
+    if (auth.isManager && screen.name === 'gaji') {
       setScreen({ name: 'landing' })
     }
-  }, [auth.profile, auth.isAdmin, screen.name])
+  }, [auth.profile, auth.isAdmin, auth.isManager, screen.name])
 
   function navigate(id: NavId) {
     setScreen({ name: id } as Screen)
@@ -275,6 +286,33 @@ function Inner() {
               />
             )}
 
+            {screen.name === 'manajemen' && isAdmin && (
+              <Manajemen
+                data={data}
+                setData={setData}
+                isOwner={auth.isOwner}
+                onLihatAbsensi={() => setScreen({ name: 'absensi' })}
+                onLihatJadwal={() => setScreen({ name: 'jadwal' })}
+                onLihatLeads={() => setScreen({ name: 'leads' })}
+                onLihatInventaris={() => setScreen({ name: 'inventaris' })}
+                onLihatPromosi={() => setScreen({ name: 'promosi' })}
+                onLihatLaporan={() => setScreen({ name: 'laporan' })}
+              />
+            )}
+
+            {screen.name === 'jadwal' && (
+              <Jadwal data={data} setData={setData} bisaUbah={isAdmin} />
+            )}
+
+            {screen.name === 'leads' && (
+              <Leads
+                data={data}
+                setData={setData}
+                bisaUbah={isAdmin}
+                currentUserId={currentUserId}
+              />
+            )}
+
             {screen.name === 'absensi' && (
               <Home
                 data={data}
@@ -371,10 +409,12 @@ function Inner() {
             )}
 
             {screen.name === 'gaji' && (
+              /* Gaji per orang = owner-only. Manajer jatuh ke tampilan
+                 karyawan (hanya slipnya sendiri). Lihat lib/roles.ts. */
               <GajiKaryawan
                 data={data}
                 setData={setData}
-                isAdmin={isAdmin}
+                isAdmin={auth.isOwner}
                 currentUserId={currentUserId}
               />
             )}
@@ -394,6 +434,7 @@ function Inner() {
 
       {showAddEmp && auth.isAdmin && (
         <AddEmployeeModal
+          isOwner={auth.isOwner}
           onClose={() => setShowAddEmp(false)}
           onCreated={(nama) => {
             setShowAddEmp(false)

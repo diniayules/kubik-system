@@ -13,6 +13,7 @@ import {
 import { todayKey } from '../storage'
 import { Icons } from '../components/Icons'
 import RupiahInput from '../components/RupiahInput'
+import { isPengelola } from '../lib/roles'
 
 type Props = {
   data: AppData
@@ -47,7 +48,7 @@ export function GajiKaryawan({ data, setData, isAdmin, currentUserId }: Props) {
   const karyawan = useMemo(
     () =>
       data.employees.filter((e) =>
-        isAdmin ? e.role !== 'admin' : e.id === currentUserId,
+        isAdmin ? !isPengelola(e.role) : e.id === currentUserId,
       ),
     [data.employees, isAdmin, currentUserId],
   )

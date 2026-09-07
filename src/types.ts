@@ -1,14 +1,18 @@
+import type { Role } from './lib/roles'
+export type { Role }
+
 export type Employee = {
   id: string
   nama: string
   jabatan: string
   pinHash: string
   /**
-   * Peran akun. Admin = pengelola (tidak ikut absen / tidak mengisi laporan
-   * income), jadi disaring dari daftar operasional. Opsional agar data lama
-   * tetap kompatibel; anggap `undefined` sebagai karyawan.
+   * Hak akses akun (lihat lib/roles.ts). Pengelola (owner/manager) tidak ikut
+   * absen / tidak mengisi laporan income, jadi disaring dari daftar
+   * operasional lewat `isPengelola`. Opsional agar data lama tetap
+   * kompatibel; anggap `undefined` sebagai karyawan.
    */
-  role?: 'admin' | 'karyawan'
+  role?: Role
   /**
    * Nomor Induk Karyawan (internal Kubik). HANYA admin yang boleh mengisi/
    * mengubah; karyawan melihat read-only. Migration 0026.
@@ -406,6 +410,14 @@ export type PromoTahap = 'ide' | 'rencana' | 'comingsoon' | 'berjalan' | 'selesa
 export type PromoStatus = 'menunggu' | 'disetujui'
 
 /**
+ * Jenis kartu di Papan Promosi:
+ *   campaign — program marketing bernama (dihitung untuk KPI "2/bulan")
+ *   konten   — unggahan rutin terjadwal (Rabu, akhir pekan)
+ *   promo    — potongan harga / penawaran
+ */
+export type PromoJenis = 'campaign' | 'konten' | 'promo'
+
+/**
  * Satu program promosi. Visibilitas ke karyawan diturunkan dari `tahap` + `status`
  * (bukan kolom terpisah): tampil kalau `status='disetujui'` dan tahap termasuk
  * comingsoon/berjalan/selesai, atau kalau kartu itu milik karyawan sendiri.
@@ -420,14 +432,176 @@ export type PromoProgram = {
   /** Periode promo (opsional untuk ide/rencana). Format YYYY-MM-DD. */
   tanggalMulai?: string
   tanggalSelesai?: string
+  /**
+   * Apa kartu ini sebenarnya. Memisahkan konten rutin (posting Rabu/akhir
+   * pekan) dari campaign besar, sehingga KPI "2 campaign/bulan" tidak
+   * terpenuhi hanya oleh unggahan harian. Lihat migration 0046.
+   */
+  jenis?: PromoJenis
+  /**
+   * Operator yang ditugaskan mengerjakan (profiles.id). Dasar perhitungan
+   * bonus marketing — lihat `kontribusiKonten()` di manajemen.ts.
+   */
+  pic?: string
+  /** Batas waktu penyelesaian. Format YYYY-MM-DD. */
+  deadline?: string
+  /**
+   * Tanggal kartu benar-benar masuk tahap 'selesai'. DISTEMPEL DATABASE
+   * (trigger `promo_stamp_selesai`, migration 0046), bukan diisi dari layar —
+   * inilah satu-satunya bukti ketepatan waktu terhadap `deadline`.
+   * Read-only bagi client.
+   */
+  selesaiPada?: string
   /** Pengusul / pembuat (profiles.id). Distempel otomatis saat insert. */
   dibuatOleh?: string
+  /**
+   * Kapan kartu ini dibuat (`created_at`, ISO). Dipakai Dashboard Manajemen
+   * untuk menghitung KPI "ide & campaign baru bulan ini" — sebuah ide sering
+   * belum punya tanggalMulai, jadi tanggal masuk papan-lah penandanya.
+   */
+  createdAt?: string
   /**
    * Desain promo untuk sosial media (data URL JPEG, di-resize di client).
    * Diunggah admin; karyawan yang bisa melihat promo dapat mengunduhnya untuk
    * diposting. `undefined` = belum ada desain. Lihat migration 0036.
    */
   desain?: string
+}
+
+/**
+ * Satu sel roster: siapa dijadwalkan apa pada tanggal berapa.
+ *
+ * Ini RENCANA, sedangkan [AbsenHari] adalah REALISASI. Keduanya memakai
+ * [DayType] yang sama supaya bisa dibandingkan langsung — dari situ muncul
+ * "dijadwalkan tapi tidak masuk" dan "masuk tidak sesuai jadwal".
+ * Disimpan di tabel `jadwal_shift` (migration 0044), kunci (tanggal, employeeId).
+ */
+export type JadwalShift = {
+  /** Format `YYYY-MM-DD`. */
+  tanggal: string
+  employeeId: string
+  shift: DayType
+  catatan?: string
+}
+
+/**
+ * Tahap pipeline sales, urut dari paling awal.
+ *
+ * `closing` & `gagal` adalah tahap AKHIR — keduanya keluar dari pipeline aktif
+ * dan itulah yang membuat angka konversi bisa dihitung.
+ */
+export type LeadTahap =
+  | 'baru'
+  | 'dihubungi'
+  | 'followup'
+  | 'negosiasi'
+  | 'closing'
+  | 'gagal'
+
+/** Jenis jasa/segmen yang dikejar. Mengikuti daftar target di brief manajer. */
+export type LeadKategori =
+  | 'play'
+  | 'photobooth'
+  | 'sekolah'
+  | 'kampus'
+  | 'komunitas'
+  | 'perusahaan'
+  | 'lainnya'
+
+/**
+ * Satu calon klien yang sedang dikejar — keadaan TERKINI-nya.
+ * Riwayat kontaknya ada di [LeadFollowup]. Lihat migration 0047.
+ */
+export type Lead = {
+  id: string
+  /** Nama calon klien / instansi. */
+  nama: string
+  kontak: string
+  /** Dari mana lead ini datang (DM Instagram, walk-in, referral, ...). */
+  sumber: string
+  kategori: LeadKategori
+  tahap: LeadTahap
+  /** Perkiraan nilai selama masih dikejar. */
+  nilaiEstimasi: number
+  /** Nilai sebenarnya setelah closing. */
+  nilaiRealisasi: number
+  /** Siapa yang mengejar (profiles.id) — dasar bonus event. */
+  pic?: string
+  /** Format `YYYY-MM-DD`. */
+  tanggalMasuk: string
+  /**
+   * Tanggal lead ini benar-benar closing. DISTEMPEL DATABASE (trigger
+   * `leads_stamp_closing`, migration 0047), bukan diisi dari layar — ia dasar
+   * perhitungan bonus. Read-only bagi client.
+   */
+  tanggalClosing?: string
+  alasanGagal?: string
+  catatan?: string
+  dibuatOleh?: string
+}
+
+/** Satu catatan follow-up pada sebuah lead. Lihat migration 0047. */
+export type LeadFollowup = {
+  id: string
+  leadId: string
+  /** Format `YYYY-MM-DD`. */
+  tanggal: string
+  catatan: string
+  oleh?: string
+}
+
+/**
+ * Catatan aktivitas sosial media SATU HARI.
+ *
+ * Satuannya sengaja hari, bukan unggahan: KPI-nya adalah "aktif setiap hari",
+ * jadi yang perlu terjawab satu lookup adalah "tanggal ini sudah dikerjakan
+ * belum?" — dan hari bolong otomatis terlihat sebagai tanggal yang hilang.
+ * Disimpan di tabel `sosmed_harian` (migration 0046), kunci `tanggal`.
+ */
+export type SosmedHarian = {
+  /** Format `YYYY-MM-DD`. Sekaligus kunci primer. */
+  tanggal: string
+  posting: boolean
+  story: boolean
+  repost: boolean
+  /** Membalas komentar / berinteraksi dengan akun lain. */
+  engagement: boolean
+  catatan?: string
+  /** Tautan ke unggahannya (opsional, untuk verifikasi). */
+  tautan?: string
+  /** Operator yang mengerjakan hari itu (profiles.id) — dasar bonus. */
+  oleh?: string
+}
+
+/**
+ * Target bulanan manajer — pembanding untuk KPI Scorecard di Dashboard
+ * Manajemen. Satu objek per periode `YYYY-MM`, disimpan di
+ * `app_config.target_bulanan` (migration 0043).
+ *
+ * Semua angka adalah target SATU BULAN PENUH. Untuk bulan yang masih berjalan,
+ * scorecard membandingkannya secara proporsional terhadap hari yang sudah lewat
+ * (lihat `skorKPI` di manajemen.ts) supaya tanggal 5 tidak selalu terbaca
+ * "tertinggal".
+ */
+export type TargetBulanan = {
+  /** Omzet total (studio + event) dalam rupiah. */
+  omzet: number
+  /** Jumlah tiket terjual — KPI utama, patokannya 2x baseline. */
+  tiket: number
+  /** Jumlah event terlaksana (photobooth + photo game). */
+  event: number
+  /** Leads baru yang masuk pipeline. */
+  leads: number
+  /** Campaign/promo yang benar-benar DIEKSEKUSI (tahap berjalan/selesai). */
+  campaign: number
+  /** Ide baru yang masuk papan promosi. */
+  ide: number
+  /** Jumlah hari sosial media aktif (posting/story/repost/engagement). */
+  sosmedHari: number
+  /** Kepatuhan checklist pagi & closing, 0-1. */
+  kepatuhan: number
+  /** Cakupan jadwal shift, 0-1. */
+  shiftCover: number
 }
 
 export type FontPair = 'playful' | 'editorial' | 'modern' | 'minimal' | 'oui'
@@ -539,6 +713,30 @@ export type AppData = {
   pengeluaran: Pengeluaran[]
   /** Papan Promosi (kanban marketing). Lihat [PromoProgram] & migration 0035. */
   promoPrograms: PromoProgram[]
+  /**
+   * Target KPI manajer per periode `YYYY-MM`. Disimpan di
+   * `app_config.target_bulanan` (JSONB), pola sama seperti saldoAktual.
+   * Key tidak ada = belum diisi; dashboard memakai `saranTarget()` sebagai
+   * angka sementara. Lihat [TargetBulanan] & migration 0043.
+   */
+  targetBulanan: Record<string, TargetBulanan>
+  /**
+   * Roster shift yang direncanakan. Lihat [JadwalShift] & migration 0044.
+   * Kosong = jadwal belum disusun (KPI cakupan shift ikut nonaktif).
+   */
+  jadwalShift: JadwalShift[]
+  /**
+   * Log aktivitas sosial media harian. Lihat [SosmedHarian] & migration 0046.
+   * Kosong = belum pernah dicatat (KPI sosmed & engagement ikut nonaktif).
+   */
+  sosmedHarian: SosmedHarian[]
+  /**
+   * Pipeline calon klien. Lihat [Lead] & migration 0047. Kosong = pipeline
+   * belum dipakai (KPI leads ikut nonaktif).
+   */
+  leads: Lead[]
+  /** Riwayat follow-up seluruh lead. Lihat [LeadFollowup]. */
+  leadsFollowup: LeadFollowup[]
   headerJudul?: string
   headerSub?: string
   incomeJudul?: string

@@ -1,3 +1,4 @@
+import type { Role } from './roles'
 import { createClient } from '@supabase/supabase-js'
 
 const url = import.meta.env.VITE_SUPABASE_URL
@@ -29,7 +30,7 @@ export type Profile = {
   id: string
   email: string
   nama: string
-  role: 'admin' | 'karyawan'
+  role: Role
   jabatan: string
   pin_hash: string | null
   avatar_color: number

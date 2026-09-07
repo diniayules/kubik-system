@@ -17,12 +17,14 @@ const ID: Dict = {
   'nav.logout': 'Keluar',
   // Sidebar groups
   'side.group.Utama': 'Utama',
+  'side.group.Manajemen': 'Manajemen',
   'side.group.Operasional': 'Operasional',
   'side.group.Keuangan': 'Studio',
   'side.group.Event': 'Event',
   'side.group.Sistem': 'Sistem',
   // Sidebar items
   'side.landing': 'Dashboard',
+  'side.manajemen': 'Dashboard Manajemen',
   'side.absensi': 'Presensi Karyawan',
   'side.profil': 'Profil Karyawan',
   'side.inventaris': 'Inventaris & Stok',
@@ -33,11 +35,14 @@ const ID: Dict = {
   'side.gaji': 'Gaji Karyawan',
   'side.pengaturan': 'Pengaturan',
   // Sidebar account
-  'side.role.admin': '🛡️ Admin',
-  'side.role.karyawan': '👤 Karyawan',
+  'side.role.owner': 'Owner',
+  'side.role.manager': 'Manajer',
+  'side.role.karyawan': 'Karyawan',
   // Page meta
   'page.landing.title': 'Dashboard',
   'page.landing.sub': 'Ringkasan operasional studio hari ini',
+  'page.manajemen.title': 'Dashboard Manajemen',
+  'page.manajemen.sub': 'Keuangan, kinerja tim & kesehatan operasional studio',
   'page.absensi.title': 'Presensi Karyawan',
   'page.absensi.sub': 'Catat clock-in & clock-out per karyawan',
   'page.absen.title': 'Detail Absensi',
@@ -374,12 +379,14 @@ const EN: Dict = {
   'nav.logout': 'Log out',
   // Sidebar groups
   'side.group.Utama': 'Main',
+  'side.group.Manajemen': 'Management',
   'side.group.Operasional': 'Operations',
   'side.group.Keuangan': 'Studio',
   'side.group.Event': 'Event',
   'side.group.Sistem': 'System',
   // Sidebar items
   'side.landing': 'Dashboard',
+  'side.manajemen': 'Management Dashboard',
   'side.absensi': 'Employee Attendance',
   'side.profil': 'Employee Profile',
   'side.inventaris': 'Inventory & Stock',
@@ -390,11 +397,14 @@ const EN: Dict = {
   'side.gaji': 'Employee Salary',
   'side.pengaturan': 'Settings',
   // Sidebar account
-  'side.role.admin': '🛡️ Admin',
-  'side.role.karyawan': '👤 Employee',
+  'side.role.owner': 'Owner',
+  'side.role.manager': 'Manager',
+  'side.role.karyawan': 'Employee',
   // Page meta
   'page.landing.title': 'Dashboard',
   'page.landing.sub': "Today's studio operations summary",
+  'page.manajemen.title': 'Management Dashboard',
+  'page.manajemen.sub': 'Finance, team performance & operational health',
   'page.absensi.title': 'Employee Attendance',
   'page.absensi.sub': 'Record clock-in & clock-out per employee',
   'page.absen.title': 'Attendance Detail',

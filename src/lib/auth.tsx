@@ -8,6 +8,7 @@ import {
 import type { ReactNode } from 'react'
 import type { Session, User } from '@supabase/supabase-js'
 import { type Profile, supabase, supabaseConfigured } from './supabase'
+import { asRole, isOwner as roleIsOwner, isPengelola, type Role } from './roles'
 
 type AuthState = {
   loading: boolean
@@ -15,7 +16,16 @@ type AuthState = {
   user: User | null
   session: Session | null
   profile: Profile | null
+  /** Hak akses efektif; 'karyawan' selama profil belum termuat. */
+  role: Role
+  /**
+   * Pengelola = owner ATAU manager. Setara `is_admin()` di database, dan
+   * sengaja tetap bernama `isAdmin` supaya seluruh layar lama tidak berubah.
+   */
   isAdmin: boolean
+  /** Hanya owner: gaji per orang, kas & rekonsiliasi, ubah hak akses. */
+  isOwner: boolean
+  isManager: boolean
   isKaryawan: boolean
 }
 
@@ -116,8 +126,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user: session?.user ?? null,
       session,
       profile,
-      isAdmin: profile?.role === 'admin',
-      isKaryawan: profile?.role === 'karyawan',
+      role: asRole(profile?.role),
+      isAdmin: isPengelola(profile?.role),
+      isOwner: roleIsOwner(profile?.role),
+      isManager: asRole(profile?.role) === 'manager',
+      isKaryawan: !isPengelola(profile?.role),
       signIn,
       signOut,
       refreshProfile,

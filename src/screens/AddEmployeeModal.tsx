@@ -2,18 +2,26 @@ import { useState } from 'react'
 import { Modal, ModalHead } from '../components/Modal'
 import { Icons } from '../components/Icons'
 import { createKaryawanAccount } from '../lib/db'
+import { ROLE_DESKRIPSI, ROLE_EMOJI, ROLE_LABEL } from '../lib/roles'
 
 export const ROLES = ['Operator', 'Editor', 'Kasir', 'Manajer']
+
+/** Hak akses yang bisa diberikan lewat modal ini — owner tidak pernah dibuat di sini. */
+const HAK_AKSES = ['karyawan', 'manager'] as const
 
 type Props = {
   /** Dipanggil setelah akun berhasil dibuat (untuk reload daftar karyawan). */
   onCreated: (nama: string) => void
   onClose: () => void
+  /** Hanya owner yang boleh mengangkat manajer (dikuatkan di edge function). */
+  isOwner: boolean
 }
 
-export function AddEmployeeModal({ onCreated, onClose }: Props) {
+export function AddEmployeeModal({ onCreated, onClose, isOwner }: Props) {
   const [nama, setNama] = useState('')
   const [jabatan, setJabatan] = useState(ROLES[0])
+  const [hakAkses, setHakAkses] =
+    useState<(typeof HAK_AKSES)[number]>('karyawan')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -41,6 +49,7 @@ export function AddEmployeeModal({ onCreated, onClose }: Props) {
         password,
         nama: nama.trim(),
         jabatan,
+        role: isOwner ? hakAkses : 'karyawan',
       })
       onCreated(nama.trim())
     } catch (e) {
@@ -72,7 +81,7 @@ export function AddEmployeeModal({ onCreated, onClose }: Props) {
         </div>
 
         <div className="field">
-          <label>Peran</label>
+          <label>Jabatan</label>
           <div className="role-pick">
             {ROLES.map((r) => (
               <button
@@ -86,6 +95,27 @@ export function AddEmployeeModal({ onCreated, onClose }: Props) {
             ))}
           </div>
         </div>
+
+        {isOwner && (
+          <div className="field">
+            <label>Hak akses</label>
+            <div className="role-pick">
+              {HAK_AKSES.map((r) => (
+                <button
+                  key={r}
+                  type="button"
+                  className={'role-opt' + (hakAkses === r ? ' sel' : '')}
+                  onClick={() => setHakAkses(r)}
+                >
+                  {ROLE_EMOJI[r]} {ROLE_LABEL[r]}
+                </button>
+              ))}
+            </div>
+            <div className="form-hint" style={{ marginTop: 8 }}>
+              {ROLE_DESKRIPSI[hakAkses]}
+            </div>
+          </div>
+        )}
 
         <div className="field">
           <label>Email login</label>

@@ -1,10 +1,13 @@
 import { useEffect } from 'react'
 import { Icons } from './Icons'
 import { useLang } from '../i18n'
+import { ROLE_EMOJI, type Role } from '../lib/roles'
 
 export type NavId =
   | 'landing'
+  | 'manajemen'
   | 'absensi'
+  | 'jadwal'
   | 'profil'
   | 'laporan'
   | 'event-photobooth'
@@ -12,30 +15,51 @@ export type NavId =
   | 'inventaris'
   | 'pengeluaran'
   | 'promosi'
+  | 'leads'
   | 'gaji'
   | 'pengaturan'
-
-type Role = 'admin' | 'karyawan'
 
 type Item = {
   id: NavId
   label: string
   icon: typeof Icons.home
   group: string
-  adminOnly?: boolean
+  /** Peran yang boleh melihat menu ini. `undefined` = semua peran. */
+  roles?: Role[]
 }
 
 const NAV_ITEMS: Item[] = [
   { id: 'landing', label: 'Dashboard', icon: Icons.home, group: 'Utama' },
+  // Dashboard Manajemen: hanya owner & manajer (dikuatkan lagi di App.tsx).
+  {
+    id: 'manajemen',
+    label: 'Dashboard Manajemen',
+    icon: Icons.wallet,
+    group: 'Manajemen',
+    roles: ['owner', 'manager'],
+  },
   { id: 'profil', label: 'Profil Karyawan', icon: Icons.user, group: 'Operasional' },
   { id: 'absensi', label: 'Presensi Karyawan', icon: Icons.clock, group: 'Operasional' },
+  // Karyawan boleh melihat jadwalnya — itu gunanya roster. Hanya pengelola yang
+  // bisa mengubah (dikuatkan lewat prop `bisaUbah` + RLS migration 0044).
+  { id: 'jadwal', label: 'Jadwal Shift', icon: Icons.clock, group: 'Operasional' },
   { id: 'inventaris', label: 'Inventaris & Stok', icon: Icons.box, group: 'Operasional' },
   // Karyawan boleh lihat menu Promosi — konten difilter per peran + RLS.
   { id: 'promosi', label: 'Papan Promosi', icon: Icons.sun, group: 'Operasional' },
+  // Pipeline sales: data komersial. Operator boleh membuka menunya — RLS 0047
+  // hanya memberinya lead yang di-PIC-kan padanya.
+  { id: 'leads', label: 'Leads & Sales', icon: Icons.cart, group: 'Event' },
   { id: 'laporan', label: 'Studio', icon: Icons.wallet, group: 'Keuangan' },
   { id: 'pengeluaran', label: 'Pengeluaran', icon: Icons.cart, group: 'Keuangan' },
-  // Karyawan boleh lihat gaji — tapi hanya slip miliknya sendiri (difilter di layar).
-  { id: 'gaji', label: 'Gaji Karyawan', icon: Icons.user, group: 'Keuangan' },
+  // Owner melihat semua slip; karyawan hanya slip miliknya sendiri (difilter di
+  // layar). Manajer tidak melihat gaji sama sekali — lihat lib/roles.ts.
+  {
+    id: 'gaji',
+    label: 'Gaji Karyawan',
+    icon: Icons.user,
+    group: 'Keuangan',
+    roles: ['owner', 'karyawan'],
+  },
   // Event: tiap kategori jadi menu sendiri (halaman penuh, tanpa sub-tab).
   { id: 'event-photobooth', label: 'Photobooth', icon: Icons.camera, group: 'Event' },
   { id: 'event-game', label: 'Photo Game', icon: Icons.camera, group: 'Event' },
@@ -78,7 +102,7 @@ export function Sidebar({
     return () => window.removeEventListener('keydown', onKey)
   }, [open, onClose])
 
-  const items = NAV_ITEMS.filter((i) => !(i.adminOnly && role !== 'admin'))
+  const items = NAV_ITEMS.filter((i) => !i.roles || i.roles.includes(role))
   const groups: { name: string; items: Item[] }[] = []
   for (const item of items) {
     let g = groups.find((x) => x.name === item.group)
@@ -148,7 +172,7 @@ export function Sidebar({
             <div className="sidebar-account-nama">{userNama}</div>
             <div className="sidebar-account-meta">
               <span className={`role-pill role-${role}`}>
-                {role === 'admin' ? t('side.role.admin') : t('side.role.karyawan')}
+                {ROLE_EMOJI[role]} {t('side.role.' + role)}
               </span>
             </div>
             <div className="sidebar-account-email" title={userEmail}>

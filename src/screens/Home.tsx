@@ -21,6 +21,7 @@ import { Avatar, colorIndexForName } from '../components/Avatar'
 import { Icons } from '../components/Icons'
 import { DEFAULTS } from '../appearance'
 import { usePrefs } from '../lib/prefs'
+import { isPengelola } from '../lib/roles'
 
 type Props = {
   data: AppData
@@ -58,9 +59,9 @@ export function Home({
 
   // Admin adalah pengelola, bukan karyawan yang absen — jadi tidak ikut
   // tampil di roster maupun dihitung di statistik kehadiran.
-  const karyawan = data.employees.filter((e) => e.role !== 'admin')
+  const karyawan = data.employees.filter((e) => !isPengelola(e.role))
   const karyawanNonaktif = data.inactiveEmployees.filter(
-    (e) => e.role !== 'admin',
+    (e) => !isPengelola(e.role),
   )
 
   // Absensi manual yang menunggu persetujuan admin (tanggal terbaru dulu).

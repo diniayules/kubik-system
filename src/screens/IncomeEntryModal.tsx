@@ -27,6 +27,7 @@ import {
   totalTiketPerLayanan,
   totalUpgradePerTipe,
 } from '../income'
+import { isPengelola } from '../lib/roles'
 
 const selStyle: CSSProperties = {
   width: '100%',
@@ -62,7 +63,7 @@ export function IncomeEntryModal({
   const { t } = useLang()
   // Admin (pengelola) tidak mengisi laporan income / tidak diatribusikan
   // sebagai operator penjualan, jadi tidak muncul sebagai pilihan karyawan.
-  const employees = data.employees.filter((e) => e.role !== 'admin')
+  const employees = data.employees.filter((e) => !isPengelola(e.role))
   // Kolom karyawan lain dikunci agar tidak bisa diisi orang yang sedang login.
   const isLocked = (empId: string) =>
     editableKaryawanId != null && empId !== editableKaryawanId

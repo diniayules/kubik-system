@@ -1,3 +1,4 @@
+import type { Role } from './roles'
 // =============================================================
 // db.ts · Supabase data layer for the AppData model.
 //
@@ -19,7 +20,10 @@ import type {
   HargaProduk,
   HargaTiket,
   HargaUpgrade,
+  JadwalShift,
   JenisFrame,
+  Lead,
+  LeadFollowup,
   JenisKertas,
   LaporanEvent,
   LaporanIncome,
@@ -33,6 +37,8 @@ import type {
   DayType,
   SalahCetak,
   SewaTipe,
+  SosmedHarian,
+  TargetBulanan,
   Tinta,
   UpgradeDef,
   WarnaTinta,
@@ -56,7 +62,7 @@ type ProfileRow = {
   nama: string
   jabatan: string
   pin_hash: string | null
-  role: 'admin' | 'karyawan' | null
+  role: Role | null
   nomor_induk: string | null
   no_hp: string[] | null
   foto: string | null
@@ -134,7 +140,46 @@ type PromoRow = {
   tanggal_mulai: string | null
   tanggal_selesai: string | null
   created_by: string | null
+  created_at: string | null
   desain: string | null
+  jenis: PromoProgram['jenis'] | null
+  pic: string | null
+  deadline: string | null
+  selesai_pada: string | null
+}
+type LeadRow = {
+  id: string
+  nama: string | null
+  kontak: string | null
+  sumber: string | null
+  kategori: Lead['kategori']
+  tahap: Lead['tahap']
+  nilai_estimasi: number | null
+  nilai_realisasi: number | null
+  pic: string | null
+  tanggal_masuk: string
+  tanggal_closing: string | null
+  alasan_gagal: string | null
+  catatan: string | null
+  created_by: string | null
+}
+type LeadFollowupRow = {
+  id: string
+  lead_id: string
+  tanggal: string
+  catatan: string | null
+  oleh: string | null
+}
+type SosmedRow = Omit<SosmedHarian, 'catatan' | 'tautan' | 'oleh'> & {
+  catatan: string | null
+  tautan: string | null
+  oleh: string | null
+}
+type JadwalShiftRow = {
+  tanggal: string
+  employee_id: string
+  shift: JadwalShift['shift']
+  catatan: string | null
 }
 type PenarikanUangBesarRow = {
   id: string
@@ -182,6 +227,7 @@ type ConfigRow = {
   saldo_aktual: Record<string, { dompet: number; rekening: number }> | null
   setoran_rekening: SetoranRekening[] | null
   saldo_awal: { dompet: number; rekening: number } | null
+  target_bulanan: Record<string, TargetBulanan> | null
   brand_kicker: string | null
   brand_name: string | null
   dash_judul: string | null
@@ -218,6 +264,10 @@ export async function fetchAppData(): Promise<AppData> {
     configRes,
     inactiveRes,
     promoRes,
+    jadwalRes,
+    sosmedRes,
+    leadsRes,
+    followupRes,
   ] = await Promise.all([
     supabase
       .from('profiles')
@@ -265,8 +315,30 @@ export async function fetchAppData(): Promise<AppData> {
     // karyawan hanya yang tayang + miliknya sendiri). Lihat migration 0035.
     supabase
       .from('promo_programs')
-      .select('id, judul, deskripsi, tahap, status, tanggal_mulai, tanggal_selesai, created_by, desain')
+      .select('id, judul, deskripsi, tahap, status, tanggal_mulai, tanggal_selesai, created_by, created_at, desain, jenis, pic, deadline, selesai_pada')
       .order('created_at', { ascending: true }),
+    // Roster shift: RLS mengizinkan semua user login membaca (karyawan perlu
+    // melihat jadwalnya sendiri). Lihat migration 0044.
+    supabase
+      .from('jadwal_shift')
+      .select('tanggal, employee_id, shift, catatan')
+      .order('tanggal', { ascending: true }),
+    // Log sosmed harian: semua user login boleh membaca (operator perlu tahu
+    // hari mana yang masih kosong). Lihat migration 0046.
+    supabase
+      .from('sosmed_harian')
+      .select('tanggal, posting, story, repost, engagement, catatan, tautan, oleh')
+      .order('tanggal', { ascending: true }),
+    // Pipeline leads: RLS memfilter (pengelola semua; operator hanya lead yang
+    // di-PIC-kan padanya). Lihat migration 0047.
+    supabase
+      .from('leads')
+      .select('id, nama, kontak, sumber, kategori, tahap, nilai_estimasi, nilai_realisasi, pic, tanggal_masuk, tanggal_closing, alasan_gagal, catatan, created_by')
+      .order('tanggal_masuk', { ascending: true }),
+    supabase
+      .from('leads_followup')
+      .select('id, lead_id, tanggal, catatan, oleh')
+      .order('tanggal', { ascending: true }),
   ])
 
   const profiles = orErr(profilesRes) as ProfileRow[]
@@ -298,6 +370,19 @@ export async function fetchAppData(): Promise<AppData> {
   // dijalankan) — fallback [] agar app tetap jalan; fitur aktif begitu migrasi
   // diterapkan.
   const promo = (promoRes.error ? [] : (promoRes.data ?? [])) as PromoRow[]
+  // Toleran kalau tabel `jadwal_shift` belum ada (migrasi 0044 belum
+  // dijalankan) — fallback [] agar app tetap jalan; fitur aktif begitu migrasi
+  // diterapkan.
+  const jadwal = (jadwalRes.error ? [] : (jadwalRes.data ?? [])) as JadwalShiftRow[]
+  // Toleran kalau tabel `sosmed_harian` belum ada (migrasi 0046 belum
+  // dijalankan) — fallback [] agar app tetap jalan.
+  const sosmed = (sosmedRes.error ? [] : (sosmedRes.data ?? [])) as SosmedRow[]
+  // Toleran kalau tabel `leads`/`leads_followup` belum ada (migrasi 0047 belum
+  // dijalankan) — fallback [] agar app tetap jalan.
+  const leadRows = (leadsRes.error ? [] : (leadsRes.data ?? [])) as LeadRow[]
+  const followupRows = (
+    followupRes.error ? [] : (followupRes.data ?? [])
+  ) as LeadFollowupRow[]
 
   const toEmployee = (p: ProfileRow): Employee => ({
     id: p.id,
@@ -454,7 +539,12 @@ export async function fetchAppData(): Promise<AppData> {
     tanggalMulai: p.tanggal_mulai ?? undefined,
     tanggalSelesai: p.tanggal_selesai ?? undefined,
     dibuatOleh: p.created_by ?? undefined,
+    createdAt: p.created_at ?? undefined,
     desain: p.desain ?? undefined,
+    jenis: p.jenis ?? 'campaign',
+    pic: p.pic ?? undefined,
+    deadline: p.deadline ?? undefined,
+    selesaiPada: p.selesai_pada ?? undefined,
   }))
 
   return {
@@ -496,6 +586,53 @@ export async function fetchAppData(): Promise<AppData> {
       dompet: config?.saldo_awal?.dompet ?? 0,
       rekening: config?.saldo_awal?.rekening ?? 0,
     },
+    // Toleran kalau kolom `target_bulanan` belum ada (migrasi 0043 belum
+    // dijalankan): `config.target_bulanan` undefined -> {}. Scorecard lalu
+    // sepenuhnya memakai saran otomatis sampai owner mengisinya.
+    targetBulanan: config?.target_bulanan ?? {},
+    leads: leadRows.map(
+      (r): Lead => ({
+        id: r.id,
+        nama: r.nama ?? '',
+        kontak: r.kontak ?? '',
+        sumber: r.sumber ?? '',
+        kategori: r.kategori,
+        tahap: r.tahap,
+        nilaiEstimasi: Number(r.nilai_estimasi ?? 0),
+        nilaiRealisasi: Number(r.nilai_realisasi ?? 0),
+        pic: r.pic ?? undefined,
+        tanggalMasuk: r.tanggal_masuk,
+        tanggalClosing: r.tanggal_closing ?? undefined,
+        alasanGagal: r.alasan_gagal || undefined,
+        catatan: r.catatan || undefined,
+        dibuatOleh: r.created_by ?? undefined,
+      }),
+    ),
+    leadsFollowup: followupRows.map(
+      (r): LeadFollowup => ({
+        id: r.id,
+        leadId: r.lead_id,
+        tanggal: r.tanggal,
+        catatan: r.catatan ?? '',
+        oleh: r.oleh ?? undefined,
+      }),
+    ),
+    sosmedHarian: sosmed.map((r) => ({
+      tanggal: r.tanggal,
+      posting: r.posting,
+      story: r.story,
+      repost: r.repost,
+      engagement: r.engagement,
+      catatan: r.catatan ?? undefined,
+      tautan: r.tautan ?? undefined,
+      oleh: r.oleh ?? undefined,
+    })),
+    jadwalShift: jadwal.map((j) => ({
+      tanggal: j.tanggal,
+      employeeId: j.employee_id,
+      shift: j.shift,
+      catatan: j.catatan ?? undefined,
+    })),
     gajiPembayaranVia: Object.fromEntries(
       pembayaranVia.map((r) => [
         `${r.employee_id}::${r.periode}`,
@@ -649,6 +786,12 @@ export async function persistChanges(
       tanggal_mulai: p.tanggalMulai ?? null,
       tanggal_selesai: p.tanggalSelesai ?? null,
       desain: p.desain ?? null,
+      jenis: p.jenis ?? 'campaign',
+      pic: p.pic ?? null,
+      deadline: p.deadline ?? null,
+      // `selesai_pada` sengaja TIDAK ditulis dari sini — distempel trigger
+      // promo_stamp_selesai (0046). Mengirimnya dari client akan membuat
+      // "tepat waktu" bisa dikarang.
     }),
     userId,
   )
@@ -829,6 +972,70 @@ export async function persistChanges(
     }
   }
 
+  // ---- leads & riwayat follow-up ----
+  // `tanggal_closing` sengaja TIDAK ditulis — distempel trigger
+  // leads_stamp_closing (0047) supaya tanggal dasar bonus tak bisa dikarang.
+  syncRows(
+    jobs,
+    'leads',
+    prev.leads ?? [],
+    next.leads ?? [],
+    (l) => l.id,
+    (l) => ({
+      id: l.id,
+      nama: l.nama,
+      kontak: l.kontak,
+      sumber: l.sumber,
+      kategori: l.kategori,
+      tahap: l.tahap,
+      nilai_estimasi: l.nilaiEstimasi || 0,
+      nilai_realisasi: l.nilaiRealisasi || 0,
+      pic: l.pic ?? null,
+      tanggal_masuk: l.tanggalMasuk,
+      alasan_gagal: l.alasanGagal ?? '',
+      catatan: l.catatan ?? '',
+    }),
+    userId,
+  )
+  syncRows(
+    jobs,
+    'leads_followup',
+    prev.leadsFollowup ?? [],
+    next.leadsFollowup ?? [],
+    (f) => f.id,
+    (f) => ({
+      id: f.id,
+      lead_id: f.leadId,
+      tanggal: f.tanggal,
+      catatan: f.catatan,
+      oleh: f.oleh ?? null,
+    }),
+  )
+
+  // ---- sosmed_harian (satu baris per tanggal; kunci primer `tanggal`) ----
+  syncRows(
+    jobs,
+    'sosmed_harian',
+    prev.sosmedHarian ?? [],
+    next.sosmedHarian ?? [],
+    (r) => r.tanggal,
+    (r) => ({
+      tanggal: r.tanggal,
+      posting: r.posting,
+      story: r.story,
+      repost: r.repost,
+      engagement: r.engagement,
+      catatan: r.catatan ?? '',
+      tautan: r.tautan ?? '',
+      oleh: r.oleh ?? null,
+    }),
+    undefined,
+    'tanggal',
+  )
+
+  // ---- jadwal_shift (kunci komposit tanggal+employee_id) ----
+  syncJadwal(jobs, prev.jadwalShift ?? [], next.jadwalShift ?? [], userId)
+
   // ---- app_config (prices + branding text) ----
   const configFields: (keyof AppData)[] = [
     'layananCatalog',
@@ -845,6 +1052,7 @@ export async function persistChanges(
     'saldoAktual',
     'setoranRekening',
     'saldoAwal',
+    'targetBulanan',
     'brandKicker',
     'brandName',
     'dashJudul',
@@ -874,6 +1082,7 @@ export async function persistChanges(
             saldo_aktual: next.saldoAktual ?? {},
             setoran_rekening: next.setoranRekening ?? [],
             saldo_awal: next.saldoAwal ?? { dompet: 0, rekening: 0 },
+            target_bulanan: next.targetBulanan ?? {},
             brand_kicker: next.brandKicker ?? null,
             brand_name: next.brandName ?? null,
             dash_judul: next.dashJudul ?? null,
@@ -896,6 +1105,69 @@ function throwIfError(res: { error: { message: string } | null }) {
   return res
 }
 
+/**
+ * Sinkronisasi roster shift.
+ *
+ * Tidak memakai syncRows() karena `jadwal_shift` berkunci KOMPOSIT
+ * (tanggal, employee_id) sementara syncRows menghapus lewat `.in('id', ...)`.
+ * Baris baru & berubah sama-sama diselesaikan satu upsert onConflict, sehingga
+ * menugaskan ulang orang yang sama di tanggal yang sama menimpa barisnya, bukan
+ * menumpuk. Penghapusan dikelompokkan per tanggal supaya membersihkan satu hari
+ * penuh tetap satu perintah.
+ */
+function syncJadwal(
+  jobs: Promise<unknown>[],
+  prev: JadwalShift[],
+  next: JadwalShift[],
+  userId?: string,
+): void {
+  const kunci = (j: JadwalShift) => `${j.tanggal}::${j.employeeId}`
+  const prevMap = new Map(prev.map((j) => [kunci(j), j]))
+  const nextKeys = new Set(next.map(kunci))
+
+  const upserts = next
+    .filter((j) => {
+      const p = prevMap.get(kunci(j))
+      return !p || !eq(p, j)
+    })
+    .map((j) => ({
+      tanggal: j.tanggal,
+      employee_id: j.employeeId,
+      shift: j.shift,
+      catatan: j.catatan ?? '',
+      ...(prevMap.has(kunci(j)) || !userId ? {} : { created_by: userId }),
+    }))
+
+  if (upserts.length) {
+    jobs.push(
+      Promise.resolve(
+        supabase
+          .from('jadwal_shift')
+          .upsert(upserts, { onConflict: 'tanggal,employee_id' }),
+      ).then(throwIfError),
+    )
+  }
+
+  const perTanggal = new Map<string, string[]>()
+  for (const j of prev) {
+    if (nextKeys.has(kunci(j))) continue
+    const list = perTanggal.get(j.tanggal) ?? []
+    list.push(j.employeeId)
+    perTanggal.set(j.tanggal, list)
+  }
+  for (const [tanggal, ids] of perTanggal) {
+    jobs.push(
+      Promise.resolve(
+        supabase
+          .from('jadwal_shift')
+          .delete()
+          .eq('tanggal', tanggal)
+          .in('employee_id', ids),
+      ).then(throwIfError),
+    )
+  }
+}
+
 // Generic insert(new)/upsert(changed)/delete(removed) sync for a table
 // keyed by a stable id. `createdByUser` (if given) stamps created_by on
 // NEW rows only (so updates never reassign ownership).
@@ -907,6 +1179,8 @@ function syncRows<T>(
   key: (t: T) => string,
   toRow: (t: T) => Record<string, unknown>,
   createdByUser?: string,
+  /** Kolom kunci primer di database — `sosmed_harian` memakai `tanggal`. */
+  keyCol = 'id',
 ): void {
   const prevMap = new Map(prev.map((t) => [key(t), t]))
   const nextKeys = new Set(next.map(key))
@@ -933,7 +1207,9 @@ function syncRows<T>(
   }
   if (deletes.length) {
     jobs.push(
-      Promise.resolve(supabase.from(table).delete().in('id', deletes)).then(throwIfError),
+      Promise.resolve(supabase.from(table).delete().in(keyCol, deletes)).then(
+        throwIfError,
+      ),
     )
   }
 }
@@ -984,14 +1260,18 @@ export async function setEmployeeActive(
 
 /**
  * Membuat akun karyawan baru via edge function `create-karyawan`.
- * Pendaftaran mandiri sudah ditutup — hanya admin (diverifikasi di server)
+ * Pendaftaran mandiri sudah ditutup — hanya pengelola (diverifikasi di server)
  * yang bisa membuat akun. Password dipilih admin lalu diberikan ke karyawan.
+ * Mengangkat manajer (`role: 'manager'`) hanya boleh dilakukan owner; edge
+ * function menolak permintaan dari manajer.
  */
 export async function createKaryawanAccount(input: {
   email: string
   password: string
   nama: string
   jabatan: string
+  /** Hak akses akun baru. Hanya owner yang boleh mengirim 'manager'. */
+  role?: Extract<Role, 'karyawan' | 'manager'>
 }): Promise<void> {
   const { data, error } = await supabase.functions.invoke('create-karyawan', {
     body: input,

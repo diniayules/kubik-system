@@ -28,6 +28,7 @@ import {
   totalUpgradePerTipe,
 } from '../income'
 import { hariSeharusnyaBulan, hitungSlipGaji } from '../gaji'
+import { hitungRekonsiliasiKas } from '../kas'
 import { Icons } from '../components/Icons'
 import { IncomeEntryModal } from './IncomeEntryModal'
 import { Modal, ModalHead } from '../components/Modal'
@@ -35,6 +36,7 @@ import { useToast } from '../components/Toast'
 import RupiahInput from '../components/RupiahInput'
 import { usePrefs } from '../lib/prefs'
 import { useLang } from '../i18n'
+import { isPengelola } from '../lib/roles'
 
 type Props = {
   data: AppData
@@ -54,7 +56,7 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
   const canTambahLaporan = true
   // Admin tidak diatribusikan sebagai operator penjualan, jadi tidak masuk
   // kolom per-karyawan di ekspor CSV.
-  const karyawan = data.employees.filter((e) => e.role !== 'admin')
+  const karyawan = data.employees.filter((e) => !isPengelola(e.role))
   const [showForm, setShowForm] = useState(false)
   const [editing, setEditing] = useState<Laporan | null>(null)
   const [showSetting, setShowSetting] = useState(false)
@@ -203,7 +205,7 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
     )
     const hariSeharusnya = hariSeharusnyaBulan(rekapAktif, hariIni)
     const gaji = data.employees
-      .filter((e) => e.role !== 'admin')
+      .filter((e) => !isPengelola(e.role))
       .reduce(
         (s, emp) =>
           s +
@@ -284,88 +286,15 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
     setData({ ...data, saldoAwal: merged })
   }
 
-  // Rekonsiliasi KUMULATIF s/d akhir bulan terpilih (bulan YYYY-MM comparable):
-  // uang di dompet/rekening menumpuk antar bulan, jadi dibandingkan dengan
-  // saldo awal + akumulasi seluruh income & setoran sampai bulan itu.
-  //   dompet diharapkan   = saldoAwal.dompet   + Σ tunai − Σ setoran − Σ pengeluaran(cash)
-  //   rekening diharapkan = saldoAwal.rekening + Σ QRIS  + Σ setoran − Σ pengeluaran(rekening)
-  const kumulatif = useMemo(() => {
-    const sampai = (tgl: string) => tgl.slice(0, 7) <= rekapAktif
-    const tunai = data.laporanIncome
-      .filter((l) => sampai(l.tanggal))
-      .reduce((s, l) => s + (l.tunai ?? 0), 0)
-    const qris = data.laporanIncome
-      .filter((l) => sampai(l.tanggal))
-      .reduce((s, l) => s + (l.qris ?? 0), 0)
-    const setoran = (data.setoranRekening ?? [])
-      .filter((s) => sampai(s.tanggal))
-      .reduce((sum, s) => sum + (s.jumlah || 0), 0)
-    // Pengeluaran dipotong dari saldo sesuai sumber dananya (cash → dompet,
-    // rekening → rekening). Data lama tanpa sumber dianggap 'cash'.
-    const pengMasuk = data.pengeluaran.filter((p) => sampai(p.tanggal))
-    const pengeluaranCash = pengMasuk
-      .filter((p) => (p.sumber ?? 'cash') === 'cash')
-      .reduce((s, p) => s + (p.jumlah || 0), 0)
-    const pengeluaranRek = pengMasuk
-      .filter((p) => p.sumber === 'rekening')
-      .reduce((s, p) => s + (p.jumlah || 0), 0)
-    return { tunai, qris, setoran, pengeluaranCash, pengeluaranRek }
-  }, [data.laporanIncome, data.setoranRekening, data.pengeluaran, rekapAktif])
+  // Rekonsiliasi kas kumulatif s/d bulan terpilih. Rumusnya dipakai bersama
+  // Dashboard Manajemen, jadi hidup di satu tempat: kas.ts.
+  const kumulatif = useMemo(
+    () => hitungRekonsiliasiKas(data, rekapAktif, hariIni),
+    [data, rekapAktif, hariIni],
+  )
 
-  // Gaji yang SUDAH dibayar (uangnya benar-benar keluar) — dipotong dari saldo
-  // sesuai "Pembayaran via" tiap slip: 'Tunai' → dompet, selain itu (Transfer /
-  // e-Wallet / kosong) → rekening. Kumulatif s/d bulan terpilih. Slip yang belum
-  // ditandai dibayar tidak dipotong (masih jadi utang, uang belum keluar).
-  const gajiKumulatif = useMemo(() => {
-    let gajiCash = 0
-    let gajiRek = 0
-    const karyawan = data.employees.filter((e) => e.role !== 'admin')
-    for (const [key, paid] of Object.entries(data.gajiDibayar ?? {})) {
-      if (!paid) continue
-      const [empId, bulan] = key.split('::')
-      if (!bulan || bulan > rekapAktif) continue
-      const emp = karyawan.find((e) => e.id === empId)
-      if (!emp) continue
-      const recordsBulan = data.records.filter((r) => r.tanggal.startsWith(bulan))
-      const laporanBulan = data.laporanIncome.filter((l) =>
-        l.tanggal.startsWith(bulan),
-      )
-      const slip = hitungSlipGaji(
-        emp,
-        data.gajiPokok[emp.id] ?? 0,
-        recordsBulan,
-        laporanBulan,
-        hariSeharusnyaBulan(bulan, hariIni),
-      )
-      const metode = (data.gajiPembayaranVia[key]?.metode ?? '').toLowerCase()
-      const dariCash = metode.includes('tunai') || metode.includes('cash')
-      if (dariCash) gajiCash += slip.total
-      else gajiRek += slip.total
-    }
-    return { gajiCash, gajiRek }
-  }, [
-    data.gajiDibayar,
-    data.employees,
-    data.records,
-    data.laporanIncome,
-    data.gajiPokok,
-    data.gajiPembayaranVia,
-    rekapAktif,
-    hariIni,
-  ])
-
-  const dompetDiharapkan =
-    (data.saldoAwal?.dompet ?? 0) +
-    kumulatif.tunai -
-    kumulatif.setoran -
-    kumulatif.pengeluaranCash -
-    gajiKumulatif.gajiCash
-  const rekeningDiharapkan =
-    (data.saldoAwal?.rekening ?? 0) +
-    kumulatif.qris +
-    kumulatif.setoran -
-    kumulatif.pengeluaranRek -
-    gajiKumulatif.gajiRek
+  const dompetDiharapkan = kumulatif.dompetDiharapkan
+  const rekeningDiharapkan = kumulatif.rekeningDiharapkan
   const selisihDompet = dompetDraft - dompetDiharapkan
   const selisihRekening = rekeningDraft - rekeningDiharapkan
 

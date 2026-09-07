@@ -6,10 +6,13 @@
 //
 // Alur keamanan:
 //   1. Verifikasi pemanggil punya sesi valid (JWT dari Authorization).
-//   2. Pastikan pemanggil ber-role 'admin' di tabel profiles.
+//   2. Pastikan pemanggil pengelola ('owner' atau 'manager') di
+//      tabel profiles.
 //   3. Baru buat auth user pakai SERVICE ROLE. Trigger DB
 //      handle_new_user() otomatis menaruh profile dengan role
 //      'karyawan'.
+//   4. Kalau akun baru diminta ber-role 'manager', role-nya di-set
+//      setelahnya — dan itu HANYA boleh dilakukan owner.
 //
 // SERVICE_ROLE_KEY hanya hidup di server (edge function) — tidak
 // pernah menyentuh frontend.
@@ -66,8 +69,9 @@ Deno.serve(async (req) => {
       .select('role')
       .eq('id', userData.user.id)
       .maybeSingle()
-    if (profile?.role !== 'admin')
-      return json({ error: 'Hanya admin yang boleh membuat akun' }, 403)
+    const callerRole = profile?.role ?? ''
+    if (callerRole !== 'owner' && callerRole !== 'manager')
+      return json({ error: 'Hanya pengelola yang boleh membuat akun' }, 403)
 
     const body = await req.json().catch(() => null)
     const email = String(body?.email ?? '')
@@ -76,12 +80,19 @@ Deno.serve(async (req) => {
     const password = String(body?.password ?? '')
     const nama = String(body?.nama ?? '').trim()
     const jabatan = String(body?.jabatan ?? '').trim()
+    // Hak akses akun baru. Default 'karyawan'; 'manager' hanya boleh
+    // diberikan owner. 'owner' tidak pernah bisa dibuat lewat jalur ini.
+    const role = String(body?.role ?? 'karyawan').trim() || 'karyawan'
 
     if (!email || !/^\S+@\S+\.\S+$/.test(email))
       return json({ error: 'Email tidak valid' }, 400)
     if (password.length < 6)
       return json({ error: 'Password minimal 6 karakter' }, 400)
     if (nama.length < 2) return json({ error: 'Nama minimal 2 huruf' }, 400)
+    if (role !== 'karyawan' && role !== 'manager')
+      return json({ error: 'Hak akses tidak dikenal' }, 400)
+    if (role !== 'karyawan' && callerRole !== 'owner')
+      return json({ error: 'Hanya owner yang boleh mengangkat manajer' }, 403)
 
     // Klien SERVICE ROLE — membuat auth user. Trigger handle_new_user()
     // yang menyisipkan baris profiles (role 'karyawan').
@@ -98,7 +109,21 @@ Deno.serve(async (req) => {
     if (createErr)
       return json({ error: translateCreateErr(createErr.message) }, 400)
 
-    return json({ id: created.user?.id ?? null, email }, 200)
+    // Trigger sudah menaruh role 'karyawan'. Naikkan ke 'manager' bila diminta
+    // (dan pemanggilnya owner — sudah divalidasi di atas).
+    if (role !== 'karyawan' && created.user?.id) {
+      const { error: roleErr } = await admin
+        .from('profiles')
+        .update({ role })
+        .eq('id', created.user.id)
+      if (roleErr)
+        return json(
+          { error: `Akun dibuat, tapi hak akses gagal diatur: ${roleErr.message}` },
+          500,
+        )
+    }
+
+    return json({ id: created.user?.id ?? null, email, role }, 200)
   } catch (e) {
     return json(
       { error: e instanceof Error ? e.message : 'Kesalahan server' },

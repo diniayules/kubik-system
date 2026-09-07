@@ -713,6 +713,113 @@ export function aktivitasSosmed(
   }
 }
 
+export type HariDampak = {
+  tanggal: string
+  /** Tanggal ke-berapa dalam bulan (1..31). */
+  hari: number
+  /** Omzet studio hari itu. Hanya berarti kalau `berlaporan`. */
+  omzet: number
+  /** Berapa dari 4 aktivitas sosmed dikerjakan hari itu. */
+  aksi: number
+  aktif: boolean
+  /** Hari itu punya laporan pemasukan. */
+  berlaporan: boolean
+  berjalan: boolean
+}
+
+export type DampakSosmed = {
+  perHari: HariDampak[]
+  /** Rata-rata omzet pada hari yang sosmed-nya aktif. */
+  rataAktif: number
+  /** Rata-rata omzet pada hari tanpa aktivitas sosmed sama sekali. */
+  rataPasif: number
+  hariAktif: number
+  hariPasif: number
+  /** (rataAktif − rataPasif) ÷ rataPasif. `null` = tidak bisa dibandingkan. */
+  selisih: number | null
+  /**
+   * Sampel layak dilihat serius? Di bawah ini angkanya terlalu mudah digeser
+   * satu hari ramai, jadi UI sebaiknya menyebutnya "belum cukup data" alih-alih
+   * menyodorkan persentase yang terdengar meyakinkan.
+   */
+  cukupSampel: boolean
+}
+
+/** Minimal hari di KEDUA sisi sebelum perbandingan layak ditampilkan. */
+export const MIN_SAMPEL_DAMPAK = 3
+
+/**
+ * Bandingkan omzet harian pada hari sosmed aktif vs hari pasif.
+ *
+ * Menjawab pertanyaan terakhir di brief manajer: "apakah aktivitas social media
+ * berdampak terhadap penjualan?".
+ *
+ * Dua hal yang membuat angkanya tidak menipu:
+ *
+ *  1. Hari TANPA laporan pemasukan dikeluarkan sepenuhnya. Omzetnya bukan nol,
+ *     melainkan TIDAK DIKETAHUI — memasukkannya sebagai nol akan menyeret
+ *     rata-rata sisi mana pun yang kebetulan laporannya bolong.
+ *  2. Perbandingan baru disebut layak kalau kedua sisi punya minimal
+ *     MIN_SAMPEL_DAMPAK hari. Di bawah itu satu hari ramai sudah cukup untuk
+ *     membalik kesimpulan.
+ *
+ * Ini korelasi, bukan sebab-akibat: hari ramai juga cenderung akhir pekan, dan
+ * akhir pekan juga cenderung hari orang rajin posting.
+ */
+export function dampakSosmed(
+  data: AppData,
+  monthKey: string,
+  hariIni: string,
+): DampakSosmed {
+  const omzetPerHari = new Map<string, number>()
+  for (const l of data.laporanIncome) {
+    if (!l.tanggal.startsWith(monthKey)) continue
+    omzetPerHari.set(
+      l.tanggal,
+      (omzetPerHari.get(l.tanggal) ?? 0) + hitungIncome(l).total,
+    )
+  }
+  const log = new Map<string, SosmedHarian>()
+  for (const r of data.sosmedHarian ?? []) log.set(r.tanggal, r)
+
+  const totalHari = hariDalamBulan(monthKey)
+  const hariBerjalan = hariSeharusnyaBulan(monthKey, hariIni)
+  const perHari: HariDampak[] = []
+  for (let d = 1; d <= totalHari; d += 1) {
+    const tanggal = tanggalKe(monthKey, d)
+    const r = log.get(tanggal)
+    const aksi = r ? AKSI_SOSMED.filter((a) => r[a]).length : 0
+    perHari.push({
+      tanggal,
+      hari: d,
+      omzet: omzetPerHari.get(tanggal) ?? 0,
+      aksi,
+      aktif: aksi > 0,
+      berlaporan: omzetPerHari.has(tanggal),
+      berjalan: d <= hariBerjalan,
+    })
+  }
+
+  const dinilai = perHari.filter((h) => h.berlaporan)
+  const sisiAktif = dinilai.filter((h) => h.aktif)
+  const sisiPasif = dinilai.filter((h) => !h.aktif)
+  const rata = (list: HariDampak[]) =>
+    list.length > 0 ? list.reduce((s, h) => s + h.omzet, 0) / list.length : 0
+
+  const rataAktif = rata(sisiAktif)
+  const rataPasif = rata(sisiPasif)
+  return {
+    perHari,
+    rataAktif,
+    rataPasif,
+    hariAktif: sisiAktif.length,
+    hariPasif: sisiPasif.length,
+    selisih: rataPasif > 0 ? (rataAktif - rataPasif) / rataPasif : null,
+    cukupSampel:
+      sisiAktif.length >= MIN_SAMPEL_DAMPAK && sisiPasif.length >= MIN_SAMPEL_DAMPAK,
+  }
+}
+
 export type KartuMenunggak = {
   id: string
   judul: string

@@ -3331,6 +3331,21 @@
   background: var(--mint-bg); border-color: var(--mint); color: var(--mint-deep);
 }
 
+/* ---- Grafik dampak sosmed ke penjualan ---- */
+.mgr-dampak-bar { fill: var(--primary-2); opacity: .45; }
+.mgr-dampak-bar.is-aktif { fill: var(--mint-deep); opacity: 1; }
+/* Hari tanpa laporan: omzetnya TIDAK DIKETAHUI, bukan nol — digambar sebagai
+   penanda tipis di garis dasar supaya tidak terbaca sebagai penjualan nol. */
+.mgr-dampak-bar.is-kosong { fill: var(--line); opacity: 1; }
+.mgr-dampak-pita { fill: var(--surface-2); }
+.mgr-dampak-pita.lv-1 { fill: color-mix(in srgb, var(--mint) 30%, transparent); }
+.mgr-dampak-pita.lv-2 { fill: color-mix(in srgb, var(--mint) 52%, transparent); }
+.mgr-dampak-pita.lv-3 { fill: color-mix(in srgb, var(--mint) 74%, transparent); }
+.mgr-dampak-pita.lv-4 { fill: var(--mint); }
+.mgr-legend-dampak-aktif { background: var(--mint-deep); }
+.mgr-legend-dampak-pasif { background: color-mix(in srgb, var(--primary-2) 45%, transparent); }
+.mgr-legend-dampak-kosong { background: var(--line); }
+
 .mgr-menunggak {
   margin-top: 14px; padding: 12px; border-radius: var(--radius-md);
   background: var(--yellow-bg); border: 1.5px solid var(--yellow);

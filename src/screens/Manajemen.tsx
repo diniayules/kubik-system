@@ -17,6 +17,8 @@ import {
   AKSI_SOSMED_LABEL,
   aktivitasSosmed,
   cakupanShift,
+  dampakSosmed,
+  MIN_SAMPEL_DAMPAK,
   eksekusiKonten,
   kontribusiKonten,
   kontribusiSales,
@@ -29,7 +31,7 @@ import {
   skorKPI,
   targetBerlaku,
 } from '../manajemen'
-import type { AksiSosmed, BarisKPI } from '../manajemen'
+import type { AksiSosmed, BarisKPI, HariDampak } from '../manajemen'
 import { Avatar, colorIndexForName } from '../components/Avatar'
 import { Icons } from '../components/Icons'
 
@@ -136,6 +138,10 @@ export function Manajemen({
   )
   const eksekusi = useMemo(
     () => eksekusiKonten(data, monthKey, hariIni),
+    [data, monthKey, hariIni],
+  )
+  const dampak = useMemo(
+    () => dampakSosmed(data, monthKey, hariIni),
     [data, monthKey, hariIni],
   )
   const kontribusi = useMemo(
@@ -664,6 +670,44 @@ export function Manajemen({
                 bergaris pada kalender di atas.
               </p>
             )}
+          </Panel>
+
+          <Panel
+            judul="Dampak Sosmed ke Penjualan"
+            sub="Omzet harian, dibandingkan antara hari sosmed aktif dan hari pasif"
+            badge={
+              dampak.cukupSampel && dampak.selisih != null
+                ? `${dampak.selisih >= 0 ? '+' : ''}${persen(dampak.selisih)}`
+                : undefined
+            }
+          >
+            <DampakChart rows={dampak.perHari} />
+            <div className="mgr-mini-stats">
+              <MiniStat
+                k={`Hari aktif (${dampak.hariAktif})`}
+                v={formatRupiah(dampak.rataAktif)}
+              />
+              <MiniStat
+                k={`Hari pasif (${dampak.hariPasif})`}
+                v={formatRupiah(dampak.rataPasif)}
+              />
+            </div>
+            <p className="mgr-hint">
+              {!dampak.cukupSampel ? (
+                <>
+                  Belum cukup data untuk dibandingkan — butuh minimal{' '}
+                  {MIN_SAMPEL_DAMPAK} hari berlaporan di kedua sisi. Hari tanpa
+                  laporan pemasukan tidak ikut dihitung, karena omzetnya tidak
+                  diketahui (bukan nol).
+                </>
+              ) : (
+                <>
+                  Ini <b>korelasi, bukan sebab-akibat</b>: akhir pekan cenderung
+                  ramai sekaligus cenderung jadi hari orang rajin posting. Pakai
+                  sebagai petunjuk arah, bukan bukti.
+                </>
+              )}
+            </p>
           </Panel>
 
           <Panel
@@ -1253,6 +1297,134 @@ function SaldoRow({
           {belumDiisi
             ? 'belum diisi'
             : `${selisih > 0 ? '+' : ''}${formatRupiah(selisih)}`}
+        </span>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Omzet harian sebulan, dengan penanda hari sosmed aktif.
+ *
+ * Batang = omzet hari itu; pita di bawahnya = seberapa banyak aktivitas sosmed
+ * hari itu (makin pekat, makin banyak). Menaruh keduanya pada sumbu waktu yang
+ * sama membuat polanya terbaca mata tanpa perlu percaya pada satu angka
+ * persentase.
+ *
+ * Hari tanpa laporan pemasukan digambar sebagai batang kosong bergaris, bukan
+ * batang nol — omzetnya tidak diketahui, dan menyamakannya dengan nol akan
+ * membuat grafik berbohong.
+ */
+function DampakChart({ rows }: { rows: HariDampak[] }) {
+  const W = 640
+  const H = 200
+  const padL = 52
+  const padR = 10
+  const padT = 12
+  const padB = 44
+  const plotW = W - padL - padR
+  const plotH = H - padT - padB
+  const pitaH = 10
+
+  const maks = Math.max(1, ...rows.map((r) => r.omzet))
+  const skalaMax = Math.ceil(maks / 4) * 4 || 1
+  const y = (v: number) => padT + plotH - (v / skalaMax) * plotH
+  const slotW = plotW / rows.length
+  const barW = Math.max(2, Math.min(14, slotW - 3))
+
+  if (rows.every((r) => !r.berlaporan)) {
+    return <p className="mgr-empty">Belum ada laporan pemasukan di periode ini.</p>
+  }
+
+  return (
+    <div className="mgr-chart">
+      <svg viewBox={`0 0 ${W} ${H}`} role="img" preserveAspectRatio="none">
+        <title>
+          Omzet harian dibandingkan aktivitas sosial media pada bulan terpilih
+        </title>
+        {[0, 0.5, 1].map((f) => (
+          <g key={f}>
+            <line
+              className="mgr-chart-grid"
+              x1={padL}
+              x2={W - padR}
+              y1={y(skalaMax * f)}
+              y2={y(skalaMax * f)}
+            />
+            <text
+              className="mgr-chart-axis"
+              x={padL - 8}
+              y={y(skalaMax * f) + 4}
+              textAnchor="end"
+            >
+              {f === 0 ? '0' : rupiahRingkas(skalaMax * f)}
+            </text>
+          </g>
+        ))}
+
+        {rows.map((r, i) => {
+          const cx = padL + slotW * i + slotW / 2
+          const tinggi = Math.max(0, padT + plotH - y(r.omzet))
+          return (
+            <g key={r.tanggal}>
+              {r.berlaporan ? (
+                <rect
+                  className={r.aktif ? 'mgr-dampak-bar is-aktif' : 'mgr-dampak-bar'}
+                  x={cx - barW / 2}
+                  y={y(r.omzet)}
+                  width={barW}
+                  height={Math.max(1, tinggi)}
+                  rx={2}
+                >
+                  <title>{`${r.tanggal} · ${formatRupiah(r.omzet)} · ${r.aksi} aktivitas sosmed`}</title>
+                </rect>
+              ) : (
+                <rect
+                  className="mgr-dampak-bar is-kosong"
+                  x={cx - barW / 2}
+                  y={padT + plotH - 4}
+                  width={barW}
+                  height={4}
+                  rx={2}
+                >
+                  <title>{`${r.tanggal} · belum ada laporan pemasukan`}</title>
+                </rect>
+              )}
+              {/* Pita aktivitas sosmed, sejajar di bawah sumbu. */}
+              <rect
+                className={`mgr-dampak-pita lv-${r.aksi}`}
+                x={cx - barW / 2}
+                y={padT + plotH + 8}
+                width={barW}
+                height={pitaH}
+                rx={2}
+              >
+                <title>{`${r.tanggal} · ${r.aksi} dari 4 aktivitas sosmed`}</title>
+              </rect>
+              {/* Label tanggal tiap 5 hari supaya tidak berdesakan. */}
+              {(r.hari === 1 || r.hari % 5 === 0) && (
+                <text
+                  className="mgr-chart-label"
+                  x={cx}
+                  y={H - 6}
+                  textAnchor="middle"
+                >
+                  {r.hari}
+                </text>
+              )}
+            </g>
+          )
+        })}
+      </svg>
+      <div className="mgr-legend">
+        <span>
+          <i className="mgr-legend-dampak-aktif" /> Omzet · hari sosmed aktif
+        </span>
+        <span>
+          <i className="mgr-legend-dampak-pasif" /> Omzet · hari pasif
+        </span>
+        <span>
+          <i className="mgr-legend-dampak-kosong" /> Tanpa laporan
         </span>
       </div>
     </div>

@@ -16,6 +16,8 @@ import {
   DAY_TYPE_LIST,
   EVENT_IKON,
   EVENT_LABEL,
+  PANTAU_LABEL,
+  PANTAU_URUTAN,
   SHIFT_DESKRIPSI,
   SHIFT_IKON,
   SHIFT_JADWAL,
@@ -27,6 +29,7 @@ import {
   cariOperatorOverlap,
   cariTakeover,
   diffMenit,
+  durasiPantauMenit,
   eventBerikutnya,
   formatDurasi,
   formatJam,
@@ -34,12 +37,14 @@ import {
   getEvent,
   hitungRingkasan,
   isHariKerja,
+  isPantau,
   istirahatDilewatiCount,
   jadwalISO,
 } from '../attendance'
 import { Avatar, colorIndexForName } from '../components/Avatar'
 import { Icons } from '../components/Icons'
 import { useToast } from '../components/Toast'
+import { isPengelola } from '../lib/roles'
 
 type Props = {
   data: AppData
@@ -89,6 +94,15 @@ export function Absen({
         .join(', ')
     : ''
   const next = eventBerikutnya(record)
+  // Pengelola (owner/manajer) tidak punya shift kerja: absennya cuma penanda
+  // kapan ia ada di studio (cek karyawan, operasional, dll) — lihat DayType
+  // 'pantau' di types.ts. Karena itu pemilih shift & seluruh hitungan jam
+  // kerja diganti alur ringkas datang–pulang.
+  const pengelola = isPengelola(employee?.role)
+  const hariPantau = !!record && isPantau(record.shift)
+  const nextPantau = record
+    ? PANTAU_URUTAN.find((t) => !getEvent(record, t))
+    : undefined
   const [now, setNow] = useState(() => new Date())
   const [editingTipe, setEditingTipe] = useState<EventTipe | null>(null)
   const [editValue, setEditValue] = useState('')
@@ -228,6 +242,32 @@ export function Absen({
     }
   }
 
+  // Mencatat kehadiran pengelola di studio (datang / selesai). Sengaja terpisah
+  // dari catatEvent(): tidak ada checklist, tidak ada istirahat, dan tidak ada
+  // jadwal yang dibandingkan — hanya stempel waktu.
+  function catatPantau(tipe: 'masuk' | 'pulang') {
+    if (!record || !isPantau(record.shift)) return
+    const waktu = new Date().toISOString()
+    const ada = record.events.some((e) => e.tipe === tipe)
+    if (
+      ada &&
+      !confirm(
+        `Sudah pernah dicatat "${PANTAU_LABEL[tipe]}". Timpa dengan waktu sekarang?`,
+      )
+    ) {
+      return
+    }
+    const events = ada
+      ? record.events.map((e) => (e.tipe === tipe ? { tipe, waktu } : e))
+      : [...record.events, { tipe, waktu }]
+    const updated: AbsenHari = { ...record, status: recordStatus, events }
+    setData({
+      ...data,
+      records: data.records.map((r) => (r.id === record.id ? updated : r)),
+    })
+    toast('ok', `${PANTAU_LABEL[tipe]} ${formatJam(waktu)}`)
+  }
+
   // Mencatat clock out (dipanggil langsung, atau dari modal closing checklist
   // dengan bukti task yang dicentang). Tetap menangani auto-prompt istirahat yang
   // belum tercatat, sama seperti sebelum ada fitur checklist.
@@ -346,11 +386,16 @@ export function Absen({
   }
 
   function bukaEdit(tipe: EventTipe) {
-    if (!record || !isHariKerja(record.shift)) return
+    // Hari kerja punya jam jadwal sebagai nilai awal; kehadiran pengelola tidak
+    // berjadwal, jadi nilai awalnya jam sekarang.
+    if (!record || (!isHariKerja(record.shift) && !isPantau(record.shift))) return
     const ev = getEvent(record, tipe)
+    const jadwalDefault = isHariKerja(record.shift)
+      ? SHIFT_JADWAL[record.shift][tipe]
+      : undefined
     const jamDefault = ev
       ? formatJam(ev.waktu)
-      : SHIFT_JADWAL[record.shift][tipe] ?? formatJam(new Date().toISOString())
+      : jadwalDefault ?? formatJam(new Date().toISOString())
     setEditingTipe(tipe)
     setEditValue(jamDefault)
   }
@@ -604,7 +649,139 @@ export function Absen({
       )}
 
       {!record ? (
-        <ShiftPicker onPick={pilihShift} />
+        pengelola ? (
+          <PantauPicker onPick={() => pilihShift('pantau')} />
+        ) : (
+          <ShiftPicker onPick={pilihShift} />
+        )
+      ) : isPantau(record.shift) ? (
+        <section className="detail-card">
+          <div className="shift-bar">
+            <div className="shift-bar-info">
+              <span className="badge badge--pantau">
+                {SHIFT_IKON.pantau} {SHIFT_LABEL.pantau}
+              </span>
+              <span className="shift-bar-rentang">
+                {SHIFT_RENTANG.pantau}
+              </span>
+            </div>
+          </div>
+
+          <div className="overlap-banner pantau-banner">
+            📍 <strong>Penanda kehadiran di studio</strong>
+            <div className="overlap-sub">
+              Catatan ini hanya menandai <strong>kapan kamu ada di studio</strong>{' '}
+              (mengecek karyawan, operasional, dll). Tidak dihitung sebagai jam
+              kerja, keterlambatan, lembur, maupun penghasilan per jam.
+            </div>
+          </div>
+
+          {isManual ? (
+            <div className="next-action">
+              <div className="next-label">Isi jam manual</div>
+              <div className="next-value">
+                Gunakan tombol <strong>Edit</strong> pada tiap baris di bawah
+                untuk mengisi jam datang & selesai.
+              </div>
+            </div>
+          ) : nextPantau ? (
+            <div className="next-action">
+              <div className="next-label">Berikutnya</div>
+              <div className="next-value">
+                {EVENT_IKON[nextPantau]} {PANTAU_LABEL[nextPantau]}
+              </div>
+              <div className="next-buttons">
+                <button
+                  type="button"
+                  className="btn btn--primary btn--lg"
+                  onClick={() => catatPantau(nextPantau)}
+                >
+                  <Icons.check /> Catat {PANTAU_LABEL[nextPantau]}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="next-action selesai">
+              <div className="next-label">✅ Kehadiran hari ini lengkap</div>
+              <div className="next-value">
+                Berada di studio {formatDurasi(durasiPantauMenit(record))}
+              </div>
+            </div>
+          )}
+
+          <h2 style={{ marginTop: 18 }}>Detail Catatan</h2>
+          <ol className="timeline-list">
+            {PANTAU_URUTAN.map((tipe) => {
+              const ev = getEvent(record, tipe)
+              const sedangEdit = editingTipe === tipe
+              return (
+                <li key={tipe} className={`timeline-item ${ev ? 'done' : ''}`}>
+                  <div className="timeline-ikon">{EVENT_IKON[tipe]}</div>
+                  <div>
+                    <div className="timeline-label">{PANTAU_LABEL[tipe]}</div>
+                    <div className="timeline-jadwal">Tanpa jadwal</div>
+                    {ev && <AuditBadge ev={ev} />}
+                  </div>
+                  <div className="timeline-jam">
+                    <div className="timeline-aktual">{formatJam(ev?.waktu)}</div>
+                    <div className="timeline-info tone-muted">
+                      {ev ? 'Tercatat' : 'Belum dicatat'}
+                    </div>
+                  </div>
+                  <div className="timeline-actions">
+                    {!ev && !isManual && (
+                      <button
+                        type="button"
+                        className="btn-mini"
+                        onClick={() => catatPantau(tipe)}
+                      >
+                        Catat
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="btn-mini btn-mini-edit"
+                      onClick={() => bukaEdit(tipe)}
+                    >
+                      <Icons.pencil /> Edit
+                    </button>
+                  </div>
+                  {sedangEdit && (
+                    <div className="edit-panel">
+                      <div className="edit-label">Atur waktu manual:</div>
+                      <div className="edit-row">
+                        <input
+                          type="time"
+                          className="edit-time"
+                          value={editValue}
+                          onChange={(e) => setEditValue(e.target.value)}
+                          autoFocus
+                        />
+                        <button
+                          type="button"
+                          className="btn btn--primary btn-mini"
+                          onClick={simpanEdit}
+                        >
+                          <Icons.check /> Simpan
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn--ghost btn-mini"
+                          onClick={batalEdit}
+                        >
+                          Batal
+                        </button>
+                      </div>
+                      <div className="edit-hint">
+                        Perubahan dicatat sebagai audit trail.
+                      </div>
+                    </div>
+                  )}
+                </li>
+              )
+            })}
+          </ol>
+        </section>
       ) : !isHariKerja(record.shift) ? (
         <section className="detail-card">
           <ShiftBadge shift={record.shift} onChange={gantiShift} />
@@ -895,7 +1072,7 @@ export function Absen({
             📅 Ubah Tanggal
           </button>
         )}
-        {record && (
+        {record && !hariPantau && (
           <button type="button" className="btn btn--ghost" onClick={aturExtra}>
             ➕ Extra Time
           </button>
@@ -1109,6 +1286,43 @@ function ShiftPicker({ onPick }: { onPick: (s: DayType) => void }) {
   )
 }
 
+// Pemilih untuk pengelola: hanya satu pilihan — menandai kehadiran di studio.
+// Sengaja tidak menawarkan shift kerja/cuti/libur karena pengelola digaji
+// bulanan dan tidak ikut roster shift.
+function PantauPicker({ onPick }: { onPick: () => void }) {
+  return (
+    <section className="detail-card">
+      <h2>Catat Kehadiran di Studio</h2>
+      <p className="timeline-help">
+        Absensi pengelola hanya penanda <strong>kapan kamu ada di studio</strong>{' '}
+        — mengecek karyawan, operasional, dan lain-lain. Tidak ada jadwal shift,
+        dan tidak dihitung sebagai penghasilan per jam.
+      </p>
+      <div className="shift-pick shift-pick--pantau" style={{ marginTop: 12 }}>
+        <button
+          type="button"
+          className="shift-opt shift-opt--pantau"
+          onClick={onPick}
+        >
+          <div className="so-emoji">{SHIFT_IKON.pantau}</div>
+          <div className="so-name">{SHIFT_LABEL.pantau}</div>
+          <div className="so-time">{SHIFT_RENTANG.pantau}</div>
+          <div
+            style={{
+              fontSize: 11,
+              color: 'var(--ink-soft)',
+              marginTop: 6,
+              lineHeight: 1.4,
+            }}
+          >
+            {SHIFT_DESKRIPSI.pantau}
+          </div>
+        </button>
+      </div>
+    </section>
+  )
+}
+
 function CutiLiburInfo({ shift }: { shift: 'cuti' | 'libur' | 'bersih' }) {
   const penjelasan: Record<'cuti' | 'libur' | 'bersih', string> = {
     cuti: 'Cuti pribadi — jatah 2 hari/bulan tidak memotong gaji. Cuti ke-3 dan seterusnya memotong 1 hari kerja.',
@@ -1157,7 +1371,7 @@ function ShiftBadge({
       </button>
       {showOpsi && (
         <div className="shift-bar-opsi">
-          {DAY_TYPE_LIST.filter((s) => s !== shift).map((s) => (
+          {DAY_TYPE_LIST.filter((s) => s !== shift && s !== 'pantau').map((s) => (
             <button
               key={s}
               type="button"

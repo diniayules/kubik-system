@@ -10,6 +10,7 @@ import {
   SHIFT_TARGET_MENIT,
   cariOperatorOverlap,
   cariTakeover,
+  durasiPantauMenit,
   formatDurasi,
   formatJam,
   formatTanggalPanjang,
@@ -21,7 +22,7 @@ import { Avatar, colorIndexForName } from '../components/Avatar'
 import { Icons } from '../components/Icons'
 import { DEFAULTS } from '../appearance'
 import { usePrefs } from '../lib/prefs'
-import { isPengelola } from '../lib/roles'
+import { ROLE_LABEL, asRole, isPengelola } from '../lib/roles'
 
 type Props = {
   data: AppData
@@ -63,6 +64,12 @@ export function Home({
   const karyawanNonaktif = data.inactiveEmployees.filter(
     (e) => !isPengelola(e.role),
   )
+
+  // Pengelola (owner & manajer) TIDAK ikut roster karyawan di atas, tapi tetap
+  // boleh mencatat kehadirannya sendiri: penanda kapan ia ada di studio untuk
+  // mengecek karyawan/operasional. Murni penanda — tidak dihitung jam kerja
+  // maupun penghasilan per jam (lihat DayType 'pantau').
+  const pengelolaList = data.employees.filter((e) => isPengelola(e.role))
 
   // Absensi manual yang menunggu persetujuan admin (tanggal terbaru dulu).
   const pendingAbsen = data.records
@@ -131,6 +138,35 @@ export function Home({
           ))}
         </div>
       </section>
+
+      {isAdmin && pengelolaList.length > 0 && (
+        <>
+          <div className="section-head">
+            <h2>
+              Kehadiran Pengelola{' '}
+              <span className="count-badge">{pengelolaList.length}</span>
+            </h2>
+          </div>
+          <p className="timeline-help" style={{ marginBottom: 12 }}>
+            📍 Penanda kapan owner/manajer ada di studio (cek karyawan,
+            operasional, dll). <strong>Tidak</strong> dihitung sebagai jam kerja
+            maupun penghasilan per jam.
+          </p>
+          <div className="emp-list">
+            {pengelolaList.map((emp) => (
+              <PengelolaRow
+                key={emp.id}
+                employee={emp}
+                data={data}
+                tanggal={hariIni}
+                isSelf={emp.id === currentUserId}
+                onAbsen={() => onPickEmployee(emp.id)}
+                onRiwayat={() => onLihatRiwayat(emp.id)}
+              />
+            ))}
+          </div>
+        </>
+      )}
 
       <div className="section-head">
         <h2>
@@ -538,6 +574,105 @@ function EmployeeCard({
           title="Riwayat"
         >
           <Icons.history /> Riwayat
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// Baris kehadiran pengelola: ringkas (datang · selesai · lama di studio) tanpa
+// kolom telat/lembur, karena kunjungan pengelola tidak berjadwal & tidak
+// dihitung gaji.
+function PengelolaRow({
+  employee,
+  data,
+  tanggal,
+  isSelf,
+  onAbsen,
+  onRiwayat,
+}: {
+  employee: Employee
+  data: AppData
+  tanggal: string
+  isSelf: boolean
+  onAbsen: () => void
+  onRiwayat: () => void
+}) {
+  const record = data.records.find(
+    (r) => r.employeeId === employee.id && r.tanggal === tanggal,
+  )
+  const masuk = getEvent(record, 'masuk')
+  const pulang = getEvent(record, 'pulang')
+  let status: 'belum' | 'kerja' | 'selesai' = 'belum'
+  if (pulang) status = 'selesai'
+  else if (masuk) status = 'kerja'
+  const durasi = durasiPantauMenit(record)
+
+  return (
+    <div className={`emp-row status-${status}`}>
+      <Avatar
+        name={employee.nama}
+        colorIndex={colorIndexForName(employee.id)}
+        foto={employee.foto}
+      />
+      <div className="emp-row-info">
+        <div className="emp-row-nama">{employee.nama}</div>
+        <div className="emp-row-meta">
+          <span className="emp-row-role">
+            {employee.jabatan || ROLE_LABEL[asRole(employee.role)]}
+          </span>
+          {status === 'kerja' && (
+            <span className="badge badge--pantau">
+              <span className="live-dot" /> Di studio
+            </span>
+          )}
+          {status === 'selesai' && (
+            <span className="badge badge--done">Selesai</span>
+          )}
+          {status === 'belum' && (
+            <span className="badge badge--none">Belum hadir</span>
+          )}
+        </div>
+      </div>
+
+      <div className="emp-row-stats">
+        <div className="emp-row-stat">
+          <span className="k">Datang</span>
+          <span className={'v' + (masuk ? '' : ' empty')}>
+            {masuk ? formatJam(masuk.waktu) : '—'}
+          </span>
+        </div>
+        <div className="emp-row-stat">
+          <span className="k">Selesai</span>
+          <span className={'v' + (pulang ? '' : ' empty')}>
+            {pulang ? formatJam(pulang.waktu) : '—'}
+          </span>
+        </div>
+        <div className="emp-row-stat">
+          <span className="k">Di studio</span>
+          <span className={'v' + (durasi > 0 ? '' : ' empty')}>
+            {durasi > 0 ? formatDurasi(durasi) : '—'}
+          </span>
+        </div>
+      </div>
+
+      <div className="emp-row-actions">
+        {isSelf && (
+          <button type="button" className="btn btn--primary" onClick={onAbsen}>
+            {status === 'kerja'
+              ? 'Catat Selesai'
+              : status === 'selesai'
+                ? 'Detail'
+                : 'Catat Hadir'}
+          </button>
+        )}
+        <button
+          type="button"
+          className="emp-row-icon"
+          onClick={onRiwayat}
+          title="Riwayat"
+        >
+          <Icons.history />
         </button>
       </div>
     </div>

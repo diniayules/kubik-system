@@ -26,6 +26,7 @@ export const SHIFT_LABEL: Record<DayType, string> = {
   cuti: 'Cuti',
   libur: 'Libur Studio',
   bersih: 'General Cleaning',
+  pantau: 'Hadir di Studio',
 }
 
 export const SHIFT_IKON: Record<DayType, string> = {
@@ -35,6 +36,7 @@ export const SHIFT_IKON: Record<DayType, string> = {
   cuti: '🌴',
   libur: '🏖️',
   bersih: '🧹',
+  pantau: '📍',
 }
 
 export const SHIFT_RENTANG: Record<DayType, string> = {
@@ -44,6 +46,7 @@ export const SHIFT_RENTANG: Record<DayType, string> = {
   cuti: 'Tidak masuk',
   libur: 'Studio tutup',
   bersih: 'Kerja bakti bersama',
+  pantau: 'Tanpa jam tetap',
 }
 
 export const SHIFT_DESKRIPSI: Record<DayType, string> = {
@@ -53,6 +56,8 @@ export const SHIFT_DESKRIPSI: Record<DayType, string> = {
   cuti: 'Cuti pribadi · jatah 2 hari/bln (lebih dari itu dipotong)',
   libur: 'Studio tutup / libur bersama · gaji tetap penuh',
   bersih: 'Ikut general cleaning · sudah termasuk gaji bulanan (tidak menambah gaji)',
+  pantau:
+    'Penanda kehadiran pengelola di studio · tidak dihitung jam kerja maupun gaji',
 }
 
 /** Penanda hari tidak dihitung gaji yang dipilih lewat tombol (bukan shift kerja). */
@@ -62,7 +67,7 @@ export const TIDAK_KERJA_LIST: ('cuti' | 'libur' | 'bersih')[] = [
   'bersih',
 ]
 
-/** Daftar lengkap jenis hari (3 shift kerja + cuti + libur + bersih). */
+/** Daftar lengkap jenis hari (3 shift kerja + cuti + libur + bersih + pantau). */
 export const DAY_TYPE_LIST: DayType[] = [
   'pagi',
   'sore',
@@ -70,11 +75,34 @@ export const DAY_TYPE_LIST: DayType[] = [
   'cuti',
   'libur',
   'bersih',
+  'pantau',
 ]
+
+/**
+ * Urutan event kehadiran pengelola: cukup datang & pulang. Tidak ada istirahat
+ * karena kunjungan pengelola bukan shift kerja berjadwal.
+ */
+export const PANTAU_URUTAN: ('masuk' | 'pulang')[] = ['masuk', 'pulang']
+
+/** Label tombol khusus kehadiran pengelola (bukan clock in/out shift). */
+export const PANTAU_LABEL: Record<'masuk' | 'pulang', string> = {
+  masuk: 'Datang ke Studio',
+  pulang: 'Selesai / Meninggalkan Studio',
+}
 
 /** Apakah `s` adalah shift kerja (punya jadwal & event), bukan cuti/libur. */
 export function isHariKerja(s: DayType): s is Shift {
   return s === 'pagi' || s === 'sore' || s === 'full'
+}
+
+/**
+ * Kehadiran pengelola (owner/manajer) di studio. Dicatat seperti absen biasa
+ * supaya jelas "kapan ada di studio", tapi sengaja BUKAN hari kerja: tidak
+ * punya jadwal, tidak dinilai telat/lembur, dan tidak pernah menghasilkan
+ * rupiah di slip gaji (lihat gaji.ts).
+ */
+export function isPantau(s: DayType): s is 'pantau' {
+  return s === 'pantau'
 }
 
 export const SHIFT_URUTAN: Record<Shift, EventTipe[]> = {
@@ -131,6 +159,29 @@ export function getEvent(
   tipe: EventTipe,
 ): AbsenEvent | undefined {
   return record?.events.find((e) => e.tipe === tipe)
+}
+
+/**
+ * Baris waktu yang perlu diisi untuk satu jenis hari: shift kerja memakai
+ * urutan lengkap (masuk–istirahat–pulang), kehadiran pengelola cukup
+ * datang & pulang, cuti/libur/bersih tidak punya jam sama sekali.
+ */
+export function slotEventUntuk(s: DayType): EventTipe[] {
+  if (isHariKerja(s)) return SHIFT_URUTAN[s]
+  if (isPantau(s)) return PANTAU_URUTAN
+  return []
+}
+
+/**
+ * Lama pengelola berada di studio (menit) — hanya untuk ditampilkan; tidak
+ * dipakai di perhitungan gaji mana pun.
+ */
+export function durasiPantauMenit(record: AbsenHari | undefined): number {
+  if (!record || !isPantau(record.shift)) return 0
+  const masuk = getEvent(record, 'masuk')
+  const pulang = getEvent(record, 'pulang')
+  if (!masuk || !pulang) return 0
+  return Math.max(0, diffMenit(pulang.waktu, masuk.waktu))
 }
 
 /** Absensi terhitung resmi? (`menunggu` = entri manual belum di-ACC admin). */

@@ -10,7 +10,7 @@ import { formatRupiah, ringkasanPerKaryawan } from '../income'
 import { Avatar, colorIndexForName } from '../components/Avatar'
 import { Modal, ModalHead } from '../components/Modal'
 import { Icons } from '../components/Icons'
-import { asRole, ROLE_EMOJI, ROLE_LABEL, type Role } from '../lib/roles'
+import { asRole, isOwner, ROLE_EMOJI, ROLE_LABEL, type Role } from '../lib/roles'
 
 type Props = {
   data: AppData
@@ -57,16 +57,20 @@ function formatTanggalID(iso?: string): string {
 }
 
 export function ProfilKaryawan({ data, setData, isAdmin, currentUserId }: Props) {
-  // Pengelola (owner & manajer) melihat SEMUA profil — termasuk akun pengelola
-  // lain — supaya data kepegawaian mereka bisa dilihat & diedit dari sini.
-  // Karyawan biasa hanya melihat profilnya sendiri, jadi kartu pengelola tidak
-  // pernah tampil ke staf.
+  // Akun OWNER tidak pernah tampil di sini — pemilik bukan karyawan, jadi
+  // kartunya cuma bikin ramai daftar (termasuk buat owner itu sendiri).
+  // Manajer tetap tampil: data kepegawaiannya masih perlu dilihat & diedit.
+  //
+  // Karyawan biasa hanya melihat profilnya sendiri.
   //
   // Ini sengaja beda dari roster Beranda, statistik kehadiran, dan gaji yang
-  // tetap menyaring pengelola lewat `isPengelola`: mereka tidak ikut absen,
+  // menyaring SEMUA pengelola lewat `isPengelola`: mereka tidak ikut absen,
   // jadi kalau ikut terdaftar di sana angkanya jadi salah.
   const karyawan = useMemo(
-    () => data.employees.filter((e) => isAdmin || e.id === currentUserId),
+    () =>
+      data.employees.filter(
+        (e) => (isAdmin || e.id === currentUserId) && !isOwner(e.role),
+      ),
     [data.employees, isAdmin, currentUserId],
   )
 
@@ -97,6 +101,12 @@ export function ProfilKaryawan({ data, setData, isAdmin, currentUserId }: Props)
       }
       if (rec.shift === 'bersih') {
         p.hariBersih += 1
+        continue
+      }
+      // Kehadiran pengelola di studio: dicatat sebagai hari hadir, tanpa jam
+      // kerja/telat/lembur karena kunjungannya tidak berjadwal.
+      if (rec.shift === 'pantau') {
+        if (getEvent(rec, 'masuk')) p.hariHadir += 1
         continue
       }
       const ring = hitungRingkasan(rec, cariTakeover(rec, data.records))

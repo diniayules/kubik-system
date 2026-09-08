@@ -52,8 +52,13 @@ export type Shift = 'pagi' | 'sore' | 'full'
  *               Kehadiran dicatat sebagai bukti ikut serta, tapi TIDAK menambah
  *               gaji (sudah termasuk gaji bulanan). Cukup ditandai hadir, tanpa
  *               jam masuk/pulang.
+ *  - 'pantau' : kehadiran PENGELOLA (owner/manajer) di studio — datang mengecek
+ *               karyawan, operasional, dsb. Hanya penanda "kapan ada di studio":
+ *               cukup jam datang & pulang, tanpa jadwal shift, tanpa istirahat,
+ *               tanpa hitungan telat/lembur, dan TIDAK pernah masuk perhitungan
+ *               gaji per jam (pengelola digaji bulanan, bukan per jam).
  */
-export type DayType = Shift | 'cuti' | 'libur' | 'bersih'
+export type DayType = Shift | 'cuti' | 'libur' | 'bersih' | 'pantau'
 
 export type EventTipe =
   | 'masuk'
@@ -418,6 +423,50 @@ export type PromoStatus = 'menunggu' | 'disetujui'
 export type PromoJenis = 'campaign' | 'konten' | 'promo'
 
 /**
+ * Tahap produksi satu konten. DIPATOK — sama untuk semua kartu, karena yang
+ * dinilai adalah irama produksinya, bukan variasi alurnya. Yang boleh diatur
+ * owner hanyalah HARI target tiap tahap, lewat [RitmeKonten].
+ */
+export type TahapKonten = 'take' | 'edit' | 'tayang'
+
+/**
+ * Satu tahap yang sudah dicentang pada sebuah kartu konten.
+ *
+ * `selesaiPada` DISTEMPEL DATABASE (trigger `promo_stamp_tahapan`, migration
+ * 0051), bukan diisi dari layar — tanpa itu, tahap yang dicentang menyusul tak
+ * terbedakan dari yang dikerjakan tepat waktu. Read-only bagi client: kirim
+ * `kunci` (+ `oleh`) saja, tanggalnya diisi server.
+ */
+export type TahapanKartu = {
+  kunci: TahapKonten
+  /** `YYYY-MM-DD`. Diisi server. */
+  selesaiPada?: string
+  /** Yang mengerjakan — `profiles.id` ATAU nama bebas, seperti [SosmedHarian]. */
+  oleh?: string
+}
+
+/**
+ * Kontrak ritme konten mingguan antara owner & manajer. Satu objek untuk
+ * seluruh aplikasi (bukan per bulan), disimpan di `app_config.ritme_konten`
+ * (migration 0051).
+ *
+ * Diisi SEKALI, bukan tiap minggu: begitu ritme berdiri, owner tidak perlu
+ * lagi bilang "minggu ini bikin konten" — diam berarti tetap jalan.
+ *
+ * Seperti [TargetBulanan], selama `disetujui` belum true angka yang lahir dari
+ * ritme ini hanya simulasi dan tidak boleh dipakai menilai orang.
+ */
+export type RitmeKonten = {
+  /** Berapa konten yang harus tayang tiap minggu. Ini yang melahirkan slot. */
+  jumlah: number
+  /** Hari target tiap tahap. 1 = Senin … 7 = Minggu. */
+  hari: Record<TahapKonten, number>
+  disetujui?: boolean
+  /** ISO timestamp saat owner menyetujui. */
+  disetujuiPada?: string
+}
+
+/**
  * Satu program promosi. Visibilitas ke karyawan diturunkan dari `tahap` + `status`
  * (bukan kolom terpisah): tampil kalau `status='disetujui'` dan tahap termasuk
  * comingsoon/berjalan/selesai, atau kalau kartu itu milik karyawan sendiri.
@@ -452,6 +501,12 @@ export type PromoProgram = {
    * Read-only bagi client.
    */
   selesaiPada?: string
+  /**
+   * Centang tahap produksi (take → edit → tayang) untuk kartu berjenis
+   * 'konten'. Dasar papan "Denyut Mingguan" di Dashboard Manajemen. Lihat
+   * [TahapanKartu] & migration 0051.
+   */
+  tahapan?: TahapanKartu[]
   /** Pengusul / pembuat (profiles.id). Distempel otomatis saat insert. */
   dibuatOleh?: string
   /**
@@ -551,6 +606,104 @@ export type LeadFollowup = {
 }
 
 /**
+ * Apa yang diajukan sekolah/instansi.
+ *  - 'sponsorship' : minta dukungan untuk satu acara (uang/voucher/booth).
+ *  - 'mou'         : kerja sama berjangka, tanpa permintaan dana.
+ *  - 'keduanya'    : MoU payung yang sekaligus mensponsori sebuah acara.
+ */
+export type KemitraanJenis = 'sponsorship' | 'mou' | 'keduanya'
+
+/**
+ * Status satu pengajuan, urut dari masuk sampai tuntas.
+ *
+ * 'disetujui' & 'ditolak' adalah KEPUTUSAN (tanggalnya distempel database);
+ * 'selesai' berarti kewajiban kedua pihak sudah beres — sponsor dibayar dan
+ * imbalannya sudah diterima — jadi kartunya boleh berhenti dipantau.
+ */
+export type KemitraanStatus =
+  | 'masuk'
+  | 'ditinjau'
+  | 'disetujui'
+  | 'ditolak'
+  | 'selesai'
+
+/** Wujud sponsor yang diberikan — tidak semuanya berupa uang tunai. */
+export type KemitraanBentuk =
+  | 'uang'
+  | 'voucher'
+  | 'produk'
+  | 'booth'
+  | 'jasa'
+  | 'lainnya'
+
+/**
+ * Satu butir timbal balik yang dijanjikan untuk Kubik (logo di banner, booth
+ * di acara, post Instagram sekolah, ...) beserta centang sudah terpenuhi atau
+ * belum. Disimpan sebagai jsonb di `kemitraan.imbalan` — pola yang sama dengan
+ * `promoPrograms.tahapan`, karena butirnya sedikit dan selalu dibaca bersama
+ * induknya.
+ */
+export type KemitraanImbalan = {
+  id: string
+  teks: string
+  selesai: boolean
+}
+
+/**
+ * Satu pengajuan MoU / sponsorship yang masuk dari sekolah atau instansi.
+ * Lihat migration 0053.
+ *
+ * Sengaja TERPISAH dari [Lead] walau sama-sama pipeline: lead dikejar supaya
+ * Kubik dapat uang, sponsorship yang disetujui membuat Kubik keluar uang.
+ * Mencampurnya akan membuat KPI sales mengaku mengejar order padahal beban.
+ */
+export type Kemitraan = {
+  id: string
+  /** Sekolah / instansi yang mengajukan. */
+  instansi: string
+  jenis: KemitraanJenis
+  /** Orang yang menghubungi: ketua panitia, guru pembina, kesiswaan. */
+  kontakNama: string
+  kontak: string
+  /** Nama kegiatan yang disponsori; kosong untuk MoU payung. */
+  acara: string
+  /** Format `YYYY-MM-DD`. */
+  tanggalAcara?: string
+  /** Format `YYYY-MM-DD`. */
+  tanggalMasuk: string
+  status: KemitraanStatus
+  /** Isi proposalnya, apa adanya. */
+  permintaan: string
+  /** Nilai yang diminta di proposal. */
+  nilaiDiminta: number
+  /** Nilai yang akhirnya disetujui — selisihnya hasil negosiasi manajer. */
+  nilaiDisetujui: number
+  bentuk: KemitraanBentuk
+  /** Timbal balik untuk Kubik. Lihat [KemitraanImbalan]. */
+  imbalan: KemitraanImbalan[]
+  /** Masa berlaku MoU (`YYYY-MM-DD`). Kosong untuk sponsorship sekali jalan. */
+  mouMulai?: string
+  mouBerakhir?: string
+  alasanTolak?: string
+  catatan?: string
+  /** Siapa yang menangani pengajuan ini (profiles.id). */
+  pic?: string
+  /**
+   * Tanggal pengajuan diputuskan (disetujui/ditolak). DISTEMPEL DATABASE
+   * (trigger `kemitraan_stamp_keputusan`, migration 0053) — ia bukti kecepatan
+   * respons, jadi read-only bagi client.
+   */
+  tanggalKeputusan?: string
+  /**
+   * Baris `pengeluaran` yang mencatat sponsor ini saat dibayar. Kosong = belum
+   * dibayar. Disimpan supaya uangnya masuk laporan keuangan tepat sekali dan
+   * bisa ditarik lagi kalau salah catat.
+   */
+  pengeluaranId?: string
+  dibuatOleh?: string
+}
+
+/**
  * Catatan aktivitas sosial media SATU HARI.
  *
  * Satuannya sengaja hari, bukan unggahan: KPI-nya adalah "aktif setiap hari",
@@ -569,8 +722,19 @@ export type SosmedHarian = {
   catatan?: string
   /** Tautan ke unggahannya (opsional, untuk verifikasi). */
   tautan?: string
-  /** Operator yang mengerjakan hari itu (profiles.id) — dasar bonus. */
+  /**
+   * Entri profil PERTAMA dari `olehList` — cermin kolom lama `sosmed_harian.oleh`
+   * (uuid ber-foreign-key). Jangan dibaca langsung: pakai `pengerjaSosmed()`
+   * di manajemen.ts supaya data lama & baru terbaca sama.
+   */
   oleh?: string
+  /**
+   * Semua yang mengerjakan hari itu. Tiap entri boleh berupa `profiles.id`
+   * ATAU nama bebas (freelancer/anak magang yang tidak punya akun) — sebuah
+   * hari sosmed sering dikerjakan berdua, dan memaksa semuanya punya akun akan
+   * membuat orang berhenti mencatat. Lihat migration 0049.
+   */
+  olehList?: string[]
 }
 
 /**
@@ -592,6 +756,8 @@ export type TargetBulanan = {
   event: number
   /** Leads baru yang masuk pipeline. */
   leads: number
+  /** Lead yang berhasil ditutup jadi order bulan ini. */
+  closing: number
   /** Campaign/promo yang benar-benar DIEKSEKUSI (tahap berjalan/selesai). */
   campaign: number
   /** Ide baru yang masuk papan promosi. */
@@ -602,6 +768,90 @@ export type TargetBulanan = {
   kepatuhan: number
   /** Cakupan jadwal shift, 0-1. */
   shiftCover: number
+  /**
+   * Porsi item "Butuh Tindakan" yang ditutup manajer SENDIRI (bukan owner),
+   * 0-1. Inilah ukuran kemandirian: makin tinggi, makin sedikit owner turun
+   * tangan. Lihat [EskalasiOwner].
+   */
+  mandiri: number
+  /** Penilaian kualitatif owner saat evaluasi, skala 1-5. */
+  penilaian: number
+  /**
+   * true = target periode ini sudah DISETUJUI owner. Sebelum disetujui,
+   * scorecard tetap dihitung tapi ditandai "simulasi" — angka saran otomatis
+   * belum boleh dipakai menilai orang.
+   */
+  disetujui?: boolean
+  /** Kapan disetujui (ISO). Hanya jejak, tidak dipakai berhitung. */
+  disetujuiPada?: string
+}
+
+/**
+ * Penilaian kualitatif owner atas manajer untuk satu periode `YYYY-MM`.
+ *
+ * Satu-satunya KPI yang TIDAK bisa diturunkan dari data: kepemimpinan,
+ * inisiatif, cara mengambil keputusan. Diisi manual saat evaluasi bulanan.
+ * Disimpan di `app_config.penilaian_owner` (migration 0048).
+ */
+export type PenilaianOwner = {
+  /** Skala 1-5. */
+  nilai: number
+  catatan?: string
+  /** Kapan diisi (ISO). */
+  diisiPada?: string
+}
+
+/**
+ * Satu item antrean "Butuh Tindakan" yang sudah ditutup — beserta SIAPA yang
+ * menutupnya.
+ *
+ * Gunanya satu: mengukur ketergantungan pada owner. Kalau tiap bulan makin
+ * banyak item yang harus ditutup owner, manajer belum benar-benar memegang
+ * kendali; angka itulah KPI kelompok Kepemimpinan.
+ * Disimpan di `app_config.eskalasi_owner` (migration 0048).
+ */
+export type EskalasiOwner = {
+  id: string
+  /** Format `YYYY-MM-DD` — periode penilaian diambil dari sini. */
+  tanggal: string
+  /** Label antrean yang ditutup, mis. "Leads menunggu di-follow-up". */
+  label: string
+  /** Siapa yang benar-benar menyelesaikannya. */
+  oleh: 'manager' | 'owner'
+  /** Alasan eskalasi (opsional, 1 tap tanpa alasan tetap sah). */
+  catatan?: string
+  /** Akun yang mencatat (profiles.id). */
+  dicatatOleh?: string
+}
+
+/**
+ * Status satu hari menurut laporan closing manajer.
+ *
+ * Tiga, bukan dua: "kendala" yang sudah beres sendiri adalah kabar BAIK —
+ * itulah bukti manajer memegang kendali — sedangkan "eskalasi" adalah hari
+ * yang benar-benar memakan waktu owner. Menggabungkan keduanya jadi "ada
+ * masalah" akan menghukum manajer justru saat ia bekerja dengan benar.
+ */
+export type StatusLaporanHarian = 'aman' | 'kendala' | 'eskalasi'
+
+/**
+ * Laporan closing harian yang ditulis manajer dengan tangan.
+ *
+ * Isinya sengaja tidak terstruktur: yang dicatat di sini justru kejadian yang
+ * TIDAK punya tempat di tabel mana pun — printer macet lalu di-head cleaning,
+ * pelanggan komplain lalu diredakan, operator tukar shift dadakan. Begitu
+ * sesuatu cukup sering muncul sampai layak punya kolom sendiri, pindahkan ke
+ * fitur yang tepat; jangan menumbuhkan formulir di sini.
+ *
+ * Satu baris per tanggal. Disimpan di tabel `laporan_harian` (migration 0052).
+ */
+export type LaporanHarian = {
+  /** Format `YYYY-MM-DD`. Sekaligus kunci primer. */
+  tanggal: string
+  status: StatusLaporanHarian
+  catatan: string
+  /** Penulisnya (`profiles.id`) — biasanya manajer, kadang owner. */
+  oleh?: string
 }
 
 export type FontPair = 'playful' | 'editorial' | 'modern' | 'minimal' | 'oui'
@@ -726,10 +976,32 @@ export type AppData = {
    */
   jadwalShift: JadwalShift[]
   /**
+   * Penilaian owner per periode `YYYY-MM` (kelompok KPI Kepemimpinan).
+   * Disimpan di `app_config.penilaian_owner`. Key tidak ada = belum dinilai,
+   * dan KPI-nya ikut nonaktif (bukan dihitung nol).
+   */
+  penilaianOwner: Record<string, PenilaianOwner>
+  /**
+   * Log penutupan antrean "Butuh Tindakan" — dasar KPI ketergantungan owner.
+   * Kosong = belum pernah dipakai (KPI kemandirian ikut nonaktif).
+   */
+  eskalasiOwner: EskalasiOwner[]
+  /**
+   * Kontrak ritme konten mingguan. Lihat [RitmeKonten] & migration 0051.
+   * `undefined` = ritme belum diatur (papan Denyut Mingguan & KPI-nya ikut
+   * nonaktif, bukan dinilai nol).
+   */
+  ritmeKonten?: RitmeKonten
+  /**
    * Log aktivitas sosial media harian. Lihat [SosmedHarian] & migration 0046.
    * Kosong = belum pernah dicatat (KPI sosmed & engagement ikut nonaktif).
    */
   sosmedHarian: SosmedHarian[]
+  /**
+   * Laporan closing harian manajer. Lihat [LaporanHarian] & migration 0052.
+   * Opsional supaya app tetap naik sebelum migrasinya dijalankan.
+   */
+  laporanHarian: LaporanHarian[]
   /**
    * Pipeline calon klien. Lihat [Lead] & migration 0047. Kosong = pipeline
    * belum dipakai (KPI leads ikut nonaktif).
@@ -737,6 +1009,11 @@ export type AppData = {
   leads: Lead[]
   /** Riwayat follow-up seluruh lead. Lihat [LeadFollowup]. */
   leadsFollowup: LeadFollowup[]
+  /**
+   * Pengajuan MoU & sponsorship yang masuk. Lihat [Kemitraan] & migration 0053.
+   * Kosong = belum ada pengajuan yang dicatat.
+   */
+  kemitraan: Kemitraan[]
   headerJudul?: string
   headerSub?: string
   incomeJudul?: string

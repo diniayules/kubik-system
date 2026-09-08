@@ -14,6 +14,8 @@
 //      + upah waktu ekstra    (menit extra manual × tarif/menit — backup/meeting)
 //      − potongan keterlambatan (menit telat × tarif/menit)
 //  - Tarif/menit = gaji pokok ÷ 30 hari ÷ 300 menit (800.000 → Rp 88,8).
+//  - Kehadiran pengelola ('pantau') tidak pernah masuk hitungan di sini:
+//    owner/manajer digaji bulanan, absennya cuma penanda kehadiran di studio.
 //  - CUTI & "Libur Studio" dicatat EKSPLISIT lewat pemilih shift; keduanya hanya
 //    ditampilkan sebagai info kehadiran dan tidak lagi mempengaruhi nominal gaji
 //    (tidak dibayar, tidak pula dipotong). Hari tanpa catatan apa pun juga hanya
@@ -118,6 +120,10 @@ export function hitungSlipGaji(
   let hariBersih = 0
   for (const r of records) {
     if (r.employeeId !== emp.id) continue
+    // Kehadiran pengelola di studio ('pantau') hanya penanda "kapan ada di
+    // studio" untuk mengecek karyawan/operasional — bukan jam kerja berbayar.
+    // Dilewati SEBELUM apa pun dihitung, termasuk waktu ekstra.
+    if (r.shift === 'pantau') continue
     // Waktu ekstra manual (backup datang cepat / meeting) dibayar di hari apa
     // pun — termasuk saat hari itu ditandai libur/cuti (mis. meeting bulanan).
     extraMenit += Math.max(0, r.extraMenit ?? 0)

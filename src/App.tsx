@@ -291,6 +291,7 @@ function Inner() {
                 data={data}
                 setData={setData}
                 isOwner={auth.isOwner}
+                meId={auth.profile?.id}
                 onLihatAbsensi={() => setScreen({ name: 'absensi' })}
                 onLihatJadwal={() => setScreen({ name: 'jadwal' })}
                 onLihatLeads={() => setScreen({ name: 'leads' })}

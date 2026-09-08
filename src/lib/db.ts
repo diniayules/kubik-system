@@ -22,12 +22,16 @@ import type {
   HargaUpgrade,
   JadwalShift,
   JenisFrame,
+  Kemitraan,
+  KemitraanImbalan,
   Lead,
   LeadFollowup,
   JenisKertas,
   LaporanEvent,
   LaporanIncome,
   LayananDef,
+  PenilaianOwner,
+  EskalasiOwner,
   PenyesuaianUangKecil,
   PenarikanUangBesar,
   Pengeluaran,
@@ -38,10 +42,13 @@ import type {
   SalahCetak,
   SewaTipe,
   SosmedHarian,
+  LaporanHarian,
   TargetBulanan,
   Tinta,
   UpgradeDef,
   WarnaTinta,
+  RitmeKonten,
+  TahapanKartu,
 } from '../types'
 import {
   HARGA_CETAK_DEFAULT,
@@ -146,6 +153,7 @@ type PromoRow = {
   pic: string | null
   deadline: string | null
   selesai_pada: string | null
+  tahapan: TahapanKartu[] | null
 }
 type LeadRow = {
   id: string
@@ -170,9 +178,41 @@ type LeadFollowupRow = {
   catatan: string | null
   oleh: string | null
 }
-type SosmedRow = Omit<SosmedHarian, 'catatan' | 'tautan' | 'oleh'> & {
+type KemitraanRow = {
+  id: string
+  instansi: string | null
+  jenis: Kemitraan['jenis']
+  kontak_nama: string | null
+  kontak: string | null
+  acara: string | null
+  tanggal_acara: string | null
+  tanggal_masuk: string
+  status: Kemitraan['status']
+  permintaan: string | null
+  nilai_diminta: number | null
+  nilai_disetujui: number | null
+  bentuk: Kemitraan['bentuk']
+  imbalan: KemitraanImbalan[] | null
+  mou_mulai: string | null
+  mou_berakhir: string | null
+  alasan_tolak: string | null
+  catatan: string | null
+  pic: string | null
+  tanggal_keputusan: string | null
+  pengeluaran_id: string | null
+  created_by: string | null
+}
+type SosmedRow = Omit<
+  SosmedHarian,
+  'catatan' | 'tautan' | 'oleh' | 'olehList'
+> & {
   catatan: string | null
   tautan: string | null
+  oleh: string | null
+  oleh_list: string[] | null
+}
+type LaporanHarianRow = Omit<LaporanHarian, 'catatan' | 'oleh'> & {
+  catatan: string | null
   oleh: string | null
 }
 type JadwalShiftRow = {
@@ -228,6 +268,9 @@ type ConfigRow = {
   setoran_rekening: SetoranRekening[] | null
   saldo_awal: { dompet: number; rekening: number } | null
   target_bulanan: Record<string, TargetBulanan> | null
+  penilaian_owner: Record<string, PenilaianOwner> | null
+  eskalasi_owner: EskalasiOwner[] | null
+  ritme_konten: RitmeKonten | null
   brand_kicker: string | null
   brand_name: string | null
   dash_judul: string | null
@@ -266,8 +309,10 @@ export async function fetchAppData(): Promise<AppData> {
     promoRes,
     jadwalRes,
     sosmedRes,
+    laporanHarianRes,
     leadsRes,
     followupRes,
+    kemitraanRes,
   ] = await Promise.all([
     supabase
       .from('profiles')
@@ -315,7 +360,7 @@ export async function fetchAppData(): Promise<AppData> {
     // karyawan hanya yang tayang + miliknya sendiri). Lihat migration 0035.
     supabase
       .from('promo_programs')
-      .select('id, judul, deskripsi, tahap, status, tanggal_mulai, tanggal_selesai, created_by, created_at, desain, jenis, pic, deadline, selesai_pada')
+      .select('id, judul, deskripsi, tahap, status, tanggal_mulai, tanggal_selesai, created_by, created_at, desain, jenis, pic, deadline, selesai_pada, tahapan')
       .order('created_at', { ascending: true }),
     // Roster shift: RLS mengizinkan semua user login membaca (karyawan perlu
     // melihat jadwalnya sendiri). Lihat migration 0044.
@@ -329,6 +374,12 @@ export async function fetchAppData(): Promise<AppData> {
       .from('sosmed_harian')
       .select('tanggal, posting, story, repost, engagement, catatan, tautan, oleh')
       .order('tanggal', { ascending: true }),
+    // Laporan closing harian: RLS mengunci baca & tulis ke pengelola saja —
+    // isinya menyebut nama operator. Lihat migration 0052.
+    supabase
+      .from('laporan_harian')
+      .select('tanggal, status, catatan, oleh')
+      .order('tanggal', { ascending: true }),
     // Pipeline leads: RLS memfilter (pengelola semua; operator hanya lead yang
     // di-PIC-kan padanya). Lihat migration 0047.
     supabase
@@ -339,6 +390,14 @@ export async function fetchAppData(): Promise<AppData> {
       .from('leads_followup')
       .select('id, lead_id, tanggal, catatan, oleh')
       .order('tanggal', { ascending: true }),
+    // Pengajuan MoU & sponsorship: RLS sama dengan leads (pengelola semua;
+    // operator hanya yang di-PIC-kan padanya). Lihat migration 0053.
+    supabase
+      .from('kemitraan')
+      .select(
+        'id, instansi, jenis, kontak_nama, kontak, acara, tanggal_acara, tanggal_masuk, status, permintaan, nilai_diminta, nilai_disetujui, bentuk, imbalan, mou_mulai, mou_berakhir, alasan_tolak, catatan, pic, tanggal_keputusan, pengeluaran_id, created_by',
+      )
+      .order('tanggal_masuk', { ascending: true }),
   ])
 
   const profiles = orErr(profilesRes) as ProfileRow[]
@@ -377,12 +436,23 @@ export async function fetchAppData(): Promise<AppData> {
   // Toleran kalau tabel `sosmed_harian` belum ada (migrasi 0046 belum
   // dijalankan) — fallback [] agar app tetap jalan.
   const sosmed = (sosmedRes.error ? [] : (sosmedRes.data ?? [])) as SosmedRow[]
+  // Toleran kalau tabel `laporan_harian` belum ada (migrasi 0052 belum
+  // dijalankan) — fallback [] agar app tetap jalan. Untuk operator, RLS
+  // memulangkan [] juga: mereka memang tidak boleh membacanya.
+  const laporanHarianRows = (
+    laporanHarianRes.error ? [] : (laporanHarianRes.data ?? [])
+  ) as LaporanHarianRow[]
   // Toleran kalau tabel `leads`/`leads_followup` belum ada (migrasi 0047 belum
   // dijalankan) — fallback [] agar app tetap jalan.
   const leadRows = (leadsRes.error ? [] : (leadsRes.data ?? [])) as LeadRow[]
   const followupRows = (
     followupRes.error ? [] : (followupRes.data ?? [])
   ) as LeadFollowupRow[]
+  // Toleran kalau tabel `kemitraan` belum ada (migrasi 0053 belum dijalankan)
+  // — fallback [] agar app tetap jalan; tab MoU & Sponsorship ikut kosong.
+  const kemitraanRows = (
+    kemitraanRes.error ? [] : (kemitraanRes.data ?? [])
+  ) as KemitraanRow[]
 
   const toEmployee = (p: ProfileRow): Employee => ({
     id: p.id,
@@ -545,6 +615,9 @@ export async function fetchAppData(): Promise<AppData> {
     pic: p.pic ?? undefined,
     deadline: p.deadline ?? undefined,
     selesaiPada: p.selesai_pada ?? undefined,
+    // Toleran kalau kolom `tahapan` belum ada (migrasi 0051 belum dijalankan):
+    // undefined -> papan Denyut Mingguan menganggap kartunya belum bertahap.
+    tahapan: Array.isArray(p.tahapan) ? p.tahapan : undefined,
   }))
 
   return {
@@ -590,6 +663,19 @@ export async function fetchAppData(): Promise<AppData> {
     // dijalankan): `config.target_bulanan` undefined -> {}. Scorecard lalu
     // sepenuhnya memakai saran otomatis sampai owner mengisinya.
     targetBulanan: config?.target_bulanan ?? {},
+    // Toleran kalau kolom penilaian/eskalasi belum ada (migrasi 0048 belum
+    // dijalankan): KPI kelompok Kepemimpinan tampil 'belum aktif', bukan nol.
+    penilaianOwner: config?.penilaian_owner ?? {},
+    // `ritme_konten` default '{}' di database. Objek tanpa `jumlah` berarti
+    // ritme BELUM diatur — dijadikan undefined supaya papan & KPI-nya nonaktif,
+    // bukan dinilai nol.
+    ritmeKonten:
+      typeof config?.ritme_konten?.jumlah === 'number'
+        ? config.ritme_konten
+        : undefined,
+    eskalasiOwner: Array.isArray(config?.eskalasi_owner)
+      ? config.eskalasi_owner
+      : [],
     leads: leadRows.map(
       (r): Lead => ({
         id: r.id,
@@ -617,6 +703,32 @@ export async function fetchAppData(): Promise<AppData> {
         oleh: r.oleh ?? undefined,
       }),
     ),
+    kemitraan: kemitraanRows.map(
+      (r): Kemitraan => ({
+        id: r.id,
+        instansi: r.instansi ?? '',
+        jenis: r.jenis,
+        kontakNama: r.kontak_nama ?? '',
+        kontak: r.kontak ?? '',
+        acara: r.acara ?? '',
+        tanggalAcara: r.tanggal_acara ?? undefined,
+        tanggalMasuk: r.tanggal_masuk,
+        status: r.status,
+        permintaan: r.permintaan ?? '',
+        nilaiDiminta: Number(r.nilai_diminta ?? 0),
+        nilaiDisetujui: Number(r.nilai_disetujui ?? 0),
+        bentuk: r.bentuk,
+        imbalan: Array.isArray(r.imbalan) ? r.imbalan : [],
+        mouMulai: r.mou_mulai ?? undefined,
+        mouBerakhir: r.mou_berakhir ?? undefined,
+        alasanTolak: r.alasan_tolak || undefined,
+        catatan: r.catatan || undefined,
+        pic: r.pic ?? undefined,
+        tanggalKeputusan: r.tanggal_keputusan ?? undefined,
+        pengeluaranId: r.pengeluaran_id ?? undefined,
+        dibuatOleh: r.created_by ?? undefined,
+      }),
+    ),
     sosmedHarian: sosmed.map((r) => ({
       tanggal: r.tanggal,
       posting: r.posting,
@@ -625,6 +737,19 @@ export async function fetchAppData(): Promise<AppData> {
       engagement: r.engagement,
       catatan: r.catatan ?? undefined,
       tautan: r.tautan ?? undefined,
+      oleh: r.oleh ?? undefined,
+      // Toleran kalau kolom `oleh_list` belum ada (migrasi 0049 belum
+      // dijalankan): jatuh kembali ke satu pengerja dari kolom lama.
+      olehList: Array.isArray(r.oleh_list)
+        ? r.oleh_list
+        : r.oleh
+          ? [r.oleh]
+          : [],
+    })),
+    laporanHarian: laporanHarianRows.map((r) => ({
+      tanggal: r.tanggal,
+      status: r.status,
+      catatan: r.catatan ?? '',
       oleh: r.oleh ?? undefined,
     })),
     jadwalShift: jadwal.map((j) => ({
@@ -789,6 +914,10 @@ export async function persistChanges(
       jenis: p.jenis ?? 'campaign',
       pic: p.pic ?? null,
       deadline: p.deadline ?? null,
+      // Hanya `kunci` & `oleh` yang berarti di sini — `selesaiPada` ditimpa
+      // trigger promo_stamp_tahapan (0051) dengan alasan yang sama seperti
+      // `selesai_pada` di bawah.
+      tahapan: (p.tahapan ?? []).map((t) => ({ kunci: t.kunci, oleh: t.oleh ?? null })),
       // `selesai_pada` sengaja TIDAK ditulis dari sini — distempel trigger
       // promo_stamp_selesai (0046). Mengirimnya dari client akan membuat
       // "tepat waktu" bisa dikarang.
@@ -1012,6 +1141,40 @@ export async function persistChanges(
     }),
   )
 
+  // ---- kemitraan (pengajuan MoU & sponsorship) ----
+  // `tanggal_keputusan` sengaja TIDAK ditulis — distempel trigger
+  // kemitraan_stamp_keputusan (0053), sama alasannya dengan leads di atas.
+  syncRows(
+    jobs,
+    'kemitraan',
+    prev.kemitraan ?? [],
+    next.kemitraan ?? [],
+    (k) => k.id,
+    (k) => ({
+      id: k.id,
+      instansi: k.instansi,
+      jenis: k.jenis,
+      kontak_nama: k.kontakNama,
+      kontak: k.kontak,
+      acara: k.acara,
+      tanggal_acara: k.tanggalAcara ?? null,
+      tanggal_masuk: k.tanggalMasuk,
+      status: k.status,
+      permintaan: k.permintaan,
+      nilai_diminta: k.nilaiDiminta || 0,
+      nilai_disetujui: k.nilaiDisetujui || 0,
+      bentuk: k.bentuk,
+      imbalan: k.imbalan ?? [],
+      mou_mulai: k.mouMulai ?? null,
+      mou_berakhir: k.mouBerakhir ?? null,
+      alasan_tolak: k.alasanTolak ?? '',
+      catatan: k.catatan ?? '',
+      pic: k.pic ?? null,
+      pengeluaran_id: k.pengeluaranId ?? null,
+    }),
+    userId,
+  )
+
   // ---- sosmed_harian (satu baris per tanggal; kunci primer `tanggal`) ----
   syncRows(
     jobs,
@@ -1027,6 +1190,26 @@ export async function persistChanges(
       engagement: r.engagement,
       catatan: r.catatan ?? '',
       tautan: r.tautan ?? '',
+      // Kolom lama tetap diisi entri PROFIL pertama (ia ber-foreign-key, jadi
+      // nama bebas tidak boleh masuk); daftar lengkapnya di `oleh_list`.
+      oleh: (r.olehList ?? (r.oleh ? [r.oleh] : [])).find(isUuid) ?? null,
+      oleh_list: r.olehList ?? (r.oleh ? [r.oleh] : []),
+    }),
+    undefined,
+    'tanggal',
+  )
+
+  // ---- laporan_harian (satu baris per tanggal; kunci primer `tanggal`) ----
+  syncRows(
+    jobs,
+    'laporan_harian',
+    prev.laporanHarian ?? [],
+    next.laporanHarian ?? [],
+    (r) => r.tanggal,
+    (r) => ({
+      tanggal: r.tanggal,
+      status: r.status,
+      catatan: r.catatan,
       oleh: r.oleh ?? null,
     }),
     undefined,
@@ -1053,6 +1236,9 @@ export async function persistChanges(
     'setoranRekening',
     'saldoAwal',
     'targetBulanan',
+    'penilaianOwner',
+    'eskalasiOwner',
+    'ritmeKonten',
     'brandKicker',
     'brandName',
     'dashJudul',
@@ -1083,6 +1269,9 @@ export async function persistChanges(
             setoran_rekening: next.setoranRekening ?? [],
             saldo_awal: next.saldoAwal ?? { dompet: 0, rekening: 0 },
             target_bulanan: next.targetBulanan ?? {},
+            penilaian_owner: next.penilaianOwner ?? {},
+            eskalasi_owner: next.eskalasiOwner ?? [],
+            ritme_konten: next.ritmeKonten ?? {},
             brand_kicker: next.brandKicker ?? null,
             brand_name: next.brandName ?? null,
             dash_judul: next.dashJudul ?? null,
@@ -1098,6 +1287,11 @@ export async function persistChanges(
   }
 
   await Promise.all(jobs)
+}
+
+/** Entri `olehList` yang berupa id profil (bukan nama bebas). */
+function isUuid(v: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v)
 }
 
 function throwIfError(res: { error: { message: string } | null }) {

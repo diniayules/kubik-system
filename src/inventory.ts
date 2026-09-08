@@ -43,6 +43,7 @@ export const KATEGORI_PENGELUARAN_SUGGEST = [
   'Gaji',
   'Perbaikan',
   'Marketing',
+  'Sponsorship',
   'Lainnya',
 ]
 

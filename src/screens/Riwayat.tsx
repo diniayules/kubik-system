@@ -14,11 +14,13 @@ import {
   SHIFT_IKON,
   SHIFT_JADWAL,
   SHIFT_LABEL,
-  SHIFT_URUTAN,
   absenDisetujui,
   isHariKerja,
+  isPantau,
+  slotEventUntuk,
   cariOperatorOverlap,
   cariTakeover,
+  durasiPantauMenit,
   formatBulanTahun,
   formatDurasi,
   formatJam,
@@ -31,6 +33,7 @@ import {
 import { Avatar, colorIndexForName } from '../components/Avatar'
 import { Icons } from '../components/Icons'
 import { useToast } from '../components/Toast'
+import { isPengelola } from '../lib/roles'
 
 type Draft = {
   tanggal: string
@@ -72,6 +75,12 @@ export function Riwayat({
       return next
     })
   const employee = data.employees.find((e) => e.id === employeeId)
+  // Pengelola hanya punya satu jenis hari: penanda kehadiran di studio. Karyawan
+  // memakai shift kerja + cuti/libur/cleaning, tapi tidak boleh memilih
+  // 'pantau' (itu bukan hari kerja berbayar).
+  const opsiJenisHari = isPengelola(employee?.role)
+    ? (['pantau'] as DayType[])
+    : DAY_TYPE_LIST.filter((s) => s !== 'pantau')
   // Pemilik kartu & admin boleh mengedit absensi langsung dari riwayat;
   // karyawan lain hanya melihat riwayat resmi (read-only).
   const bolehLihatMenunggu = isAdmin || employeeId === currentUserId
@@ -108,6 +117,8 @@ export function Riwayat({
     let cuti = 0
     let libur = 0
     let bersih = 0
+    let pantau = 0
+    let pantauMenit = 0
     let extra = 0
     const perShift = { pagi: 0, sore: 0, full: 0 } as Record<string, number>
     for (const r of records) {
@@ -126,6 +137,13 @@ export function Riwayat({
         bersih += 1
         continue
       }
+      // Kehadiran pengelola: hanya penanda ada di studio — dijumlah terpisah,
+      // tidak ikut jam kerja / telat / lembur.
+      if (isPantau(r.shift)) {
+        pantau += 1
+        pantauMenit += durasiPantauMenit(r)
+        continue
+      }
       const ring = hitungRingkasan(r, cariTakeover(r, data.records))
       kerja += ring.kerjaBersihMenit
       terlambat += ring.terlambatMenit
@@ -136,7 +154,20 @@ export function Riwayat({
         perShift[r.shift] = (perShift[r.shift] ?? 0) + 1
       }
     }
-    return { kerja, terlambat, lembur, hari, perShift, overlap, cuti, libur, bersih, extra }
+    return {
+      kerja,
+      terlambat,
+      lembur,
+      hari,
+      perShift,
+      overlap,
+      cuti,
+      libur,
+      bersih,
+      pantau,
+      pantauMenit,
+      extra,
+    }
   }, [records, data.records])
 
   function bukaEdit(r: AbsenHari) {
@@ -185,8 +216,9 @@ export function Riwayat({
     }
     const sekarang = new Date().toISOString()
     const events: AbsenEvent[] = []
-    // Hari cuti / libur tidak punya jam kerja → events tetap kosong.
-    const slots = isHariKerja(draft.shift) ? SHIFT_URUTAN[draft.shift] : []
+    // Hari cuti / libur tidak punya jam kerja → events tetap kosong; kehadiran
+    // pengelola cukup datang & pulang (lihat slotEventUntuk).
+    const slots = slotEventUntuk(draft.shift)
     for (const tipe of slots) {
       const val = (draft.jam[tipe] ?? '').trim()
       if (!val) continue
@@ -393,6 +425,18 @@ export function Riwayat({
               <div className="ringkasan-hint">tidak dihitung sebagai absen</div>
             </div>
           )}
+          {total.pantau > 0 && (
+            <div className="ringkasan-item tone-primary">
+              <div className="ringkasan-label">Hadir di studio</div>
+              <div className="ringkasan-value">
+                {SHIFT_IKON.pantau} {total.pantau} hari
+              </div>
+              <div className="ringkasan-hint">
+                total {formatDurasi(total.pantauMenit)} · penanda kehadiran
+                pengelola, tidak dihitung gaji
+              </div>
+            </div>
+          )}
           {total.overlap > 0 && (
             <div className="ringkasan-item tone-warning">
               <div className="ringkasan-label">Total overlap</div>
@@ -595,7 +639,7 @@ export function Riwayat({
                             })
                           }
                         >
-                          {DAY_TYPE_LIST.map((s) => (
+                          {opsiJenisHari.map((s) => (
                             <option key={s} value={s}>
                               {SHIFT_LABEL[s]}
                             </option>
@@ -604,10 +648,7 @@ export function Riwayat({
                       </label>
                     </div>
                     <div className="edit-jam-grid">
-                      {(isHariKerja(draft.shift)
-                        ? SHIFT_URUTAN[draft.shift]
-                        : []
-                      ).map((tipe) => (
+                      {slotEventUntuk(draft.shift).map((tipe) => (
                         <label key={tipe} className="edit-field">
                           <span>
                             {EVENT_LABEL[tipe]}{' '}

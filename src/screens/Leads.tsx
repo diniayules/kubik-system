@@ -12,6 +12,12 @@
 //
 // Pipeline adalah data komersial: hanya pengelola yang boleh mengubah, operator
 // hanya melihat lead yang di-PIC-kan padanya (RLS migration 0047).
+//
+// Layar ini bertab dua. Tab kedua — MoU & Sponsorship — sengaja menumpang di
+// sini alih-alih jadi menu sidebar sendiri: keduanya pekerjaan kemitraan yang
+// sama, ditangani orang yang sama, dan aplikasi ini dipakai satu owner + satu
+// manajer. Datanya tetap terpisah (tabel `kemitraan`, migration 0053) karena
+// arah uangnya berlawanan; lihat Kemitraan.tsx.
 // =============================================================
 import { useMemo, useState } from 'react'
 import type { AppData, Lead, LeadFollowup, LeadKategori, LeadTahap } from '../types'
@@ -24,11 +30,13 @@ import {
   LEAD_TAHAP_AKTIF,
   LEAD_TAHAP_LABEL,
   LEAD_TAHAP_ORDER,
+  KEMITRAAN_STATUS_ANTRE,
   pipelineLeads,
 } from '../manajemen'
 import { Icons } from '../components/Icons'
 import { Modal, ModalHead } from '../components/Modal'
 import { useToast } from '../components/Toast'
+import { Kemitraan } from './Kemitraan'
 
 type Props = {
   data: AppData
@@ -44,6 +52,7 @@ export function Leads({ data, setData, bisaUbah, currentUserId }: Props) {
   const [monthKey] = useState(() => hariIni.slice(0, 7))
   const [editing, setEditing] = useState<Lead | null>(null)
   const [showForm, setShowForm] = useState(false)
+  const [tab, setTab] = useState<'pipeline' | 'kemitraan'>('pipeline')
 
   const leads = data.leads ?? []
   const pipeline = useMemo(
@@ -53,6 +62,14 @@ export function Leads({ data, setData, bisaUbah, currentUserId }: Props) {
   const namaById = useMemo(
     () => new Map(data.employees.map((e) => [e.id, e.nama])),
     [data.employees],
+  )
+  // Badge tab: pengajuan yang masih menunggu keputusan. Angkanya di tab supaya
+  // proposal yang masuk tidak perlu ditemukan dengan cara membuka tabnya dulu.
+  const antreKemitraan = useMemo(
+    () =>
+      (data.kemitraan ?? []).filter((k) => KEMITRAAN_STATUS_ANTRE.includes(k.status))
+        .length,
+    [data.kemitraan],
   )
   const terakhirKontak = useMemo(() => {
     const m = new Map<string, string>()
@@ -111,10 +128,42 @@ export function Leads({ data, setData, bisaUbah, currentUserId }: Props) {
         </div>
         <h1>Leads &amp; Sales 🎯</h1>
         <p className="sub">
-          Calon klien yang sedang dikejar — dari masuk sampai closing.
+          {tab === 'pipeline'
+            ? 'Calon klien yang sedang dikejar — dari masuk sampai closing.'
+            : 'Pengajuan MoU & sponsorship yang masuk dari sekolah dan instansi.'}
         </p>
       </section>
 
+      <nav className="mgr-tabs" role="tablist" aria-label="Bagian Leads & Sales">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === 'pipeline'}
+          className={'mgr-tab' + (tab === 'pipeline' ? ' is-aktif' : '')}
+          onClick={() => setTab('pipeline')}
+        >
+          <span className="mgr-tab-lbl">Pipeline</span>
+          <em className="mgr-tab-sub">Calon klien yang kita kejar</em>
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === 'kemitraan'}
+          className={'mgr-tab' + (tab === 'kemitraan' ? ' is-aktif' : '')}
+          onClick={() => setTab('kemitraan')}
+        >
+          <span className="mgr-tab-lbl">
+            MoU &amp; Sponsorship
+            {antreKemitraan > 0 && <em className="mgr-tab-badge">{antreKemitraan}</em>}
+          </span>
+          <em className="mgr-tab-sub">Pengajuan yang masuk ke kita</em>
+        </button>
+      </nav>
+
+      {tab === 'kemitraan' ? (
+        <Kemitraan data={data} setData={setData} bisaUbah={bisaUbah} />
+      ) : (
+        <>
       <section className="lead-stats">
         <Stat label="Leads baru bulan ini" nilai={String(pipeline.baruBulanIni)} />
         <Stat label="Closing bulan ini" nilai={String(pipeline.closingBulanIni)} nada="mint" />
@@ -253,6 +302,8 @@ export function Leads({ data, setData, bisaUbah, currentUserId }: Props) {
             setEditing(null)
           }}
         />
+      )}
+        </>
       )}
     </>
   )

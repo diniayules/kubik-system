@@ -769,9 +769,13 @@ export type TargetBulanan = {
   /** Cakupan jadwal shift, 0-1. */
   shiftCover: number
   /**
-   * Porsi item "Butuh Tindakan" yang ditutup manajer SENDIRI (bukan owner),
-   * 0-1. Inilah ukuran kemandirian: makin tinggi, makin sedikit owner turun
-   * tangan. Lihat [EskalasiOwner].
+   * Porsi hari berlaporan yang BERES tanpa keputusan owner, 0-1. Inilah ukuran
+   * kemandirian: makin tinggi, makin sedikit owner turun tangan.
+   *
+   * Diambil dari status `eskalasi` pada laporan closing harian — bukan lagi
+   * dari tombol "Selesai oleh" yang sempat ada di panel Butuh Tindakan. Tombol
+   * itu dihapus justru karena angkanya ditulis sendiri oleh orang yang sedang
+   * dinilai, satu tap tanpa bukti. Lihat [LaporanHarian].
    */
   mandiri: number
   /** Penilaian kualitatif owner saat evaluasi, skala 1-5. */
@@ -802,29 +806,6 @@ export type PenilaianOwner = {
 }
 
 /**
- * Satu item antrean "Butuh Tindakan" yang sudah ditutup — beserta SIAPA yang
- * menutupnya.
- *
- * Gunanya satu: mengukur ketergantungan pada owner. Kalau tiap bulan makin
- * banyak item yang harus ditutup owner, manajer belum benar-benar memegang
- * kendali; angka itulah KPI kelompok Kepemimpinan.
- * Disimpan di `app_config.eskalasi_owner` (migration 0048).
- */
-export type EskalasiOwner = {
-  id: string
-  /** Format `YYYY-MM-DD` — periode penilaian diambil dari sini. */
-  tanggal: string
-  /** Label antrean yang ditutup, mis. "Leads menunggu di-follow-up". */
-  label: string
-  /** Siapa yang benar-benar menyelesaikannya. */
-  oleh: 'manager' | 'owner'
-  /** Alasan eskalasi (opsional, 1 tap tanpa alasan tetap sah). */
-  catatan?: string
-  /** Akun yang mencatat (profiles.id). */
-  dicatatOleh?: string
-}
-
-/**
  * Status satu hari menurut laporan closing manajer.
  *
  * Tiga, bukan dua: "kendala" yang sudah beres sendiri adalah kabar BAIK —
@@ -852,6 +833,15 @@ export type LaporanHarian = {
   catatan: string
   /** Penulisnya (`profiles.id`) — biasanya manajer, kadang owner. */
   oleh?: string
+  /**
+   * `updated_at` dari database (ISO). Dipakai owner untuk membedakan laporan
+   * yang ditulis sekali jadi dari yang disunting belakangan — jam yang jauh
+   * lebih baru dari hari laporannya berarti isinya pernah diubah.
+   *
+   * Hanya dibaca, tidak pernah dikirim: distempel trigger `laporan_harian_touch`
+   * (migration 0052).
+   */
+  diperbarui?: string
 }
 
 export type FontPair = 'playful' | 'editorial' | 'modern' | 'minimal' | 'oui'
@@ -981,11 +971,6 @@ export type AppData = {
    * dan KPI-nya ikut nonaktif (bukan dihitung nol).
    */
   penilaianOwner: Record<string, PenilaianOwner>
-  /**
-   * Log penutupan antrean "Butuh Tindakan" — dasar KPI ketergantungan owner.
-   * Kosong = belum pernah dipakai (KPI kemandirian ikut nonaktif).
-   */
-  eskalasiOwner: EskalasiOwner[]
   /**
    * Kontrak ritme konten mingguan. Lihat [RitmeKonten] & migration 0051.
    * `undefined` = ritme belum diatur (papan Denyut Mingguan & KPI-nya ikut

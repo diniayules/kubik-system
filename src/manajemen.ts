@@ -12,7 +12,6 @@ import type {
   AppData,
   ClosingTask,
   DayType,
-  EskalasiOwner,
   EventKategori,
   JadwalShift,
   Kemitraan,
@@ -38,7 +37,11 @@ import {
   hitungPemakaianStok,
   ringkasanPerKaryawan,
 } from './income'
-import { hariSeharusnyaBulan, hitungSlipGaji } from './gaji'
+import {
+  hariSeharusnyaBulan,
+  hariSeharusnyaKaryawan,
+  hitungSlipGaji,
+} from './gaji'
 import { isOwner as isAkunOwner, isPengelola } from './lib/roles'
 
 // Ambang "stok menipis" — mengikuti badge `.tipis` di layar Inventaris
@@ -225,7 +228,13 @@ export function ringkasanBulan(
   for (const e of data.employees.filter((x) => !isAkunOwner(x.role))) {
     const pokok = data.gajiPokok?.[e.id] ?? 0
     if (pokok <= 0) continue
-    gajiSlip += hitungSlipGaji(e, pokok, recordsBulan, lap, hariBerjalan).total
+    gajiSlip += hitungSlipGaji(
+      e,
+      pokok,
+      recordsBulan,
+      lap,
+      hariSeharusnyaKaryawan(e, monthKey, hariIni),
+    ).total
   }
   const bebanGaji = Math.max(gajiTercatat, gajiSlip)
 
@@ -292,6 +301,11 @@ export type KinerjaKaryawan = {
    */
   pengelola: boolean
   hariHadir: number
+  /**
+   * Hari patokan MILIK ORANG INI: hari yang sudah lewat di bulan terpilih,
+   * dipotong di `tanggalDiterima`-nya. Orang yang baru masuk tanggal 5 punya
+   * patokan lebih kecil daripada rekan yang sudah bekerja sejak tanggal 1.
+   */
   hariSeharusnya: number
   /** hariHadir ÷ hariSeharusnya, 0–1. */
   kehadiran: number
@@ -316,9 +330,12 @@ export function kinerjaKaryawan(
   hariIni: string,
 ): KinerjaKaryawan[] {
   const staf = data.employees.filter((e) => !isAkunOwner(e.role))
-  const hariSeharusnya = hariSeharusnyaBulan(monthKey, hariIni)
   const byId = new Map<string, KinerjaKaryawan>()
+  // Tanggal mulai kerja per orang (profil karyawan). Apa pun yang tercatat
+  // sebelum tanggal ini bukan hasil kerjanya, jadi tidak ikut dihitung.
+  const mulaiById = new Map<string, string>()
   for (const e of staf) {
+    if (e.tanggalDiterima) mulaiById.set(e.id, e.tanggalDiterima)
     byId.set(e.id, {
       id: e.id,
       nama: e.nama,
@@ -326,7 +343,7 @@ export function kinerjaKaryawan(
       foto: e.foto,
       pengelola: isPengelola(e.role),
       hariHadir: 0,
-      hariSeharusnya,
+      hariSeharusnya: hariSeharusnyaKaryawan(e, monthKey, hariIni),
       kehadiran: 0,
       hariCuti: 0,
       hariLibur: 0,
@@ -338,11 +355,17 @@ export function kinerjaKaryawan(
     })
   }
 
+  const sebelumMulai = (id: string, tanggal: string) => {
+    const mulai = mulaiById.get(id)
+    return mulai !== undefined && tanggal < mulai
+  }
+
   for (const rec of data.records) {
     if (!rec.tanggal.startsWith(monthKey)) continue
     const k = byId.get(rec.employeeId)
     if (!k) continue
     if (rec.status === 'menunggu') continue // belum di-ACC → tidak dihitung
+    if (sebelumMulai(rec.employeeId, rec.tanggal)) continue
     if (rec.shift === 'cuti') {
       k.hariCuti += 1
       continue
@@ -370,6 +393,7 @@ export function kinerjaKaryawan(
     for (const [id, r] of Object.entries(ringkasanPerKaryawan(l))) {
       const k = byId.get(id)
       if (!k) continue
+      if (sebelumMulai(id, l.tanggal)) continue
       k.jumlahItem += r.tiket + r.cetak + r.upgrade + r.produk
       k.penjualan += r.total
     }
@@ -435,7 +459,10 @@ export function kepatuhanChecklist(
 ): KepatuhanChecklist {
   const staf = data.employees.filter((e) => !isPengelola(e.role))
   const perOrang = new Map<string, KepatuhanOrang>()
+  // Kepatuhan dihitung sejak tanggal karyawan mulai bekerja (profil karyawan).
+  const mulaiById = new Map<string, string>()
   for (const e of staf) {
+    if (e.tanggalDiterima) mulaiById.set(e.id, e.tanggalDiterima)
     perOrang.set(e.id, {
       id: e.id,
       nama: e.nama,
@@ -473,6 +500,8 @@ export function kepatuhanChecklist(
     if (!isHariKerja(rec.shift)) continue
     const orang = perOrang.get(rec.employeeId)
     if (!orang) continue
+    const mulai = mulaiById.get(rec.employeeId)
+    if (mulai !== undefined && rec.tanggal < mulai) continue
 
     if (sudahMasuk(rec)) {
       const wajib = taskUntukShift(data.openingChecklist ?? [], rec.shift)
@@ -2314,58 +2343,6 @@ export function ringkasKemitraan(
 }
 
 // ---------------------------------------------------------------
-// 8. Ketergantungan pada owner (kelompok KPI Kepemimpinan)
-// ---------------------------------------------------------------
-
-export type Ketergantungan = {
-  ditutupManajer: number
-  ditutupOwner: number
-  total: number
-  /** ditutupManajer ÷ total, 0–1. Inilah "kemandirian". */
-  mandiri: number
-  /** Jumlah item yang ditutup owner BULAN LALU — untuk melihat trennya. */
-  ownerBulanLalu: number
-  /** Item yang ditutup owner bulan ini, terbaru dulu. */
-  daftarOwner: EskalasiOwner[]
-  /** true kalau belum ada satu pun item dicatat (KPI ikut nonaktif). */
-  belumAda: boolean
-}
-
-/**
- * Seberapa sering owner masih harus turun tangan.
- *
- * Ini KPI yang paling sulit dipalsukan sekaligus paling relevan: seorang
- * manajer yang menutup semua antreannya sendiri sedang menggantikan owner,
- * sedangkan manajer yang tiap minggu mengembalikan keputusan ke owner sedang
- * menjadi perantara. Datanya datang dari tombol "Selesai oleh" di panel Butuh
- * Tindakan — satu tap, tanpa formulir.
- */
-export function ketergantunganOwner(
-  data: AppData,
-  monthKey: string,
-): Ketergantungan {
-  const log = data.eskalasiOwner ?? []
-  const bulanIni = log.filter((e) => e.tanggal.startsWith(monthKey))
-  const ditutupOwner = bulanIni.filter((e) => e.oleh === 'owner')
-  const ditutupManajer = bulanIni.length - ditutupOwner.length
-  const lalu = bulanSebelumnya(monthKey)
-
-  return {
-    ditutupManajer,
-    ditutupOwner: ditutupOwner.length,
-    total: bulanIni.length,
-    mandiri: bulanIni.length > 0 ? ditutupManajer / bulanIni.length : 0,
-    ownerBulanLalu: log.filter(
-      (e) => e.tanggal.startsWith(lalu) && e.oleh === 'owner',
-    ).length,
-    daftarOwner: [...ditutupOwner].sort((a, b) =>
-      b.tanggal.localeCompare(a.tanggal),
-    ),
-    belumAda: bulanIni.length === 0,
-  }
-}
-
-// ---------------------------------------------------------------
 // 9. Target & KPI Scorecard manajer
 // ---------------------------------------------------------------
 
@@ -2661,7 +2638,18 @@ export function skorKPI(
   const denyut = denyutKonten(data, monthKey, hariIni)
   const siapCampaign = kualitasCampaign(data, monthKey, hariIni)
   const pipeline = pipelineLeads(data, monthKey, hariIni)
-  const mandiri = ketergantunganOwner(data, monthKey)
+  /*
+    Kemandirian dulunya dihitung dari tombol "Selesai oleh" di panel Butuh
+    Tindakan — satu tap, tanpa bukti, oleh orang yang sedang dinilai sendiri.
+    KPI seperti itu selalu berakhir 100%. Sekarang diambil dari laporan closing
+    yang memang sudah ditulis tiap malam: hari berstatus 'eskalasi' adalah hari
+    yang benar-benar memakan keputusan owner, dan alasannya ikut tertulis.
+  */
+  const laporan = laporanClosing(data, monthKey, hariIni)
+  const hariBerlaporan = laporan.terisi
+  const hariEskalasi = Math.min(laporan.eskalasi, hariBerlaporan)
+  const mandiri =
+    hariBerlaporan > 0 ? (hariBerlaporan - hariEskalasi) / hariBerlaporan : 0
   const nilaiOwner = data.penilaianOwner?.[monthKey]
   const progres = progresBulan(monthKey, hariIni)
 
@@ -3004,22 +2992,22 @@ export function skorKPI(
     ),
 
     // ---------------- Kepemimpinan (10%) ----------------
-    mandiri.belumAda
+    hariBerlaporan === 0
       ? belum(
           'mandiri',
           'kepemimpinan',
-          'Antrean ditutup tanpa owner',
-          'Tombol “Selesai oleh” pada panel Butuh Tindakan',
+          'Hari beres tanpa keputusan owner',
+          'Laporan closing harian belum ditulis bulan ini',
         )
       : baris(
           'mandiri',
           'kepemimpinan',
-          'Antrean ditutup tanpa owner',
-          mandiri.mandiri,
+          'Hari beres tanpa keputusan owner',
+          mandiri,
           target.mandiri,
-          `${mandiri.ditutupManajer} dari ${mandiri.total} item ditutup manajer` +
-            ` · owner ${mandiri.ditutupOwner}× (bulan lalu ${mandiri.ownerBulanLalu}×)`,
-          'Log “Selesai oleh” di panel Butuh Tindakan',
+          `${hariBerlaporan - hariEskalasi} dari ${hariBerlaporan} hari berlaporan` +
+            ` · ${hariEskalasi} hari perlu owner`,
+          'Status “eskalasi” pada laporan closing harian',
           false,
         ),
     !nilaiOwner || !(nilaiOwner.nilai > 0)

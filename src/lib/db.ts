@@ -31,7 +31,6 @@ import type {
   LaporanIncome,
   LayananDef,
   PenilaianOwner,
-  EskalasiOwner,
   PenyesuaianUangKecil,
   PenarikanUangBesar,
   Pengeluaran,
@@ -211,9 +210,10 @@ type SosmedRow = Omit<
   oleh: string | null
   oleh_list: string[] | null
 }
-type LaporanHarianRow = Omit<LaporanHarian, 'catatan' | 'oleh'> & {
+type LaporanHarianRow = Omit<LaporanHarian, 'catatan' | 'oleh' | 'diperbarui'> & {
   catatan: string | null
   oleh: string | null
+  updated_at: string | null
 }
 type JadwalShiftRow = {
   tanggal: string
@@ -269,7 +269,6 @@ type ConfigRow = {
   saldo_awal: { dompet: number; rekening: number } | null
   target_bulanan: Record<string, TargetBulanan> | null
   penilaian_owner: Record<string, PenilaianOwner> | null
-  eskalasi_owner: EskalasiOwner[] | null
   ritme_konten: RitmeKonten | null
   brand_kicker: string | null
   brand_name: string | null
@@ -378,7 +377,7 @@ export async function fetchAppData(): Promise<AppData> {
     // isinya menyebut nama operator. Lihat migration 0052.
     supabase
       .from('laporan_harian')
-      .select('tanggal, status, catatan, oleh')
+      .select('tanggal, status, catatan, oleh, updated_at')
       .order('tanggal', { ascending: true }),
     // Pipeline leads: RLS memfilter (pengelola semua; operator hanya lead yang
     // di-PIC-kan padanya). Lihat migration 0047.
@@ -673,9 +672,6 @@ export async function fetchAppData(): Promise<AppData> {
       typeof config?.ritme_konten?.jumlah === 'number'
         ? config.ritme_konten
         : undefined,
-    eskalasiOwner: Array.isArray(config?.eskalasi_owner)
-      ? config.eskalasi_owner
-      : [],
     leads: leadRows.map(
       (r): Lead => ({
         id: r.id,
@@ -751,6 +747,7 @@ export async function fetchAppData(): Promise<AppData> {
       status: r.status,
       catatan: r.catatan ?? '',
       oleh: r.oleh ?? undefined,
+      diperbarui: r.updated_at ?? undefined,
     })),
     jadwalShift: jadwal.map((j) => ({
       tanggal: j.tanggal,
@@ -1237,7 +1234,6 @@ export async function persistChanges(
     'saldoAwal',
     'targetBulanan',
     'penilaianOwner',
-    'eskalasiOwner',
     'ritmeKonten',
     'brandKicker',
     'brandName',
@@ -1270,7 +1266,6 @@ export async function persistChanges(
             saldo_awal: next.saldoAwal ?? { dompet: 0, rekening: 0 },
             target_bulanan: next.targetBulanan ?? {},
             penilaian_owner: next.penilaianOwner ?? {},
-            eskalasi_owner: next.eskalasiOwner ?? [],
             ritme_konten: next.ritmeKonten ?? {},
             brand_kicker: next.brandKicker ?? null,
             brand_name: next.brandName ?? null,

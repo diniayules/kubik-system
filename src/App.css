@@ -3428,22 +3428,6 @@
 }
 .mgr-nilai-catatan:focus-visible { outline: none; box-shadow: var(--ring); }
 
-/* ---- "Selesai oleh" pada antrean Butuh Tindakan ---- */
-.mgr-todo-tutup {
-  display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 6px;
-}
-.mgr-todo-tutup em {
-  font-style: normal; font-size: 10px; font-weight: 800;
-  letter-spacing: .06em; text-transform: uppercase; color: var(--muted);
-}
-.mgr-todo-tutup button {
-  padding: 3px 9px; border-radius: var(--radius-pill);
-  border: 1.5px solid var(--line); background: var(--surface);
-  color: var(--ink-soft); font-size: 10.5px; font-weight: 800; cursor: pointer;
-}
-.mgr-todo-tutup button:hover { background: var(--surface-2); color: var(--ink); }
-.mgr-todo-tutup button:focus-visible { outline: none; box-shadow: var(--ring); }
-
 /* Penanda "orang ini pengelola" di tabel Kinerja Karyawan. */
 .mgr-orang-tag {
   margin-left: 6px; font-style: normal; font-size: 9.5px; font-weight: 800;
@@ -3501,10 +3485,29 @@
 }
 .mgr-lap-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .mgr-lap-tgl { font-size: 13px; font-weight: 800; color: var(--ink); }
+/*
+  Jejak penulis + jam. Tidak di-uppercase seperti label lain di header: isinya
+  nama orang dan tanggal, yang justru jadi sulit dibaca kalau dibesarkan semua.
+*/
 .mgr-lap-sudah {
-  font-size: 10.5px; font-weight: 800; letter-spacing: .04em;
-  text-transform: uppercase; color: var(--muted);
+  display: flex; align-items: center; gap: 6px; min-width: 0;
+  font-size: 10.5px; font-weight: 800; color: var(--muted);
+  text-align: right;
 }
+/* Tombol batal-submit. Sengaja kecil dan tidak merah sampai disentuh: ia
+   berdampingan dengan tombol simpan, jadi tidak boleh mengundang tangan. */
+.mgr-lap-hapus {
+  width: 20px; height: 20px; flex: 0 0 auto; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 50%; border: 1.5px solid var(--line);
+  background: var(--surface-2); color: var(--ink-soft);
+  font-size: 14px; font-weight: 800; line-height: 1; cursor: pointer;
+  transition: background .15s, border-color .15s, color .15s;
+}
+.mgr-lap-hapus:hover {
+  background: var(--pink-bg); border-color: var(--pink); color: var(--pink-deep);
+}
+.mgr-lap-hapus:focus-visible { outline: none; box-shadow: var(--ring); }
 .mgr-lap-status { display: flex; flex-direction: column; gap: 6px; }
 .mgr-lap-pilih {
   display: flex; align-items: center; gap: 7px;

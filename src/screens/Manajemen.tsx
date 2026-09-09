@@ -2,7 +2,6 @@ import { Fragment, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import type {
   AppData,
-  EskalasiOwner,
   LaporanHarian,
   StatusLaporanHarian,
   PromoProgram,
@@ -12,7 +11,7 @@ import type {
   TargetBulanan,
 } from '../types'
 import { todayKey, uid } from '../storage'
-import { formatDurasi } from '../attendance'
+import { formatDurasi, formatJam } from '../attendance'
 import { formatRupiah } from '../income'
 import { hitungRekonsiliasiKas } from '../kas'
 import {
@@ -35,7 +34,6 @@ import {
   NAMA_HARI,
   TAHAP_KONTEN,
   TAHAP_KONTEN_LABEL,
-  ketergantunganOwner,
   kualitasCampaign,
   AMBANG_JADWAL_H,
   HARI_SISA_MERAH,
@@ -268,10 +266,6 @@ export function Manajemen({
     () => kualitasCampaign(data, monthKey, hariIni),
     [data, monthKey, hariIni],
   )
-  const mandiri = useMemo(
-    () => ketergantunganOwner(data, monthKey),
-    [data, monthKey],
-  )
   const nilaiOwner = data.penilaianOwner?.[monthKey]
 
   const [tglPilih, setTglPilih] = useState(hariIni)
@@ -304,6 +298,18 @@ export function Manajemen({
   const laporanTerpilih = (data.laporanHarian ?? []).find(
     (r) => r.tanggal === tglLaporan,
   )
+  /*
+    Laporan ini boleh ditulis manajer MAUPUN owner, dan sampai sekarang
+    keduanya terlihat identik di layar. Nama penulisnya sudah tersimpan di
+    kolom `oleh` sejak awal — tinggal ditampilkan. Mantan pengelola dicari
+    juga di daftar nonaktif supaya laporan lama tidak kehilangan namanya.
+  */
+  const penulisLaporan = laporanTerpilih?.oleh
+    ? (
+        data.employees.find((e) => e.id === laporanTerpilih.oleh) ??
+        data.inactiveEmployees.find((e) => e.id === laporanTerpilih.oleh)
+      )?.nama
+    : undefined
 
   /**
    * Simpan/ubah laporan satu hari. Catatan kosong TIDAK menghapus barisnya —
@@ -321,11 +327,32 @@ export function Manajemen({
       status,
       catatan: catatan.trim(),
       oleh: meId,
+      // Database yang jadi sumber kebenaran (trigger `laporan_harian_touch`),
+      // tapi distempel lokal juga supaya jejaknya langsung terlihat tanpa
+      // menunggu reload berikutnya.
+      diperbarui: new Date().toISOString(),
     }
     setData({
       ...data,
       laporanHarian: [...list.filter((r) => r.tanggal !== tanggal), baris].sort(
         (a, b) => a.tanggal.localeCompare(b.tanggal),
+      ),
+    })
+  }
+
+  /**
+   * Hapus laporan satu hari sepenuhnya — hari itu kembali terhitung bolong.
+   *
+   * Ada karena laporan closing tidak punya jalan mundur: sekali disimpan, satu
+   * salah tanggal atau satu percobaan iseng akan menempel di riwayat selamanya
+   * dan ikut mengubah rasio kepatuhan. "Perbarui" saja tidak cukup — statusnya
+   * memang tidak boleh ada.
+   */
+  function hapusLaporan(tanggal: string) {
+    setData({
+      ...data,
+      laporanHarian: (data.laporanHarian ?? []).filter(
+        (r) => r.tanggal !== tanggal,
       ),
     })
   }
@@ -517,28 +544,6 @@ export function Manajemen({
     })
   }
 
-  /** Tutup satu antrean, sekaligus mencatat SIAPA yang menutupnya. */
-  function tutupTindakan(label: string, oleh: EskalasiOwner['oleh']) {
-    const entri: EskalasiOwner = {
-      id: uid(),
-      tanggal: hariIni,
-      label,
-      oleh,
-      dicatatOleh: meId,
-    }
-    setData({ ...data, eskalasiOwner: [...(data.eskalasiOwner ?? []), entri] })
-  }
-
-  /** Urungkan pencatatan terakhir — salah tap tidak boleh mengotori KPI. */
-  function urungkanTutup() {
-    const list = data.eskalasiOwner ?? []
-    if (list.length === 0) return
-    const terakhir = list.reduce((a, b) => (b.tanggal >= a.tanggal ? b : a))
-    setData({
-      ...data,
-      eskalasiOwner: list.filter((e) => e.id !== terakhir.id),
-    })
-  }
   const saldoAktual = data.saldoAktual[monthKey] ?? { dompet: 0, rekening: 0 }
 
   const komposisi = [
@@ -829,26 +834,7 @@ export function Manajemen({
           <div className="mgr-col">
             <Panel
               judul="Butuh Tindakan"
-              sub={
-                mandiri.belumAda
-                  ? 'Antrean yang menunggu keputusanmu. Tandai “Selesai oleh” tiap kali satu antrean beres.'
-                  : `${mandiri.ditutupManajer} ditutup manajer · ${mandiri.ditutupOwner} ditutup owner bulan ini (bulan lalu ${mandiri.ownerBulanLalu}×)`
-              }
-              badge={
-                mandiri.belumAda ? undefined : `Mandiri ${persen(mandiri.mandiri)}`
-              }
-              aksi={
-                mandiri.total > 0 ? (
-                  <button
-                    type="button"
-                    className="mgr-aksi-btn"
-                    onClick={urungkanTutup}
-                    title="Hapus catatan “Selesai oleh” yang terakhir"
-                  >
-                    Urungkan
-                  </button>
-                ) : undefined
-              }
+              sub="Antrean yang dihitung langsung dari data. Angkanya turun sendiri begitu penyebabnya dibereskan."
             >
               {tindakan.length === 0 ? (
                 <p className="mgr-empty">
@@ -866,41 +852,10 @@ export function Manajemen({
                         <button type="button" className="mgr-todo-aksi" onClick={t.onClick}>
                           {t.aksi} <Icons.chevron />
                         </button>
-                        {/*
-                          Satu tap, tanpa formulir. Dari sinilah KPI kemandirian
-                          lahir: antrean yang selalu ditutup owner berarti manajer
-                          belum benar-benar memegang kendali.
-                        */}
-                        <span className="mgr-todo-tutup">
-                          <em>Selesai oleh</em>
-                          <button
-                            type="button"
-                            onClick={() => tutupTindakan(t.label, 'manager')}
-                          >
-                            Manajer
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => tutupTindakan(t.label, 'owner')}
-                          >
-                            Owner
-                          </button>
-                        </span>
                       </span>
                     </li>
                   ))}
                 </ul>
-              )}
-              {mandiri.daftarOwner.length > 0 && (
-                <p className="mgr-hint">
-                  Ditutup owner bulan ini:{' '}
-                  {mandiri.daftarOwner
-                    .slice(0, 3)
-                    .map((e) => e.label)
-                    .join(' · ')}
-                  {mandiri.daftarOwner.length > 3 &&
-                    ` · +${mandiri.daftarOwner.length - 3} lainnya`}
-                </p>
               )}
             </Panel>
           </div>
@@ -950,10 +905,12 @@ export function Manajemen({
                 key={tglLaporan}
                 tanggal={tglLaporan}
                 awal={laporanTerpilih}
+                penulis={penulisLaporan}
                 // Hari yang belum tiba tidak bisa dilaporkan; tanggalnya tetap
                 // bisa diklik supaya kalender terasa utuh.
                 bisaTulis={tglLaporan <= hariIni}
                 onSimpan={simpanLaporan}
+                onHapus={hapusLaporan}
               />
 
               {laporan.terakhir.filter((r) => r.tanggal !== tglLaporan).length > 0 && (
@@ -2187,23 +2144,52 @@ function KelompokBlok({
 function LaporanBox({
   tanggal,
   awal,
+  penulis,
   bisaTulis,
   onSimpan,
+  onHapus,
 }: {
   tanggal: string
   awal?: LaporanHarian
+  /** Nama penulisnya, sudah dicarikan pemanggil dari `awal.oleh`. */
+  penulis?: string
   bisaTulis: boolean
   onSimpan: (
     tanggal: string,
     status: StatusLaporanHarian,
     catatan: string,
   ) => void
+  onHapus: (tanggal: string) => void
 }) {
   const [status, setStatus] = useState<StatusLaporanHarian>(awal?.status ?? 'aman')
   const [catatan, setCatatan] = useState(awal?.catatan ?? '')
 
   const berubah =
     status !== (awal?.status ?? 'aman') || catatan.trim() !== (awal?.catatan ?? '')
+
+  /*
+    Jejak singkat: siapa menulis, dan kapan terakhir disentuh. Jam saja kalau
+    ditulis pada hari laporannya (itu memang alurnya — tulis setelah closing);
+    "disunting" beserta tanggalnya kalau lebih baru, karena itulah satu-satunya
+    hal yang tidak bisa ditebak owner dari isi laporan.
+  */
+  const waktu = awal?.diperbarui
+  const jejak = [
+    penulis,
+    waktu
+      ? todayKey(new Date(waktu)) === tanggal
+        ? formatJam(waktu)
+        : `disunting ${labelTanggalPendek(todayKey(new Date(waktu)))} ${formatJam(waktu)}`
+      : undefined,
+  ]
+    .filter(Boolean)
+    .join(' · ')
+
+  /** Kembalikan formulir ke isi yang tersimpan — batalkan ketikan yang belum disimpan. */
+  function batalkanDraf() {
+    setStatus(awal?.status ?? 'aman')
+    setCatatan(awal?.catatan ?? '')
+  }
 
   if (!bisaTulis) {
     return (
@@ -2218,7 +2204,33 @@ function LaporanBox({
     <div className="mgr-lap-form">
       <div className="mgr-lap-head">
         <span className="mgr-lap-tgl">{labelHariTanggal(tanggal)}</span>
-        {awal && <span className="mgr-lap-sudah">sudah ditulis</span>}
+        {awal && (
+          <span className="mgr-lap-sudah">
+            {jejak || 'sudah ditulis'}
+            <button
+              type="button"
+              className="mgr-lap-hapus"
+              title="Hapus laporan hari ini"
+              aria-label={`Hapus laporan ${labelHariTanggal(tanggal)}`}
+              onClick={() => {
+                if (
+                  confirm(
+                    `Hapus laporan ${labelHariTanggal(tanggal)}? Hari itu kembali terhitung belum ada laporan.`,
+                  )
+                ) {
+                  onHapus(tanggal)
+                  // Komponen tidak remount (key-nya tetap tanggal ini), jadi
+                  // formulirnya dikosongkan manual — bukan ke isi yang barusan
+                  // dihapus.
+                  setStatus('aman')
+                  setCatatan('')
+                }
+              }}
+            >
+              ×
+            </button>
+          </span>
+        )}
       </div>
 
       <div className="mgr-lap-status">
@@ -2251,7 +2263,14 @@ function LaporanBox({
         >
           {awal ? 'Perbarui laporan' : 'Simpan laporan'}
         </button>
-        {berubah && <em>belum tersimpan</em>}
+        {berubah && (
+          <>
+            <button type="button" className="mgr-aksi-btn" onClick={batalkanDraf}>
+              Batalkan
+            </button>
+            <em>belum tersimpan</em>
+          </>
+        )}
       </div>
     </div>
   )

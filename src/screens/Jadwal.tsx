@@ -11,9 +11,16 @@
 //
 // Menyusun jadwal adalah wewenang pengelola (owner & manajer); karyawan hanya
 // membaca. Dikuatkan di server lewat RLS migration 0044.
+//
+// Selain rencana, grid ini juga menampilkan CUTI yang sudah di-ACC owner. Cuti
+// diajukan karyawan dari laman Presensi (entri manual → status 'menunggu') dan
+// baru resmi setelah disetujui; begitu resmi ia muncul sendiri di sel tanggal
+// yang bersangkutan — tidak perlu disalin ulang ke roster. Cuti resmi menimpa
+// tampilan rencana (realisasi mengalahkan rencana) dan selnya dikunci supaya
+// keputusan owner tidak tertimpa satu klik.
 // =============================================================
 import { useMemo, useState } from 'react'
-import type { AppData, DayType, JadwalShift } from '../types'
+import type { AbsenHari, AppData, DayType, JadwalShift } from '../types'
 import { SHIFT_IKON, SHIFT_LABEL } from '../attendance'
 import { todayKey } from '../storage'
 import { cakupanShift, hariDalamBulan } from '../manajemen'
@@ -53,6 +60,14 @@ function geser(monthKey: string, arah: number): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }
 
+/** Tooltip sel cuti resmi — sekalian menyebut rencana yang ditimpanya. */
+function judulCuti(rencana: DayType | undefined): string {
+  const dasar = 'Cuti disetujui owner — tercatat otomatis dari presensi'
+  return rencana && rencana !== 'cuti'
+    ? `${dasar} (rencana semula: ${SHIFT_LABEL[rencana]})`
+    : dasar
+}
+
 export function Jadwal({ data, setData, bisaUbah }: Props) {
   const hariIni = todayKey()
   const [monthKey, setMonthKey] = useState(() => hariIni.slice(0, 7))
@@ -84,6 +99,19 @@ export function Jadwal({ data, setData, bisaUbah }: Props) {
     for (const j of data.jadwalShift ?? []) m.set(`${j.tanggal}::${j.employeeId}`, j)
     return m
   }, [data.jadwalShift])
+
+  // Cuti yang sudah disetujui owner (lihat komentar kepala berkas). Entri yang
+  // masih 'menunggu' sengaja tidak ikut — pengajuan belum tentu jadi.
+  const cutiMap = useMemo(() => {
+    const m = new Map<string, AbsenHari>()
+    for (const r of data.records) {
+      if (r.shift !== 'cuti') continue
+      if (r.status === 'menunggu') continue
+      if (!r.tanggal.startsWith(monthKey)) continue
+      m.set(`${r.tanggal}::${r.employeeId}`, r)
+    }
+    return m
+  }, [data.records, monthKey])
 
   const cakupan = useMemo(
     () => cakupanShift(data, monthKey, hariIni),
@@ -133,6 +161,9 @@ export function Jadwal({ data, setData, bisaUbah }: Props) {
             terisi penuh
             {cakupan.bolongMendatang.length > 0 && (
               <> · <b>{cakupan.bolongMendatang.length} hari ke depan masih bolong</b></>
+            )}
+            {cutiMap.size > 0 && (
+              <> · {cutiMap.size} cuti disetujui tampil otomatis</>
             )}
           </p>
         </div>
@@ -215,18 +246,27 @@ export function Jadwal({ data, setData, bisaUbah }: Props) {
                       </span>
                     </th>
                     {tanggalList.map((t) => {
-                      const shift = jadwalMap.get(`${t.tanggal}::${e.id}`)?.shift
+                      const kunci = `${t.tanggal}::${e.id}`
+                      const rencana = jadwalMap.get(kunci)?.shift
+                      const cutiACC = cutiMap.get(kunci)
+                      const shift: DayType | undefined = cutiACC
+                        ? 'cuti'
+                        : rencana
                       return (
                         <td key={t.tanggal} className={t.akhirPekan ? 'is-pekan' : ''}>
                           <button
                             type="button"
-                            className={`jdw-sel${shift ? ` is-${shift}` : ''}`}
-                            disabled={!bisaUbah}
+                            className={`jdw-sel${shift ? ` is-${shift}` : ''}${
+                              cutiACC ? ' is-acc' : ''
+                            }`}
+                            disabled={!bisaUbah || !!cutiACC}
                             onClick={() => putar(t.tanggal, e.id)}
                             title={
-                              shift
-                                ? `${SHIFT_LABEL[shift]} — klik untuk mengganti`
-                                : 'Kosong — klik untuk menjadwalkan'
+                              cutiACC
+                                ? judulCuti(rencana)
+                                : shift
+                                  ? `${SHIFT_LABEL[shift]} — klik untuk mengganti`
+                                  : 'Kosong — klik untuk menjadwalkan'
                             }
                           >
                             {shift ? SHIFT_IKON[shift] : ''}
@@ -249,6 +289,10 @@ export function Jadwal({ data, setData, bisaUbah }: Props) {
                 {SHIFT_LABEL[s]}
               </span>
             ))}
+            <span>
+              <i className="jdw-sel is-cuti is-acc">{SHIFT_IKON.cuti}</i>
+              Cuti disetujui (otomatis)
+            </span>
           </div>
           {bisaUbah && (
             <button type="button" className="jdw-hapus" onClick={kosongkanBulan}>

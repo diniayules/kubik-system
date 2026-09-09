@@ -3278,6 +3278,14 @@
 .jdw-sel.is-full { background: var(--mint-bg); border-color: var(--mint); }
 .jdw-sel.is-cuti { background: var(--surface-2); border-color: var(--line); }
 .jdw-sel.is-libur { background: var(--surface-2); border-color: var(--muted); }
+/* Cuti yang sudah di-ACC owner: bukan rencana yang bisa diklik, melainkan fakta
+   yang datang dari presensi — dibedakan garis tegas warna primer + kunci. */
+.jdw-sel.is-cuti.is-acc {
+  border-color: var(--primary); border-style: solid;
+  background: color-mix(in srgb, var(--primary) 14%, transparent);
+  cursor: default;
+}
+.jdw-sel.is-cuti.is-acc:hover { transform: none; }
 
 .jdw-kaki {
   display: flex; align-items: center; justify-content: space-between;

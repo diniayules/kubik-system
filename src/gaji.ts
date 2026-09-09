@@ -92,13 +92,42 @@ export function hariSeharusnyaBulan(monthKey: string, hariIni: string): number {
 }
 
 /**
+ * Sama seperti {@link hariSeharusnyaBulan}, tapi dipotong di tanggal karyawan
+ * mulai bekerja (`tanggalDiterima` di profil karyawan).
+ *
+ * Hasil kerja seseorang dihitung SEJAK ia bergabung: orang yang baru masuk
+ * tanggal 5 tidak boleh terlihat mangkir 4 hari di awal bulan — tanggal 1–4
+ * memang bukan harinya. Bulan sebelum ia bergabung bernilai 0.
+ *
+ * Karyawan lama yang `tanggalDiterima`-nya belum diisi tetap dihitung sebulan
+ * penuh (perilaku sebelum aturan ini ada).
+ */
+export function hariSeharusnyaKaryawan(
+  emp: Employee,
+  monthKey: string,
+  hariIni: string,
+): number {
+  const total = hariSeharusnyaBulan(monthKey, hariIni)
+  const mulai = emp.tanggalDiterima
+  if (!mulai) return total
+  const bulanMulai = mulai.slice(0, 7)
+  if (bulanMulai > monthKey) return 0 // belum bergabung di bulan ini
+  if (bulanMulai < monthKey) return total
+  // Bulan ia mulai: hitung dari tanggal masuk sampai batas bulan berjalan.
+  return Math.max(0, total - Number(mulai.slice(8, 10)) + 1)
+}
+
+/**
  * Hitung slip gaji satu karyawan untuk satu bulan.
  *
  * @param emp            karyawan
  * @param gajiPokok      gaji pokok bulanannya (Rp)
  * @param records        SEMUA catatan absen (akan disaring ke karyawan + bulan)
  * @param laporan        laporan income bulan tsb (sudah disaring ke bulan)
- * @param hariSeharusnya jumlah hari patokan (lihat hariSeharusnyaBulan)
+ * @param hariSeharusnya jumlah hari patokan — pakai {@link hariSeharusnyaKaryawan}
+ *                       supaya hari sebelum karyawan bergabung tidak terhitung
+ *                       mangkir. Hanya mempengaruhi info `hariTidakHadir`,
+ *                       tidak mengubah nominal gaji.
  */
 export function hitungSlipGaji(
   emp: Employee,

@@ -12,7 +12,7 @@
 //   rekening diharapkan = saldoAwal.rekening + Σ QRIS  + Σ setoran − Σ pengeluaran(rekening) − Σ gaji dibayar transfer
 // =============================================================
 import type { AppData } from './types'
-import { hariSeharusnyaBulan, hitungSlipGaji } from './gaji'
+import { hariSeharusnyaKaryawan, hitungSlipGaji } from './gaji'
 import { isPengelola } from './lib/roles'
 
 export type RekonsiliasiKas = {
@@ -78,7 +78,7 @@ export function hitungRekonsiliasiKas(
       data.gajiPokok[emp.id] ?? 0,
       data.records.filter((r) => r.tanggal.startsWith(bulan)),
       data.laporanIncome.filter((l) => l.tanggal.startsWith(bulan)),
-      hariSeharusnyaBulan(bulan, hariIni),
+      hariSeharusnyaKaryawan(emp, bulan, hariIni),
     )
     const metode = (data.gajiPembayaranVia[key]?.metode ?? '').toLowerCase()
     const dariCash = metode.includes('tunai') || metode.includes('cash')

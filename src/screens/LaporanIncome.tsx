@@ -27,7 +27,7 @@ import {
   totalTiketPerLayanan,
   totalUpgradePerTipe,
 } from '../income'
-import { hariSeharusnyaBulan, hitungSlipGaji } from '../gaji'
+import { hariSeharusnyaKaryawan, hitungSlipGaji } from '../gaji'
 import { hitungRekonsiliasiKas } from '../kas'
 import { Icons } from '../components/Icons'
 import { IncomeEntryModal } from './IncomeEntryModal'
@@ -203,7 +203,6 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
     const recordsBulan = data.records.filter((r) =>
       r.tanggal.startsWith(rekapAktif),
     )
-    const hariSeharusnya = hariSeharusnyaBulan(rekapAktif, hariIni)
     const gaji = data.employees
       .filter((e) => !isPengelola(e.role))
       .reduce(
@@ -214,7 +213,7 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
             data.gajiPokok[emp.id] ?? 0,
             recordsBulan,
             laporanBulan,
-            hariSeharusnya,
+            hariSeharusnyaKaryawan(emp, rekapAktif, hariIni),
           ).total,
         0,
       )

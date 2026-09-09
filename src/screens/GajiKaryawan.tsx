@@ -6,7 +6,7 @@ import {
   BONUS_PER_ITEM,
   HARI_KERJA_SEBULAN,
   MENIT_KERJA_HARIAN,
-  hariSeharusnyaBulan,
+  hariSeharusnyaKaryawan,
   hitungSlipGaji,
   type SlipGaji,
 } from '../gaji'
@@ -118,8 +118,6 @@ export function GajiKaryawan({ data, setData, isAdmin, currentUserId }: Props) {
     () => data.laporanIncome.filter((l) => l.tanggal.startsWith(periodeAktif)),
     [data.laporanIncome, periodeAktif],
   )
-  const hariSeharusnya = hariSeharusnyaBulan(periodeAktif, hariIni)
-
   // Slip gaji tiap karyawan untuk bulan terpilih. Karyawan yang belum mulai
   // pada periode ini (bulan sebelum presensi pertamanya) tidak punya slip.
   const slips = useMemo(
@@ -137,7 +135,7 @@ export function GajiKaryawan({ data, setData, isAdmin, currentUserId }: Props) {
             data.gajiPokok[emp.id] ?? 0,
             recordsBulan,
             laporanBulan,
-            hariSeharusnya,
+            hariSeharusnyaKaryawan(emp, periodeAktif, hariIni),
           ),
         })),
     [
@@ -145,7 +143,7 @@ export function GajiKaryawan({ data, setData, isAdmin, currentUserId }: Props) {
       data.gajiPokok,
       recordsBulan,
       laporanBulan,
-      hariSeharusnya,
+      hariIni,
       mulaiBulanMap,
       periodeAktif,
       bulanIni,

@@ -155,7 +155,7 @@ export function Jadwal({ data, setData, bisaUbah }: Props) {
       <section className="jdw-head">
         <div>
           <span className="jdw-kicker">Operasional · Roster</span>
-          <h2>Jadwal Shift</h2>
+          <h2>Jadwal Karyawan</h2>
           <p>
             {cakupan.hariTercover} dari {cakupan.hariDinilai} hari berjalan sudah
             terisi penuh

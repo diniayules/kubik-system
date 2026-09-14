@@ -42,7 +42,7 @@ const NAV_ITEMS: Item[] = [
   { id: 'absensi', label: 'Presensi Karyawan', icon: Icons.clock, group: 'Operasional' },
   // Karyawan boleh melihat jadwalnya — itu gunanya roster. Hanya pengelola yang
   // bisa mengubah (dikuatkan lewat prop `bisaUbah` + RLS migration 0044).
-  { id: 'jadwal', label: 'Jadwal Shift', icon: Icons.clock, group: 'Operasional' },
+  { id: 'jadwal', label: 'Jadwal Karyawan', icon: Icons.clock, group: 'Operasional' },
   { id: 'inventaris', label: 'Inventaris & Stok', icon: Icons.box, group: 'Operasional' },
   // Karyawan boleh lihat menu Promosi — konten difilter per peran + RLS.
   { id: 'promosi', label: 'Papan Promosi', icon: Icons.sun, group: 'Operasional' },

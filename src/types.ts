@@ -806,6 +806,24 @@ export type PenilaianOwner = {
 }
 
 /**
+ * Satu baris jobdesk manajer — tugas yang DITETAPKAN OWNER untuk periode
+ * `YYYY-MM` tertentu, lalu dicentang sendiri oleh manajer.
+ *
+ * Bedanya dengan {@link ClosingTask}: checklist pagi/pulang berulang tiap hari
+ * kerja dan berlaku untuk semua karyawan, sedangkan jobdesk ini sekali-selesai
+ * dan khusus manajer. Karena itu status selesainya menempel di item-nya
+ * sendiri, bukan di catatan absen harian.
+ */
+export type JobdeskItem = {
+  id: string
+  label: string
+  /** Kapan dicentang (ISO). Kosong/undefined = belum selesai. */
+  selesaiPada?: string
+  /** Id profil yang mencentang — biasanya manajer, bisa juga owner. */
+  selesaiOleh?: string
+}
+
+/**
  * Status satu hari menurut laporan closing manajer.
  *
  * Tiga, bukan dua: "kendala" yang sudah beres sendiri adalah kabar BAIK —
@@ -971,6 +989,13 @@ export type AppData = {
    * dan KPI-nya ikut nonaktif (bukan dihitung nol).
    */
   penilaianOwner: Record<string, PenilaianOwner>
+  /**
+   * Jobdesk manajer per periode `YYYY-MM`. Disusun owner, dicentang manajer.
+   * Lihat [JobdeskItem] & migration 0054. Key tidak ada / array kosong =
+   * owner belum menetapkan jobdesk bulan itu (panelnya tampil kosong, tidak
+   * ikut dinilai di mana pun).
+   */
+  jobdeskManajer: Record<string, JobdeskItem[]>
   /**
    * Kontrak ritme konten mingguan. Lihat [RitmeKonten] & migration 0051.
    * `undefined` = ritme belum diatur (papan Denyut Mingguan & KPI-nya ikut

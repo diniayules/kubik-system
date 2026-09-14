@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import type {
   AppData,
   LaporanHarian,
+  JobdeskItem,
   StatusLaporanHarian,
   PromoProgram,
   RitmeKonten,
@@ -544,6 +545,37 @@ export function Manajemen({
     })
   }
 
+  // ---- Jobdesk manajer (disusun owner, dicentang manajer) ----
+  const jobdesk = data.jobdeskManajer?.[monthKey] ?? []
+  const jobdeskLalu = data.jobdeskManajer?.[bulanSebelumnya(monthKey)] ?? []
+  const jobdeskSelesai = jobdesk.filter((j) => j.selesaiPada).length
+  const [editJobdesk, setEditJobdesk] = useState(false)
+
+  function simpanJobdesk(items: JobdeskItem[]) {
+    setData({
+      ...data,
+      jobdeskManajer: { ...(data.jobdeskManajer ?? {}), [monthKey]: items },
+    })
+  }
+
+  /**
+   * Centang/batal satu jobdesk. Membatalkan centang MENGHAPUS jejak siapa &
+   * kapan (bukan menyimpan `selesaiPada: undefined` di sebelah `selesaiOleh`
+   * lama) supaya tidak ada baris yang tampak belum selesai tapi masih membawa
+   * nama pencentangnya.
+   */
+  function toggleJobdesk(id: string) {
+    simpanJobdesk(
+      jobdesk.map((j) =>
+        j.id !== id
+          ? j
+          : j.selesaiPada
+            ? { id: j.id, label: j.label }
+            : { ...j, selesaiPada: new Date().toISOString(), selesaiOleh: meId },
+      ),
+    )
+  }
+
   const saldoAktual = data.saldoAktual[monthKey] ?? { dompet: 0, rekening: 0 }
 
   const komposisi = [
@@ -856,6 +888,95 @@ export function Manajemen({
                     </li>
                   ))}
                 </ul>
+              )}
+            </Panel>
+
+            <Panel
+              judul="Jobdesk Manajer"
+              sub={
+                isOwner
+                  ? `Tugas yang Anda tetapkan untuk ${labelBulan(monthKey)}. Manajer mencentangnya sendiri di layar ini.`
+                  : `Tugas dari owner untuk ${labelBulan(monthKey)}. Centang setelah beres.`
+              }
+              badge={
+                jobdesk.length > 0
+                  ? `${jobdeskSelesai}/${jobdesk.length}`
+                  : undefined
+              }
+              aksi={
+                isOwner ? (
+                  <button
+                    type="button"
+                    className="mgr-aksi-btn"
+                    onClick={() => setEditJobdesk((v) => !v)}
+                  >
+                    {editJobdesk ? 'Tutup' : jobdesk.length ? 'Atur jobdesk' : 'Susun jobdesk'}
+                  </button>
+                ) : undefined
+              }
+            >
+              {editJobdesk ? (
+                <JobdeskEditor
+                  key={monthKey}
+                  awal={jobdesk}
+                  bulanLalu={jobdeskLalu}
+                  labelBulanLalu={labelBulan(bulanSebelumnya(monthKey))}
+                  onSimpan={(items) => {
+                    simpanJobdesk(items)
+                    setEditJobdesk(false)
+                  }}
+                  onBatal={() => setEditJobdesk(false)}
+                />
+              ) : jobdesk.length === 0 ? (
+                <p className="mgr-empty">
+                  {isOwner
+                    ? 'Belum ada jobdesk untuk periode ini. Klik "Susun jobdesk" untuk menuliskan daftarnya — manajer langsung melihatnya di sini.'
+                    : 'Owner belum menetapkan jobdesk untuk periode ini.'}
+                </p>
+              ) : (
+                <>
+                  <div className="mgr-jobdesk-head">
+                    <span className="mgr-jobdesk-meter">
+                      <span
+                        className="mgr-jobdesk-fill"
+                        style={{
+                          width: `${(jobdeskSelesai / jobdesk.length) * 100}%`,
+                        }}
+                      />
+                    </span>
+                    <span className="mgr-jobdesk-hitung">
+                      {jobdeskSelesai} dari {jobdesk.length} selesai
+                    </span>
+                  </div>
+                  <ul className="mgr-jobdesk">
+                    {jobdesk.map((j) => {
+                      const oleh = j.selesaiOleh
+                        ? data.employees.find((e) => e.id === j.selesaiOleh)?.nama
+                        : undefined
+                      return (
+                        <li
+                          key={j.id}
+                          className={'mgr-jobdesk-row' + (j.selesaiPada ? ' is-done' : '')}
+                        >
+                          <label>
+                            <input
+                              type="checkbox"
+                              checked={Boolean(j.selesaiPada)}
+                              onChange={() => toggleJobdesk(j.id)}
+                            />
+                            <span className="mgr-jobdesk-label">{j.label}</span>
+                          </label>
+                          {j.selesaiPada && (
+                            <span className="mgr-jobdesk-jejak">
+                              {labelTanggalPendek(todayKey(new Date(j.selesaiPada)))}
+                              {oleh && ` · ${oleh}`}
+                            </span>
+                          )}
+                        </li>
+                      )
+                    })}
+                  </ul>
+                </>
               )}
             </Panel>
           </div>
@@ -2566,6 +2687,138 @@ function TargetEditor({
           }
         >
           Simpan &amp; setujui
+        </button>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Penyusun jobdesk manajer (owner). Mengedit SALINAN lokal, baru menulis saat
+ * "Simpan" — supaya menghapus baris tidak langsung menghilangkan centang
+ * manajer sebelum owner yakin.
+ *
+ * Label diedit per-id dan sisa field item (`selesaiPada`/`selesaiOleh`)
+ * dibiarkan utuh: memperbaiki typo tidak boleh membatalkan centang yang sudah
+ * ada.
+ */
+function JobdeskEditor({
+  awal,
+  bulanLalu,
+  labelBulanLalu,
+  onSimpan,
+  onBatal,
+}: {
+  awal: JobdeskItem[]
+  /** Jobdesk periode sebelumnya — bahan tombol "Salin dari ...". */
+  bulanLalu: JobdeskItem[]
+  labelBulanLalu: string
+  onSimpan: (items: JobdeskItem[]) => void
+  onBatal: () => void
+}) {
+  const [draf, setDraf] = useState<JobdeskItem[]>(awal)
+
+  function ubahLabel(id: string, label: string) {
+    setDraf((d) => d.map((j) => (j.id === id ? { ...j, label } : j)))
+  }
+
+  function pindah(id: string, arah: -1 | 1) {
+    setDraf((d) => {
+      const i = d.findIndex((j) => j.id === id)
+      const t = i + arah
+      if (i < 0 || t < 0 || t >= d.length) return d
+      const next = [...d]
+      ;[next[i], next[t]] = [next[t], next[i]]
+      return next
+    })
+  }
+
+  function hapus(id: string) {
+    setDraf((d) => d.filter((j) => j.id !== id))
+  }
+
+  function tambah() {
+    setDraf((d) => [...d, { id: uid(), label: '' }])
+  }
+
+  /** Salin LABEL-nya saja: id & centang bulan lalu tidak boleh ikut terbawa. */
+  function salinBulanLalu() {
+    setDraf((d) => [
+      ...d,
+      ...bulanLalu.map((j) => ({ id: uid(), label: j.label })),
+    ])
+  }
+
+  return (
+    <div className="mgr-jobdesk-editor">
+      {draf.length === 0 && (
+        <p className="mgr-empty">
+          Belum ada baris. Tambahkan tugas pertama untuk manajer.
+        </p>
+      )}
+      {draf.map((j, i) => (
+        <div key={j.id} className="mgr-jobdesk-edit-row">
+          <span className="mgr-jobdesk-num">{i + 1}.</span>
+          <input
+            type="text"
+            value={j.label}
+            onChange={(e) => ubahLabel(j.id, e.target.value)}
+            placeholder="mis. Rekap penjualan mingguan ke owner"
+          />
+          <button
+            type="button"
+            className="btn-mini btn-mini-ghost"
+            onClick={() => pindah(j.id, -1)}
+            disabled={i === 0}
+            title="Naikkan"
+          >
+            ↑
+          </button>
+          <button
+            type="button"
+            className="btn-mini btn-mini-ghost"
+            onClick={() => pindah(j.id, 1)}
+            disabled={i === draf.length - 1}
+            title="Turunkan"
+          >
+            ↓
+          </button>
+          <button
+            type="button"
+            className="btn-mini btn-mini-skip"
+            onClick={() => hapus(j.id)}
+            title="Hapus"
+          >
+            ×
+          </button>
+        </div>
+      ))}
+      <div className="mgr-jobdesk-edit-aksi">
+        <button type="button" className="mgr-aksi-btn" onClick={tambah}>
+          + Tambah tugas
+        </button>
+        {bulanLalu.length > 0 && (
+          <button type="button" className="mgr-aksi-btn" onClick={salinBulanLalu}>
+            Salin dari {labelBulanLalu}
+          </button>
+        )}
+        <span className="spacer" />
+        <button type="button" className="mgr-aksi-btn" onClick={onBatal}>
+          Batal
+        </button>
+        <button
+          type="button"
+          className="mgr-aksi-btn is-utama"
+          onClick={() =>
+            /* Baris kosong dibuang, bukan disimpan sebagai tugas tanpa nama. */
+            onSimpan(
+              draf
+                .map((j) => ({ ...j, label: j.label.trim() }))
+                .filter((j) => j.label !== ''),
+            )
+          }
+        >
+          Simpan jobdesk
         </button>
       </div>
     </div>

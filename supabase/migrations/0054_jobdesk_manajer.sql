@@ -1,0 +1,32 @@
+-- =============================================================
+-- 0054_jobdesk_manajer.sql · Jobdesk manajer per periode
+-- -------------------------------------------------------------
+-- Daftar tugas yang DITETAPKAN OWNER untuk manajer, per periode
+-- `YYYY-MM`, dan dicentang sendiri oleh manajer di Dashboard
+-- Manajemen (tab "Hari Ini"):
+--
+--   { "2026-09": [
+--       { "id": "...", "label": "Rekap penjualan mingguan ke owner",
+--         "selesaiPada": "2026-09-07T10:12:00.000Z",
+--         "selesaiOleh": "<uuid profil>" },
+--       { "id": "...", "label": "Cek stok kertas tiap Senin" }
+--     ] }
+--
+-- Kenapa per periode dan bukan satu daftar tetap: jobdesk manajer
+-- memang berubah tiap bulan (bulan ini beresin stok, bulan depan
+-- garap kemitraan), dan riwayat centangnya harus tetap menempel di
+-- bulan yang dinilai. Satu daftar tetap akan menghapus jejak bulan
+-- lalu begitu daftarnya diedit.
+--
+-- Menempel di `app_config` mengikuti pola `target_bulanan` (0043) &
+-- `penilaian_owner` (0048): volumenya kecil, selalu dibaca bersama
+-- data dashboard, dan hak aksesnya sudah pas — `app_config` boleh
+-- DIBACA semua user login dan hanya boleh DIUBAH pengelola.
+--
+-- Catatan hak akses: "hanya owner yang boleh menyusun daftarnya"
+-- ditegakkan di layar (sama seperti target bulanan). Manajer memang
+-- perlu MENULIS ke kolom ini — justru dialah yang mencentang.
+-- =============================================================
+
+alter table public.app_config
+  add column if not exists jobdesk_manajer jsonb not null default '{}'::jsonb;

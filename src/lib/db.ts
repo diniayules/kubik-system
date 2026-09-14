@@ -31,6 +31,7 @@ import type {
   LaporanIncome,
   LayananDef,
   PenilaianOwner,
+  JobdeskItem,
   PenyesuaianUangKecil,
   PenarikanUangBesar,
   Pengeluaran,
@@ -269,6 +270,7 @@ type ConfigRow = {
   saldo_awal: { dompet: number; rekening: number } | null
   target_bulanan: Record<string, TargetBulanan> | null
   penilaian_owner: Record<string, PenilaianOwner> | null
+  jobdesk_manajer: Record<string, JobdeskItem[]> | null
   ritme_konten: RitmeKonten | null
   brand_kicker: string | null
   brand_name: string | null
@@ -665,6 +667,9 @@ export async function fetchAppData(): Promise<AppData> {
     // Toleran kalau kolom penilaian/eskalasi belum ada (migrasi 0048 belum
     // dijalankan): KPI kelompok Kepemimpinan tampil 'belum aktif', bukan nol.
     penilaianOwner: config?.penilaian_owner ?? {},
+    // Toleran kalau kolom `jobdesk_manajer` belum ada (migrasi 0054 belum
+    // dijalankan): panel Jobdesk Manajer tampil kosong, bukan error.
+    jobdeskManajer: config?.jobdesk_manajer ?? {},
     // `ritme_konten` default '{}' di database. Objek tanpa `jumlah` berarti
     // ritme BELUM diatur — dijadikan undefined supaya papan & KPI-nya nonaktif,
     // bukan dinilai nol.
@@ -1234,6 +1239,7 @@ export async function persistChanges(
     'saldoAwal',
     'targetBulanan',
     'penilaianOwner',
+    'jobdeskManajer',
     'ritmeKonten',
     'brandKicker',
     'brandName',
@@ -1266,6 +1272,7 @@ export async function persistChanges(
             saldo_awal: next.saldoAwal ?? { dompet: 0, rekening: 0 },
             target_bulanan: next.targetBulanan ?? {},
             penilaian_owner: next.penilaianOwner ?? {},
+            jobdesk_manajer: next.jobdeskManajer ?? {},
             ritme_konten: next.ritmeKonten ?? {},
             brand_kicker: next.brandKicker ?? null,
             brand_name: next.brandName ?? null,

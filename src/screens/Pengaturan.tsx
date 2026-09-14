@@ -17,6 +17,7 @@ import {
   FONT_SIZE_META,
 } from '../appearance'
 import { ThemeSwitcher, type Theme } from '../components/ThemeSwitcher'
+import { GantiPassword } from '../components/GantiPassword'
 import { Icons } from '../components/Icons'
 import { useToast } from '../components/Toast'
 import { useLang, type Lang } from '../i18n'
@@ -852,6 +853,8 @@ export function Pengaturan({
         </div>
       </section>
       )}
+
+      <GantiPassword />
 
       <section className="settings-card">
         <div className="settings-head">

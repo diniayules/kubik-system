@@ -30,6 +30,7 @@ import type {
   LaporanEvent,
   LaporanIncome,
   LayananDef,
+  MasalahTeknis,
   PenilaianOwner,
   JobdeskItem,
   PenyesuaianUangKecil,
@@ -216,6 +217,18 @@ type LaporanHarianRow = Omit<LaporanHarian, 'catatan' | 'oleh' | 'diperbarui'> &
   oleh: string | null
   updated_at: string | null
 }
+type MasalahTeknisRow = {
+  id: string
+  judul: string
+  kategori: MasalahTeknis['kategori']
+  tingkat: MasalahTeknis['tingkat']
+  catatan: string | null
+  dilaporkan_oleh: string | null
+  dilaporkan_pada: string
+  selesai_pada: string | null
+  selesai_oleh: string | null
+  solusi: string | null
+}
 type JadwalShiftRow = {
   tanggal: string
   employee_id: string
@@ -314,6 +327,7 @@ export async function fetchAppData(): Promise<AppData> {
     leadsRes,
     followupRes,
     kemitraanRes,
+    masalahRes,
   ] = await Promise.all([
     supabase
       .from('profiles')
@@ -399,6 +413,15 @@ export async function fetchAppData(): Promise<AppData> {
         'id, instansi, jenis, kontak_nama, kontak, acara, tanggal_acara, tanggal_masuk, status, permintaan, nilai_diminta, nilai_disetujui, bentuk, imbalan, mou_mulai, mou_berakhir, alasan_tolak, catatan, pic, tanggal_keputusan, pengeluaran_id, created_by',
       )
       .order('tanggal_masuk', { ascending: true }),
+    // Kendala teknis: semua yang login boleh membaca — operator shift
+    // berikutnya perlu tahu alat mana yang sedang bermasalah. Lihat
+    // migration 0055.
+    supabase
+      .from('masalah_teknis')
+      .select(
+        'id, judul, kategori, tingkat, catatan, dilaporkan_oleh, dilaporkan_pada, selesai_pada, selesai_oleh, solusi',
+      )
+      .order('dilaporkan_pada', { ascending: false }),
   ])
 
   const profiles = orErr(profilesRes) as ProfileRow[]
@@ -449,6 +472,12 @@ export async function fetchAppData(): Promise<AppData> {
   const followupRows = (
     followupRes.error ? [] : (followupRes.data ?? [])
   ) as LeadFollowupRow[]
+  // Toleran kalau tabel `masalah_teknis` belum ada (migrasi 0055 belum
+  // dijalankan) — fallback [] agar app tetap jalan; panel & KPI kendala
+  // teknis ikut nonaktif, bukan terbaca "nol masalah".
+  const masalahRows = (
+    masalahRes.error ? [] : (masalahRes.data ?? [])
+  ) as MasalahTeknisRow[]
   // Toleran kalau tabel `kemitraan` belum ada (migrasi 0053 belum dijalankan)
   // — fallback [] agar app tetap jalan; tab MoU & Sponsorship ikut kosong.
   const kemitraanRows = (
@@ -746,6 +775,18 @@ export async function fetchAppData(): Promise<AppData> {
         : r.oleh
           ? [r.oleh]
           : [],
+    })),
+    masalahTeknis: masalahRows.map((r) => ({
+      id: r.id,
+      judul: r.judul,
+      kategori: r.kategori ?? 'lain',
+      tingkat: r.tingkat ?? 'ganggu',
+      catatan: r.catatan ?? '',
+      dilaporkanOleh: r.dilaporkan_oleh ?? undefined,
+      dilaporkanPada: r.dilaporkan_pada,
+      selesaiPada: r.selesai_pada ?? undefined,
+      selesaiOleh: r.selesai_oleh ?? undefined,
+      solusi: r.solusi ?? '',
     })),
     laporanHarian: laporanHarianRows.map((r) => ({
       tanggal: r.tanggal,
@@ -1216,6 +1257,27 @@ export async function persistChanges(
     }),
     undefined,
     'tanggal',
+  )
+
+  // ---- masalah_teknis ----
+  syncRows(
+    jobs,
+    'masalah_teknis',
+    prev.masalahTeknis ?? [],
+    next.masalahTeknis ?? [],
+    (m) => m.id,
+    (m) => ({
+      id: m.id,
+      judul: m.judul,
+      kategori: m.kategori,
+      tingkat: m.tingkat,
+      catatan: m.catatan ?? '',
+      dilaporkan_oleh: m.dilaporkanOleh ?? null,
+      dilaporkan_pada: m.dilaporkanPada,
+      selesai_pada: m.selesaiPada ?? null,
+      selesai_oleh: m.selesaiOleh ?? null,
+      solusi: m.solusi ?? '',
+    }),
   )
 
   // ---- jadwal_shift (kunci komposit tanggal+employee_id) ----

@@ -1,6 +1,11 @@
 import { useEffect, useState } from 'react'
-import type { AppData, Employee } from '../types'
-import { todayKey } from '../storage'
+import type { AppData, Employee, MasalahTeknis } from '../types'
+import { todayKey, uid } from '../storage'
+import {
+  KATEGORI_MASALAH_LABEL,
+  TINGKAT_MASALAH_LABEL,
+  masalahTeknis,
+} from '../manajemen'
 import {
   SHIFT_DESKRIPSI,
   SHIFT_IKON,
@@ -26,6 +31,8 @@ import { ROLE_LABEL, asRole, isPengelola } from '../lib/roles'
 
 type Props = {
   data: AppData
+  /** Write-through ke Supabase — dipakai melaporkan kendala teknis. */
+  setData: (d: AppData) => void
   isAdmin: boolean
   currentUserId: string
   onPickEmployee: (id: string) => void
@@ -40,6 +47,7 @@ type Props = {
 
 export function Home({
   data,
+  setData,
   isAdmin,
   currentUserId,
   onPickEmployee,
@@ -138,6 +146,19 @@ export function Home({
           ))}
         </div>
       </section>
+
+      {/*
+        Lapor kendala dari layar yang memang sudah dibuka tiap pagi.
+        Sengaja di sini, bukan di Dashboard Manajemen: yang menemukan printer
+        bergaris adalah operator di lantai, dan dashboard tidak bisa ia buka.
+        Menandai selesai tetap milik pengelola (RLS migration 0055) — di sini
+        hanya melapor dan melihat apa yang sedang rusak.
+      */}
+      <KendalaStrip
+        data={data}
+        setData={setData}
+        currentUserId={currentUserId}
+      />
 
       {isAdmin && pengelolaList.length > 0 && (
         <>
@@ -810,5 +831,156 @@ function EmployeeRow({
         )}
       </div>
     </div>
+  )
+}
+
+const KATEGORI_ORDER: MasalahTeknis['kategori'][] = [
+  'printer',
+  'kamera',
+  'jaringan',
+  'listrik',
+  'aplikasi',
+  'lain',
+]
+const TINGKAT_ORDER: MasalahTeknis['tingkat'][] = ['stop', 'ganggu', 'ringan']
+
+/**
+ * Strip kendala teknis di Home — jalur lapor untuk operator.
+ *
+ * Tertutup secara bawaan dan hanya menampilkan satu baris ringkas, karena ini
+ * bukan pekerjaan utama layar ini. Yang tidak boleh disembunyikan adalah
+ * kendala yang sedang MENGHENTIKAN studio: operator yang baru masuk shift
+ * harus melihatnya sebelum menyentuh apa pun, jadi barisnya ikut tampil
+ * terbuka begitu ada.
+ *
+ * Menandai selesai tidak ada di sini — itu keputusan pengelola, dan RLS
+ * (migration 0055) memang menolaknya dari akun karyawan.
+ */
+function KendalaStrip({
+  data,
+  setData,
+  currentUserId,
+}: {
+  data: AppData
+  setData: (d: AppData) => void
+  currentUserId: string
+}) {
+  const hariIni = todayKey()
+  const ringkas = masalahTeknis(data, hariIni.slice(0, 7), hariIni)
+  const [buka, setBuka] = useState(false)
+  const [judul, setJudul] = useState('')
+  const [kategori, setKategori] = useState<MasalahTeknis['kategori']>('printer')
+  const [tingkat, setTingkat] = useState<MasalahTeknis['tingkat']>('ganggu')
+
+  function kirim() {
+    if (!judul.trim()) return
+    setData({
+      ...data,
+      masalahTeknis: [
+        {
+          id: uid(),
+          judul: judul.trim(),
+          kategori,
+          tingkat,
+          catatan: '',
+          solusi: '',
+          dilaporkanOleh: currentUserId || undefined,
+          dilaporkanPada: new Date().toISOString(),
+        },
+        ...(data.masalahTeknis ?? []),
+      ],
+    })
+    setJudul('')
+    setTingkat('ganggu')
+    setBuka(false)
+  }
+
+  const mendesak = ringkas.terbuka.filter((t) => t.masalah.tingkat === 'stop')
+
+  return (
+    <section className="kendala-strip">
+      <div className="kendala-head">
+        <div className="kendala-teks">
+          <b>Kendala teknis</b>
+          <span>
+            {ringkas.terbuka.length === 0
+              ? 'Tidak ada alat yang sedang bermasalah.'
+              : `${ringkas.terbuka.length} kendala belum dibereskan`}
+          </span>
+        </div>
+        <button
+          type="button"
+          className={'kendala-btn' + (buka ? '' : ' is-utama')}
+          onClick={() => setBuka((v) => !v)}
+        >
+          {buka ? 'Tutup' : 'Lapor kendala'}
+        </button>
+      </div>
+
+      {mendesak.length > 0 && (
+        <ul className="kendala-stop">
+          {mendesak.map(({ masalah: m, umurHari }) => (
+            <li key={m.id}>
+              <span className="tag">Studio berhenti</span>
+              <span className="isi">{m.judul}</span>
+              <em>{umurHari === 0 ? 'hari ini' : `${umurHari} hari`}</em>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {buka && (
+        <div className="kendala-form">
+          <input
+            type="text"
+            autoFocus
+            value={judul}
+            placeholder="Apa yang bermasalah? mis. Printer 2 garis-garis"
+            onChange={(e) => setJudul(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && kirim()}
+          />
+          <div className="kendala-pilih">
+            <label>
+              <span>Alat</span>
+              <select
+                value={kategori}
+                onChange={(e) =>
+                  setKategori(e.target.value as MasalahTeknis['kategori'])
+                }
+              >
+                {KATEGORI_ORDER.map((k) => (
+                  <option key={k} value={k}>
+                    {KATEGORI_MASALAH_LABEL[k]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>Dampak</span>
+              <select
+                value={tingkat}
+                onChange={(e) =>
+                  setTingkat(e.target.value as MasalahTeknis['tingkat'])
+                }
+              >
+                {TINGKAT_ORDER.map((t) => (
+                  <option key={t} value={t}>
+                    {TINGKAT_MASALAH_LABEL[t]}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <button
+            type="button"
+            className="kendala-btn is-utama"
+            disabled={!judul.trim()}
+            onClick={kirim}
+          >
+            Kirim laporan
+          </button>
+        </div>
+      )}
+    </section>
   )
 }

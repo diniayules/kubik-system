@@ -4,6 +4,7 @@ import type {
   AppData,
   LaporanHarian,
   JobdeskItem,
+  MasalahTeknis,
   StatusLaporanHarian,
   PromoProgram,
   RitmeKonten,
@@ -39,8 +40,13 @@ import {
   AMBANG_JADWAL_H,
   HARI_SISA_MERAH,
   JENDELA_PEMAKAIAN,
-  kontribusiKonten,
   kontribusiSales,
+  KATEGORI_MASALAH_LABEL,
+  KELOMPOK_TUGAS,
+  TINGKAT_MASALAH_LABEL,
+  basisTarget,
+  masalahTeknis,
+  PENGALI_TARGET,
   laporanClosing,
   STATUS_LAPORAN,
   STATUS_LAPORAN_LABEL,
@@ -50,6 +56,7 @@ import {
   LEAD_TAHAP_ORDER,
   pengerjaSosmed,
   pipelineLeads,
+  ringkasKemitraan,
   ringkasanBulan,
   saranTarget,
   skorKPI,
@@ -58,6 +65,9 @@ import {
 import type {
   AksiSosmed,
   BarisKPI,
+  KelompokKPI,
+  RingkasKemitraan,
+  RingkasMasalah,
   HariDampak,
   MingguKonten,
   SkorKelompok,
@@ -154,18 +164,27 @@ function formatPace(pace: number): string {
 }
 
 /**
- * Empat pekerjaan manajer, satu tab masing-masing — plus rapornya sendiri yang
- * hanya owner boleh buka. Urutannya sengaja: yang harus dikerjakan dulu, baru
- * yang harus dipantau, terakhir yang cuma dibaca.
+ * Empat tab, empat tugas manajer — tidak ada yang kelima.
+ *
+ * Susunan sebelumnya punya lima tab yang dibagi per SUMBER DATA ("Hari Ini",
+ * "Marketing", "Uang"), sehingga satu tugas tersebar ke beberapa layar: MoU
+ * duduk di layar lain sama sekali, sementara antrean kerjanya menumpuk jadi
+ * satu daftar dua belas baris yang mencampur kertas habis dengan lead yang
+ * belum ditelepon. Sekarang tabnya persis job description manajer, dan tiap
+ * tab berbentuk sama: **rapor tugas ini → antrean tugas ini → detailnya**.
+ *
+ * Tab "Hari Ini" sengaja DIHAPUS, bukan dipindah: antrean gabungan memaksa
+ * manajer menyortir sendiri mana yang tugasnya yang mana. Sekarang tiap
+ * antrean muncul di tab pemiliknya, dan angka di label tab yang memberi tahu
+ * ada berapa tunggakan tanpa perlu membukanya.
  */
-type TabMgr = 'kpi' | 'hari' | 'operasional' | 'marketing' | 'uang'
+type TabMgr = KelompokKPI
 
 const TAB_MGR: { id: TabMgr; label: string; sub: string }[] = [
-  { id: 'kpi', label: 'KPI Manajer', sub: 'rapor bulanan' },
-  { id: 'hari', label: 'Hari Ini', sub: 'antrean & centang' },
-  { id: 'operasional', label: 'Operasional', sub: 'Karyawan & SOP' },
-  { id: 'marketing', label: 'Marketing', sub: 'konten & leads' },
-  { id: 'uang', label: 'Uang', sub: 'omzet & margin' },
+  { id: 'operasional', label: 'Operasional', sub: 'SOP · stok · kendala teknis' },
+  { id: 'sales', label: 'Leads & Sales', sub: 'MoU · event' },
+  { id: 'sosmed', label: 'Social Media', sub: 'ide · jadwal · keaktifan' },
+  { id: 'keuangan', label: 'Keuangan', sub: 'omzet · target 2×' },
 ]
 
 export function Manajemen({
@@ -185,11 +204,12 @@ export function Manajemen({
   const [monthKey, setMonthKey] = useState(() => hariIni.slice(0, 7))
 
   /*
-    Manajer mendarat di "Hari Ini" (daftar kerjanya), owner di "KPI Manajer"
-    (alasan ia membuka halaman ini). Tab tidak disimpan ke storage — sekali
-    berpindah layar, keduanya kembali ke titik berangkat yang benar.
+    Keduanya mendarat di Operasional — tugas nomor satu, dan satu-satunya yang
+    kalau bocor akan menjatuhkan tiga tugas lainnya. Owner tidak lagi mendarat
+    di rapor: rapornya sekarang menempel di tiap tab sebagai kepala halaman,
+    jadi tidak ada lagi layar yang isinya cuma menilai tanpa bisa dikerjakan.
   */
-  const [tab, setTab] = useState<TabMgr>(isOwner ? 'kpi' : 'hari')
+  const [tab, setTab] = useState<TabMgr>('operasional')
 
   const kini = useMemo(
     () => ringkasanBulan(data, monthKey, hariIni),
@@ -220,11 +240,20 @@ export function Manajemen({
     () => (isOwner ? hitungRekonsiliasiKas(data, monthKey, hariIni) : null),
     [data, monthKey, hariIni, isOwner],
   )
-  // Scorecard hanya untuk owner (lihat panel "KPI Manajer" di bawah), jadi
-  // tidak perlu dihitung sama sekali untuk akun manajer.
+  /*
+    Dulu scorecard ini hanya dihitung untuk owner, dan manajer cuma melihat
+    kartu gembok "KPI disembunyikan". Rapor yang tidak bisa dibaca oleh orang
+    yang dinilai tidak mengubah apa pun — ia hanya jadi bahan sidang di akhir
+    bulan. Sekarang manajer melihat rapornya sendiri; yang tetap tertutup
+    adalah hal yang memang bukan urusannya: nominal gaji & rekonsiliasi kas.
+  */
   const kpi = useMemo(
-    () => (isOwner ? skorKPI(data, monthKey, hariIni) : null),
-    [data, monthKey, hariIni, isOwner],
+    () => skorKPI(data, monthKey, hariIni),
+    [data, monthKey, hariIni],
+  )
+  const masalah = useMemo(
+    () => masalahTeknis(data, monthKey, hariIni),
+    [data, monthKey, hariIni],
   )
   const jadwal = useMemo(
     () => cakupanShift(data, monthKey, hariIni),
@@ -249,10 +278,6 @@ export function Manajemen({
   const dampak = useMemo(
     () => dampakSosmed(data, monthKey, hariIni),
     [data, monthKey, hariIni],
-  )
-  const kontribusi = useMemo(
-    () => kontribusiKonten(data, monthKey),
-    [data, monthKey],
   )
   const pipeline = useMemo(
     () => pipelineLeads(data, monthKey, hariIni),
@@ -283,7 +308,7 @@ export function Manajemen({
   const periodeBerjalan = hariIni.startsWith(monthKey)
   /**
    * Log tanggal HARI INI, terlepas dari tanggal mana yang sedang dipilih di
-   * formulir Marketing. Dipakai centang cepat di tab "Hari Ini".
+   * panel Sosial Media. Dipakai centang cepat di panel "Sosmed Hari Ini".
    */
   const logToday = (data.sosmedHarian ?? []).find((r) => r.tanggal === hariIni)
 
@@ -597,9 +622,45 @@ export function Manajemen({
     .filter((k) => k.nilai > 0)
     .sort((a, b) => b.nilai - a.nilai)
 
+  /**
+   * Rupiah yang harus dikejar supaya omzet kembali sejajar dengan laju target.
+   *
+   * Diambil dari baris KPI omzet, bukan dihitung ulang di sini — kalau tidak,
+   * angka di antrean bisa berbeda dari angka di rapor tepat di halaman yang
+   * sama. 0 kalau sudah sejajar, atau kalau KPI-nya belum bisa dinilai
+   * (target belum diisi / periode belum berjalan).
+   */
+  const barisOmzet = kpi.baris.find((b) => b.id === 'omzet')
+  const kurangOmzet =
+    barisOmzet && barisOmzet.status !== 'belum-aktif'
+      ? Math.max(0, Math.round(barisOmzet.pace - barisOmzet.nilai))
+      : 0
+
+  /*
+    Antrean kerja, sekarang BER-TUGAS.
+
+    Dulu dua belas baris ini menumpuk jadi satu daftar di tab "Hari Ini",
+    urutannya urutan penulisan kode, dan manajer harus menyortir sendiri mana
+    yang urusan stok dan mana yang urusan lead. Tiap baris kini membawa `tugas`
+    sehingga ia muncul di tab pemiliknya saja, dan `bobot` menentukan urutan —
+    makin kecil makin genting, sehingga studio yang berhenti jualan selalu
+    berada di atas ide promosi yang menunggu ACC.
+  */
   const tindakan = [
     {
+      // Paling genting yang bisa ada: studio tidak bisa menerima pelanggan.
+      tugas: 'operasional' as TabMgr,
+      bobot: 0,
+      jumlah: masalah.stopTerbuka,
+      label: 'Kendala teknis menghentikan studio',
+      aksi: 'Buka log kendala',
+      onClick: () => setTab('operasional'),
+      nada: 'pink' as const,
+    },
+    {
       // Paling mendesak: hari yang sudah di depan mata tapi belum ada penjaga.
+      tugas: 'operasional' as TabMgr,
+      bobot: 1,
       jumlah: jadwal.bolongMendatang.length,
       label: 'Hari ke depan tanpa operator terjadwal',
       aksi: 'Buka jadwal shift',
@@ -607,17 +668,21 @@ export function Manajemen({
       nada: 'pink' as const,
     },
     {
-      jumlah: pipeline.perluFollowup.length,
-      label: 'Leads menunggu di-follow-up',
-      aksi: 'Buka leads & sales',
-      onClick: onLihatLeads,
-      nada: 'primary' as const,
+      tugas: 'operasional' as TabMgr,
+      bobot: 2,
+      jumlah: masalah.terbuka.length - masalah.stopTerbuka,
+      label: 'Kendala teknis belum dibereskan',
+      aksi: 'Buka log kendala',
+      onClick: () => setTab('operasional'),
+      nada: 'yellow' as const,
     },
     {
-      jumlah: eksekusi.menunggak.length,
-      label: 'Campaign lewat deadline & belum selesai',
-      aksi: 'Buka papan promosi',
-      onClick: onLihatPromosi,
+      tugas: 'operasional' as TabMgr,
+      bobot: 3,
+      jumlah: ops.stokKritis.length,
+      label: 'Item stok di bawah ambang aman',
+      aksi: 'Buka inventaris',
+      onClick: onLihatInventaris,
       nada: 'yellow' as const,
     },
     {
@@ -627,6 +692,8 @@ export function Manajemen({
         terpisah, supaya laporan harian ikut hilang dari layar begitu ditulis,
         persis seperti antrean lainnya.
       */
+      tugas: 'operasional' as TabMgr,
+      bobot: 4,
       jumlah: laporan.bolong.length,
       label:
         laporan.bolong[0] === hariIni
@@ -634,12 +701,14 @@ export function Manajemen({
           : 'Hari kerja tanpa laporan closing',
       aksi: 'Tulis laporan',
       onClick: () => {
-        setTab('hari')
+        setTab('operasional')
         setTglLaporanPilih(laporan.bolong[0] ?? hariIni)
       },
       nada: 'yellow' as const,
     },
     {
+      tugas: 'operasional' as TabMgr,
+      bobot: 5,
       jumlah: ops.absenMenunggu,
       label: 'Absensi manual menunggu persetujuan',
       aksi: 'Buka presensi',
@@ -647,20 +716,8 @@ export function Manajemen({
       nada: 'pink' as const,
     },
     {
-      jumlah: ops.stokKritis.length,
-      label: 'Item stok di bawah ambang aman',
-      aksi: 'Buka inventaris',
-      onClick: onLihatInventaris,
-      nada: 'yellow' as const,
-    },
-    {
-      jumlah: ops.promoMenunggu,
-      label: 'Ide promosi menunggu ACC',
-      aksi: 'Buka papan promosi',
-      onClick: onLihatPromosi,
-      nada: 'primary' as const,
-    },
-    {
+      tugas: 'operasional' as TabMgr,
+      bobot: 6,
       jumlah: ops.hariTanpaLaporan,
       label: 'Hari berjalan tanpa laporan pemasukan',
       aksi: 'Buka pemasukan',
@@ -668,30 +725,8 @@ export function Manajemen({
       nada: 'primary' as const,
     },
     {
-      // KPI baru: lead yang jendela 2 harinya lewat tanpa satu pun kontak.
-      jumlah: pipeline.belumDihubungi.length,
-      label: 'Lead baru belum pernah dihubungi',
-      aksi: 'Buka leads & sales',
-      onClick: onLihatLeads,
-      nada: 'pink' as const,
-    },
-    {
-      // Peringatan paling awal yang dipunyai dashboard ini: tahap yang lewat
-      // tenggat hari ini sudah menyalakan lampu untuk hari tayang nanti.
-      jumlah: denyut.macet.length,
-      label: 'Tahap konten mingguan lewat tenggat',
-      aksi: 'Buka papan promosi',
-      onClick: onLihatPromosi,
-      nada: 'pink' as const,
-    },
-    {
-      jumlah: siapCampaign.belumSiap.length,
-      label: 'Campaign tanpa PIC atau deadline',
-      aksi: 'Buka papan promosi',
-      onClick: onLihatPromosi,
-      nada: 'yellow' as const,
-    },
-    {
+      tugas: 'operasional' as TabMgr,
+      bobot: 7,
       jumlah: siapJadwal.berikutnya
         ? siapJadwal.berikutnya.hariDinilai - siapJadwal.berikutnya.hariTerisi
         : 0,
@@ -700,7 +735,170 @@ export function Manajemen({
       onClick: onLihatJadwal,
       nada: 'primary' as const,
     },
-  ].filter((t) => t.jumlah > 0)
+
+    {
+      // KPI: lead yang jendela 2 harinya lewat tanpa satu pun kontak.
+      tugas: 'sales' as TabMgr,
+      bobot: 0,
+      jumlah: pipeline.belumDihubungi.length,
+      label: 'Lead baru belum pernah dihubungi',
+      aksi: 'Buka leads & sales',
+      onClick: onLihatLeads,
+      nada: 'pink' as const,
+    },
+    {
+      tugas: 'sales' as TabMgr,
+      bobot: 1,
+      jumlah: pipeline.perluFollowup.length,
+      label: 'Leads menunggu di-follow-up',
+      aksi: 'Buka leads & sales',
+      onClick: onLihatLeads,
+      nada: 'primary' as const,
+    },
+
+    {
+      // Peringatan paling awal yang dipunyai dashboard ini: tahap yang lewat
+      // tenggat hari ini sudah menyalakan lampu untuk hari tayang nanti.
+      tugas: 'sosmed' as TabMgr,
+      bobot: 0,
+      jumlah: denyut.macet.length,
+      label: 'Tahap konten mingguan lewat tenggat',
+      aksi: 'Buka papan promosi',
+      onClick: onLihatPromosi,
+      nada: 'pink' as const,
+    },
+    {
+      tugas: 'sosmed' as TabMgr,
+      bobot: 1,
+      jumlah: eksekusi.menunggak.length,
+      label: 'Campaign lewat deadline & belum selesai',
+      aksi: 'Buka papan promosi',
+      onClick: onLihatPromosi,
+      nada: 'yellow' as const,
+    },
+    {
+      tugas: 'sosmed' as TabMgr,
+      bobot: 2,
+      jumlah: siapCampaign.belumSiap.length,
+      label: 'Campaign tanpa PIC atau deadline',
+      aksi: 'Buka papan promosi',
+      onClick: onLihatPromosi,
+      nada: 'yellow' as const,
+    },
+    {
+      tugas: 'sosmed' as TabMgr,
+      bobot: 3,
+      jumlah: ops.promoMenunggu,
+      label: 'Ide promosi menunggu ACC',
+      aksi: 'Buka papan promosi',
+      onClick: onLihatPromosi,
+      nada: 'primary' as const,
+    },
+    {
+      /*
+        Satu-satunya antrean tugas Keuangan, dan sengaja hanya satu: omzet
+        tidak dikerjakan langsung — ia hasil dari tiga tugas lainnya. Yang bisa
+        ditindak adalah SELISIHNYA, jadi barisnya muncul hanya kalau capaian
+        sudah tertinggal dari laju target, dan angkanya adalah jumlah rupiah
+        yang harus dikejar sisa bulan ini.
+      */
+      tugas: 'keuangan' as TabMgr,
+      bobot: 0,
+      jumlah: kurangOmzet,
+      label: `Omzet tertinggal dari laju target (kurang ${rupiahRingkas(kurangOmzet)})`,
+      aksi: 'Lihat tren & komposisi',
+      onClick: () => setTab('keuangan'),
+      nada: 'pink' as const,
+    },
+  ]
+    .filter((t) => t.jumlah > 0)
+    .sort((a, b) => a.bobot - b.bobot)
+
+  const mou = useMemo(
+    () => ringkasKemitraan(data, monthKey, hariIni),
+    [data, monthKey, hariIni],
+  )
+  /** Target yang berlaku — dipakai panel MoU & Event untuk patokan event. */
+  const target = useMemo(
+    () => targetBerlaku(data, monthKey, hariIni).target,
+    [data, monthKey, hariIni],
+  )
+  const jumlahEventBulanIni =
+    kini.eventPerKategori.photobooth.jumlah + kini.eventPerKategori.game.jumlah
+
+  // ---- Kendala teknis (migration 0055) ----
+  /*
+    Menandai selesai adalah keputusan, bukan laporan — RLS mengunci UPDATE ke
+    `is_admin()` (migration 0055). Layar ini sendiri sudah digerbangi pengelola
+    di App.tsx, jadi siapa pun yang sampai ke sini berhak; ditulis eksplisit
+    supaya panelnya tetap benar kalau suatu saat dashboard dibuka lebih lebar.
+  */
+  const bisaKelolaMasalah = true
+
+  function laporMasalah(baru: Omit<MasalahTeknis, 'id' | 'dilaporkanPada'>) {
+    setData({
+      ...data,
+      masalahTeknis: [
+        {
+          ...baru,
+          id: uid(),
+          dilaporkanPada: new Date().toISOString(),
+          dilaporkanOleh: baru.dilaporkanOleh ?? meId,
+        },
+        ...(data.masalahTeknis ?? []),
+      ],
+    })
+  }
+
+  function ubahMasalah(id: string, patch: Partial<MasalahTeknis>) {
+    setData({
+      ...data,
+      masalahTeknis: (data.masalahTeknis ?? []).map((m) =>
+        m.id === id ? { ...m, ...patch } : m,
+      ),
+    })
+  }
+
+  function tutupMasalah(id: string, solusi: string) {
+    ubahMasalah(id, {
+      selesaiPada: new Date().toISOString(),
+      selesaiOleh: meId,
+      solusi: solusi.trim(),
+    })
+  }
+
+  /**
+   * Buka lagi kendala yang terlanjur ditutup. Jejak penutupnya DIHAPUS, bukan
+   * disisakan — pola yang sama dengan `toggleJobdesk`: tidak boleh ada baris
+   * yang tampak terbuka tapi masih membawa nama orang yang menutupnya.
+   */
+  function bukaLagiMasalah(id: string) {
+    ubahMasalah(id, {
+      selesaiPada: undefined,
+      selesaiOleh: undefined,
+      solusi: '',
+    })
+  }
+
+  function hapusMasalah(id: string) {
+    setData({
+      ...data,
+      masalahTeknis: (data.masalahTeknis ?? []).filter((m) => m.id !== id),
+    })
+  }
+
+  /** Blok rapor untuk tugas yang sedang dibuka. */
+  const kelompokAktif = kpi.kelompok.find((g) => g.id === tab)
+  /** Bulan pembanding target — dipakai menerangkan dari mana angka 2× berasal. */
+  const basis = useMemo(
+    () => basisTarget(data, monthKey, hariIni),
+    [data, monthKey, hariIni],
+  )
+
+  /** Antrean tugas yang sedang dibuka, dan hitungan per tab untuk badge. */
+  const antreanTab = tindakan.filter((t) => t.tugas === tab)
+  const antreanPerTugas = (id: TabMgr) =>
+    tindakan.filter((t) => t.tugas === id).length
 
   return (
     <>
@@ -715,6 +913,26 @@ export function Manajemen({
             {kini.hariBerlaporan} hari berlaporan dari {kini.hariBerjalan} hari
             berjalan · rata-rata {formatRupiah(kini.rataPerHari)}/hari
           </p>
+          {/*
+            Skor gabungan empat tugas, ditaruh di hero dan bukan di tab
+            tersendiri: begitu ia punya halaman sendiri, halaman itu jadi
+            satu-satunya yang isinya menilai tanpa bisa dikerjakan. Di sini ia
+            terlihat dari tab mana pun, tanpa pernah merebut layar.
+          */}
+          <div
+            className={
+              'mgr-hero-skor' + (kpi.targetDisetujui ? '' : ' is-simulasi')
+            }
+          >
+            <span className="mgr-hero-skor-nilai">{persen(kpi.skor)}</span>
+            <span className="mgr-hero-skor-teks">
+              <b>Rapor 4 tugas</b>
+              <em>
+                bulan {persen(kpi.progres)} berjalan ·{' '}
+                {kpi.targetDisetujui ? 'target disetujui' : 'simulasi'}
+              </em>
+            </span>
+          </div>
         </div>
         <label className="mgr-periode">
           <span>Periode</span>
@@ -730,62 +948,47 @@ export function Manajemen({
           </select>
         </label>
       </section>
-      {/* ---------- Tab ---------- */}
-      {/*
-        Kubik usaha kecil — satu owner, satu manajer — jadi dashboard-nya tidak
-        boleh terasa seperti ERP. Tidak ada panel yang dihapus, tapi sebelas
-        panel dipisah per PEKERJAAN, bukan per sumber data: apa yang harus
-        kubereskan hari ini, apakah operasional jalan, apakah marketing jalan,
-        dan apakah uangnya bergerak. Manajer mendarat di "Hari Ini" karena itu
-        satu-satunya tab yang wajib ia buka tiap pagi; owner mendarat di "KPI
-        Manajer" karena itu alasan ia membuka halaman ini.
-      */}
-      <nav className="mgr-tabs" role="tablist" aria-label="Bagian dashboard">
-        {TAB_MGR.filter((x) => x.id !== 'kpi' || isOwner).map((x) => (
-          <button
-            key={x.id}
-            type="button"
-            role="tab"
-            aria-selected={tab === x.id}
-            className={'mgr-tab' + (tab === x.id ? ' is-aktif' : '')}
-            onClick={() => setTab(x.id)}
-          >
-            <span className="mgr-tab-lbl">
-              {x.label}
-              {x.id === 'hari' && tindakan.length > 0 && (
-                <em className="mgr-tab-badge">{tindakan.length}</em>
-              )}
-            </span>
-            <em className="mgr-tab-sub">{x.sub}</em>
-          </button>
-        ))}
+      {/* ---------- Tab = 4 tugas manajer ---------- */}
+      <nav className="mgr-tabs" role="tablist" aria-label="Tugas manajer">
+        {TAB_MGR.map((x) => {
+          const antre = antreanPerTugas(x.id)
+          return (
+            <button
+              key={x.id}
+              type="button"
+              role="tab"
+              aria-selected={tab === x.id}
+              className={'mgr-tab' + (tab === x.id ? ' is-aktif' : '')}
+              onClick={() => setTab(x.id)}
+            >
+              <span className="mgr-tab-lbl">
+                {x.label}
+                {/* Badge ada di SEMUA tab sekarang — itulah yang menggantikan
+                    tab "Hari Ini": tunggakan tiap tugas terbaca tanpa dibuka. */}
+                {antre > 0 && <em className="mgr-tab-badge">{antre}</em>}
+              </span>
+              <em className="mgr-tab-sub">{x.sub}</em>
+            </button>
+          )
+        })}
       </nav>
 
+      {/* ---------- Kepala tiap tab: rapor tugas ini, lalu antreannya ---------- */}
       {/*
-        Owner-only. Skor ini adalah penilaian ATAS manajer, dipakai owner saat
-        evaluasi — memperlihatkannya kepada yang dinilai mengubah perilakunya
-        (kejar angka, bukan kejar hasil) dan membocorkan target yang belum
-        disetujui. Manajer tetap memegang seluruh bahan kerjanya di tab lain:
-        antrean tindakan, jadwal, sosmed, pipeline — bahan kerjanya, bukan
-        rapornya.
+        Bentuk yang sama di keempat tab, dan urutannya disengaja: rapor dulu
+        (aku sedang menang atau kalah di tugas ini), baru antrean (jadi apa
+        yang harus kukerjakan). Dibalik, antrean akan selalu dikerjakan tanpa
+        pernah ada yang bertanya apakah mengerjakannya cukup.
       */}
-      {tab === 'kpi' && isOwner && kpi && (
+      {kelompokAktif && (
         <Panel
-          judul="KPI Manajer"
-          sub={
-            <>
-              {kpi.aktif} KPI aktif · {kpi.tercapai} on track · {kpi.perhatian}{' '}
-              perlu perhatian · {kpi.tertinggal} tertinggal
-              {kpi.bobotAktif < 1 && (
-                <>
-                  {' '}
-                  · bobot yang menilai {persen(kpi.bobotAktif)} (kelompok tanpa
-                  data dikeluarkan dari pembagi)
-                </>
-              )}
-            </>
+          judul={`Tugas: ${kelompokAktif.label}`}
+          sub={KELOMPOK_TUGAS[tab]}
+          badge={
+            kelompokAktif.skor != null
+              ? `Capaian ${persen(kelompokAktif.skor)} · bobot ${persen(kelompokAktif.bobot)}`
+              : 'Belum bisa dinilai'
           }
-          badge={`Bulan ${persen(kpi.progres)} · Skor ${persen(kpi.skor)} dari pace`}
           aksi={
             isOwner ? (
               <button
@@ -803,7 +1006,11 @@ export function Manajemen({
               <div>
                 <b>Simulasi — belum disetujui.</b>{' '}
                 {kpi.targetSaran
-                  ? 'Target periode ini masih saran otomatis (2× rata-rata 3 bulan terakhir).'
+                  ? `Target periode ini masih saran otomatis (${PENGALI_TARGET}× ${
+                      basis
+                        ? `${labelBulan(basis.monthKey)}${basis.berurutan ? '' : ' — bulan berisi terakhir'}`
+                        : 'bulan lalu'
+                    }).`
                   : 'Target sudah diisi tapi belum disetujui owner.'}{' '}
                 Skor di bawah belum boleh dipakai menilai orang.
               </div>
@@ -831,346 +1038,43 @@ export function Manajemen({
               'mgr-kpi-kelompok-list' + (kpi.targetDisetujui ? '' : ' is-simulasi')
             }
           >
-            {kpi.kelompok.map((g) => (
-              <KelompokBlok
-                key={g.id}
-                kelompok={g}
-                laju={kpi.progres}
-                ekstra={
-                  g.id === 'kepemimpinan' ? (
-                    <PenilaianOwnerBox
-                      key={monthKey}
-                      nilai={nilaiOwner?.nilai ?? 0}
-                      catatan={nilaiOwner?.catatan}
-                      onSimpan={simpanPenilaian}
-                    />
-                  ) : undefined
-                }
-              />
-            ))}
+            <KelompokBlok kelompok={kelompokAktif} laju={kpi.progres} />
           </div>
-          <p className="mgr-hint">
-            Tiga angka sengaja dipisah:{' '}
-            <b>progres bulan {persen(kpi.progres)}</b> → <b>pace</b> = target
-            bulanan × progres bulan → <b>capaian</b> = aktual ÷ pace (dibatasi
-            150%). Skor kelompok = rata-rata capaian KPI aktif di dalamnya; skor
-            akhir = Σ(skor kelompok × bobot) ÷ bobot kelompok yang aktif. Kelompok
-            yang seluruh KPI-nya belum ada datanya dikeluarkan dari pembagi, bukan
-            dihitung nol.
-          </p>
+
+          {/* ---------- Antrean tugas ini ---------- */}
+          <div className="mgr-antrean">
+            <b className="mgr-antrean-judul">
+              Yang harus dibereskan di tugas ini
+            </b>
+            {antreanTab.length === 0 ? (
+              <p className="mgr-empty">
+                ✅ Tidak ada antrean. Semua sudah tertangani.
+              </p>
+            ) : (
+              <ul className="mgr-todo">
+                {antreanTab.map((t) => (
+                  <li key={t.label}>
+                    <span className={`mgr-todo-num mgr-todo-num--${t.nada}`}>
+                      {t.jumlah}
+                    </span>
+                    <span className="mgr-todo-teks">
+                      <span className="lbl">{t.label}</span>
+                      <button
+                        type="button"
+                        className="mgr-todo-aksi"
+                        onClick={t.onClick}
+                      >
+                        {t.aksi} <Icons.chevron />
+                      </button>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </Panel>
       )}
 
-      {tab === 'hari' && (
-        <div className="mgr-cols">
-          <div className="mgr-col">
-            <Panel
-              judul="Butuh Tindakan"
-              sub="Antrean yang dihitung langsung dari data. Angkanya turun sendiri begitu penyebabnya dibereskan."
-            >
-              {tindakan.length === 0 ? (
-                <p className="mgr-empty">
-                  ✅ Tidak ada antrean. Semua sudah tertangani.
-                </p>
-              ) : (
-                <ul className="mgr-todo">
-                  {tindakan.map((t) => (
-                    <li key={t.label}>
-                      <span className={`mgr-todo-num mgr-todo-num--${t.nada}`}>
-                        {t.jumlah}
-                      </span>
-                      <span className="mgr-todo-teks">
-                        <span className="lbl">{t.label}</span>
-                        <button type="button" className="mgr-todo-aksi" onClick={t.onClick}>
-                          {t.aksi} <Icons.chevron />
-                        </button>
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </Panel>
-
-            <Panel
-              judul="Jobdesk Manajer"
-              sub={
-                isOwner
-                  ? `Tugas yang Anda tetapkan untuk ${labelBulan(monthKey)}. Manajer mencentangnya sendiri di layar ini.`
-                  : `Tugas dari owner untuk ${labelBulan(monthKey)}. Centang setelah beres.`
-              }
-              badge={
-                jobdesk.length > 0
-                  ? `${jobdeskSelesai}/${jobdesk.length}`
-                  : undefined
-              }
-              aksi={
-                isOwner ? (
-                  <button
-                    type="button"
-                    className="mgr-aksi-btn"
-                    onClick={() => setEditJobdesk((v) => !v)}
-                  >
-                    {editJobdesk ? 'Tutup' : jobdesk.length ? 'Atur jobdesk' : 'Susun jobdesk'}
-                  </button>
-                ) : undefined
-              }
-            >
-              {editJobdesk ? (
-                <JobdeskEditor
-                  key={monthKey}
-                  awal={jobdesk}
-                  bulanLalu={jobdeskLalu}
-                  labelBulanLalu={labelBulan(bulanSebelumnya(monthKey))}
-                  onSimpan={(items) => {
-                    simpanJobdesk(items)
-                    setEditJobdesk(false)
-                  }}
-                  onBatal={() => setEditJobdesk(false)}
-                />
-              ) : jobdesk.length === 0 ? (
-                <p className="mgr-empty">
-                  {isOwner
-                    ? 'Belum ada jobdesk untuk periode ini. Klik "Susun jobdesk" untuk menuliskan daftarnya — manajer langsung melihatnya di sini.'
-                    : 'Owner belum menetapkan jobdesk untuk periode ini.'}
-                </p>
-              ) : (
-                <>
-                  <div className="mgr-jobdesk-head">
-                    <span className="mgr-jobdesk-meter">
-                      <span
-                        className="mgr-jobdesk-fill"
-                        style={{
-                          width: `${(jobdeskSelesai / jobdesk.length) * 100}%`,
-                        }}
-                      />
-                    </span>
-                    <span className="mgr-jobdesk-hitung">
-                      {jobdeskSelesai} dari {jobdesk.length} selesai
-                    </span>
-                  </div>
-                  <ul className="mgr-jobdesk">
-                    {jobdesk.map((j) => {
-                      const oleh = j.selesaiOleh
-                        ? data.employees.find((e) => e.id === j.selesaiOleh)?.nama
-                        : undefined
-                      return (
-                        <li
-                          key={j.id}
-                          className={'mgr-jobdesk-row' + (j.selesaiPada ? ' is-done' : '')}
-                        >
-                          <label>
-                            <input
-                              type="checkbox"
-                              checked={Boolean(j.selesaiPada)}
-                              onChange={() => toggleJobdesk(j.id)}
-                            />
-                            <span className="mgr-jobdesk-label">{j.label}</span>
-                          </label>
-                          {j.selesaiPada && (
-                            <span className="mgr-jobdesk-jejak">
-                              {labelTanggalPendek(todayKey(new Date(j.selesaiPada)))}
-                              {oleh && ` · ${oleh}`}
-                            </span>
-                          )}
-                        </li>
-                      )
-                    })}
-                  </ul>
-                </>
-              )}
-            </Panel>
-          </div>
-
-          <div className="mgr-col mgr-col--side">
-            <Panel
-              judul="Laporan Closing"
-              sub={
-                laporan.belumDicatat
-                  ? 'Ditulis manajer setelah tutup — kejadian yang tidak tercatat di mana pun: trouble, komplain, apa pun.'
-                  : `${laporan.terisi} dari ${laporan.hariKerja} hari kerja terisi · ${laporan.kendala} kendala · ${laporan.eskalasi} perlu owner`
-              }
-              badge={laporan.hariKerja > 0 ? persen(laporan.rasio) : undefined}
-            >
-              {/*
-                Strip sebulan lebih dulu, baru formulirnya. Urutan ini disengaja:
-                yang paling sering dilakukan owner bukan menulis, melainkan
-                memindai — mencari kotak yang tidak hijau.
-              */}
-              <div className="mgr-lap-strip">
-                {laporan.perHari.map((h) => (
-                  <button
-                    key={h.tanggal}
-                    type="button"
-                    className={
-                      `mgr-lap-sel is-${h.status ?? 'kosong'}` +
-                      (h.berjalan ? '' : ' is-nanti') +
-                      (h.hariKerja ? '' : ' is-tutup') +
-                      (h.tanggal === tglLaporan ? ' is-pilih' : '')
-                    }
-                    onClick={() => setTglLaporanPilih(h.tanggal)}
-                    title={
-                      `${labelHariTanggal(h.tanggal)} — ` +
-                      (h.status
-                        ? `${STATUS_LAPORAN_PENDEK[h.status]}${h.catatan ? `: ${h.catatan}` : ''}`
-                        : h.hariKerja
-                          ? 'belum ada laporan'
-                          : 'tidak ada kegiatan')
-                    }
-                  >
-                    {Number(h.tanggal.slice(8))}
-                  </button>
-                ))}
-              </div>
-
-              <LaporanBox
-                key={tglLaporan}
-                tanggal={tglLaporan}
-                awal={laporanTerpilih}
-                penulis={penulisLaporan}
-                // Hari yang belum tiba tidak bisa dilaporkan; tanggalnya tetap
-                // bisa diklik supaya kalender terasa utuh.
-                bisaTulis={tglLaporan <= hariIni}
-                onSimpan={simpanLaporan}
-                onHapus={hapusLaporan}
-              />
-
-              {laporan.terakhir.filter((r) => r.tanggal !== tglLaporan).length > 0 && (
-                <div className="mgr-lap-riwayat">
-                  <b>Laporan terakhir</b>
-                  <ul>
-                    {laporan.terakhir
-                      .filter((r) => r.tanggal !== tglLaporan)
-                      .slice(0, 4)
-                      .map((r) => (
-                        <li key={r.tanggal}>
-                          <button
-                            type="button"
-                            onClick={() => setTglLaporanPilih(r.tanggal)}
-                          >
-                            <span className={`mgr-lap-tag is-${r.status}`}>
-                              {STATUS_LAPORAN_PENDEK[r.status]}
-                            </span>
-                            <span className="tgl">{labelTanggalPendek(r.tanggal)}</span>
-                            <span className="isi">
-                              {r.catatan || <em>tanpa catatan</em>}
-                            </span>
-                          </button>
-                        </li>
-                      ))}
-                  </ul>
-                </div>
-              )}
-            </Panel>
-
-            <Panel
-              judul="Sosmed Hari Ini"
-              sub={
-                sosmed.belumDicatat
-                  ? 'Belum ada catatan bulan ini — centang begitu satu aktivitas selesai.'
-                  : `Rentetan ${sosmed.runSekarang} hari · konsistensi ${persen(sosmed.konsistensi)} bulan ini`
-              }
-              aksi={
-                <button
-                  type="button"
-                  className="mgr-aksi-btn"
-                  onClick={() => setTab('marketing')}
-                >
-                  Riwayat &amp; pengerja
-                </button>
-              }
-            >
-              {/*
-                Centang cepat, tanpa memilih tanggal dan tanpa memilih orang —
-                inilah satu-satunya bentuk pencatatan yang benar-benar dilakukan
-                tiap hari. Formulir lengkapnya (tanggal lain, nama pengerja,
-                tautan) tetap ada di tab Marketing.
-              */}
-              {!periodeBerjalan ? (
-                <p className="mgr-empty">
-                  Periode yang sedang dilihat bukan bulan berjalan. Centang harian
-                  hanya berlaku untuk hari ini.
-                </p>
-              ) : (
-                <>
-                  <div className="mgr-sos-aksi">
-                    {AKSI_SOSMED.map((a) => (
-                      <button
-                        key={a}
-                        type="button"
-                        className={`mgr-sos-chip${logToday?.[a] ? ' is-on' : ''}`}
-                        onClick={() =>
-                          ubahSosmed(hariIni, {
-                            [a]: !logToday?.[a],
-                          } as Partial<SosmedHarian>)
-                        }
-                      >
-                        {logToday?.[a] ? '✓' : '○'} {AKSI_SOSMED_LABEL[a as AksiSosmed]}
-                      </button>
-                    ))}
-                  </div>
-                  {sosmed.bolong.length > 0 && (
-                    <p className="mgr-hint">
-                      {sosmed.bolong.length} hari bulan ini masih kosong — bisa
-                      disusulkan dari tab Marketing.
-                    </p>
-                  )}
-                </>
-              )}
-            </Panel>
-
-            <Panel
-              judul="Konten Minggu Ini"
-              sub={teksRitme(denyut.ritme)}
-              badge={
-                denyut.mingguIni
-                  ? `${denyut.mingguIni.beres}/${denyut.mingguIni.slot.length} slot`
-                  : undefined
-              }
-              aksi={
-                <button
-                  type="button"
-                  className="mgr-aksi-btn"
-                  onClick={() => setTab('marketing')}
-                >
-                  Buka papan
-                </button>
-              }
-            >
-              {!denyut.mingguIni ? (
-                <p className="mgr-empty">
-                  Minggu berjalan tidak ada di periode yang sedang dilihat.
-                </p>
-              ) : (
-                <ul className="mgr-slot-ringkas">
-                  {denyut.mingguIni.slot.map((s) => (
-                    <li key={s.nomor} className={`is-${s.status}`}>
-                      <span className="ikon">
-                        {s.status === 'beres' ? '✓' : s.status === 'macet' ? '!' : '○'}
-                      </span>
-                      <span className="lbl">{s.judul}</span>
-                      <em>
-                        {s.virtual
-                          ? 'kartu belum dibuat'
-                          : (s.pic ? (namaById.get(s.pic) ?? 'PIC tidak dikenal') : 'tanpa PIC')}
-                      </em>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {denyut.macet.length > 0 && (
-                <p className="mgr-hint">
-                  Menunggak:{' '}
-                  {denyut.macet
-                    .slice(0, 3)
-                    .map((m) => `${m.judul} — ${m.tahap} (${m.telatHari} hari)`)
-                    .join(' · ')}
-                  {denyut.macet.length > 3 && ` · +${denyut.macet.length - 3} lainnya`}
-                </p>
-              )}
-            </Panel>
-          </div>
-        </div>
-      )}
 
       {tab === 'operasional' && (
         <div className="mgr-cols">
@@ -1334,6 +1238,95 @@ export function Manajemen({
                 </>
               )}
             </Panel>
+
+            <Panel
+              judul="Jobdesk Manajer"
+              sub={
+                isOwner
+                  ? `Tugas yang Anda tetapkan untuk ${labelBulan(monthKey)}. Manajer mencentangnya sendiri di layar ini.`
+                  : `Tugas dari owner untuk ${labelBulan(monthKey)}. Centang setelah beres.`
+              }
+              badge={
+                jobdesk.length > 0
+                  ? `${jobdeskSelesai}/${jobdesk.length}`
+                  : undefined
+              }
+              aksi={
+                isOwner ? (
+                  <button
+                    type="button"
+                    className="mgr-aksi-btn"
+                    onClick={() => setEditJobdesk((v) => !v)}
+                  >
+                    {editJobdesk ? 'Tutup' : jobdesk.length ? 'Atur jobdesk' : 'Susun jobdesk'}
+                  </button>
+                ) : undefined
+              }
+            >
+              {editJobdesk ? (
+                <JobdeskEditor
+                  key={monthKey}
+                  awal={jobdesk}
+                  bulanLalu={jobdeskLalu}
+                  labelBulanLalu={labelBulan(bulanSebelumnya(monthKey))}
+                  onSimpan={(items) => {
+                    simpanJobdesk(items)
+                    setEditJobdesk(false)
+                  }}
+                  onBatal={() => setEditJobdesk(false)}
+                />
+              ) : jobdesk.length === 0 ? (
+                <p className="mgr-empty">
+                  {isOwner
+                    ? 'Belum ada jobdesk untuk periode ini. Klik "Susun jobdesk" untuk menuliskan daftarnya — manajer langsung melihatnya di sini.'
+                    : 'Owner belum menetapkan jobdesk untuk periode ini.'}
+                </p>
+              ) : (
+                <>
+                  <div className="mgr-jobdesk-head">
+                    <span className="mgr-jobdesk-meter">
+                      <span
+                        className="mgr-jobdesk-fill"
+                        style={{
+                          width: `${(jobdeskSelesai / jobdesk.length) * 100}%`,
+                        }}
+                      />
+                    </span>
+                    <span className="mgr-jobdesk-hitung">
+                      {jobdeskSelesai} dari {jobdesk.length} selesai
+                    </span>
+                  </div>
+                  <ul className="mgr-jobdesk">
+                    {jobdesk.map((j) => {
+                      const oleh = j.selesaiOleh
+                        ? data.employees.find((e) => e.id === j.selesaiOleh)?.nama
+                        : undefined
+                      return (
+                        <li
+                          key={j.id}
+                          className={'mgr-jobdesk-row' + (j.selesaiPada ? ' is-done' : '')}
+                        >
+                          <label>
+                            <input
+                              type="checkbox"
+                              checked={Boolean(j.selesaiPada)}
+                              onChange={() => toggleJobdesk(j.id)}
+                            />
+                            <span className="mgr-jobdesk-label">{j.label}</span>
+                          </label>
+                          {j.selesaiPada && (
+                            <span className="mgr-jobdesk-jejak">
+                              {labelTanggalPendek(todayKey(new Date(j.selesaiPada)))}
+                              {oleh && ` · ${oleh}`}
+                            </span>
+                          )}
+                        </li>
+                      )
+                    })}
+                  </ul>
+                </>
+              )}
+            </Panel>
           </div>
 
           <div className="mgr-col mgr-col--side">
@@ -1386,11 +1379,101 @@ export function Manajemen({
                 tetap memakai ambang tetap.
               </p>
             </Panel>
+
+            <MasalahTeknisPanel
+              ringkas={masalah}
+              namaById={namaById}
+              bisaTutup={bisaKelolaMasalah}
+              onLapor={laporMasalah}
+              onTutup={tutupMasalah}
+              onBukaLagi={bukaLagiMasalah}
+              onHapus={hapusMasalah}
+            />
+
+            <Panel
+              judul="Laporan Closing"
+              sub={
+                laporan.belumDicatat
+                  ? 'Ditulis manajer setelah tutup — kejadian yang tidak tercatat di mana pun: trouble, komplain, apa pun.'
+                  : `${laporan.terisi} dari ${laporan.hariKerja} hari kerja terisi · ${laporan.kendala} kendala · ${laporan.eskalasi} perlu owner`
+              }
+              badge={laporan.hariKerja > 0 ? persen(laporan.rasio) : undefined}
+            >
+              {/*
+                Strip sebulan lebih dulu, baru formulirnya. Urutan ini disengaja:
+                yang paling sering dilakukan owner bukan menulis, melainkan
+                memindai — mencari kotak yang tidak hijau.
+              */}
+              <div className="mgr-lap-strip">
+                {laporan.perHari.map((h) => (
+                  <button
+                    key={h.tanggal}
+                    type="button"
+                    className={
+                      `mgr-lap-sel is-${h.status ?? 'kosong'}` +
+                      (h.berjalan ? '' : ' is-nanti') +
+                      (h.hariKerja ? '' : ' is-tutup') +
+                      (h.tanggal === tglLaporan ? ' is-pilih' : '')
+                    }
+                    onClick={() => setTglLaporanPilih(h.tanggal)}
+                    title={
+                      `${labelHariTanggal(h.tanggal)} — ` +
+                      (h.status
+                        ? `${STATUS_LAPORAN_PENDEK[h.status]}${h.catatan ? `: ${h.catatan}` : ''}`
+                        : h.hariKerja
+                          ? 'belum ada laporan'
+                          : 'tidak ada kegiatan')
+                    }
+                  >
+                    {Number(h.tanggal.slice(8))}
+                  </button>
+                ))}
+              </div>
+
+              <LaporanBox
+                key={tglLaporan}
+                tanggal={tglLaporan}
+                awal={laporanTerpilih}
+                penulis={penulisLaporan}
+                // Hari yang belum tiba tidak bisa dilaporkan; tanggalnya tetap
+                // bisa diklik supaya kalender terasa utuh.
+                bisaTulis={tglLaporan <= hariIni}
+                onSimpan={simpanLaporan}
+                onHapus={hapusLaporan}
+              />
+
+              {laporan.terakhir.filter((r) => r.tanggal !== tglLaporan).length > 0 && (
+                <div className="mgr-lap-riwayat">
+                  <b>Laporan terakhir</b>
+                  <ul>
+                    {laporan.terakhir
+                      .filter((r) => r.tanggal !== tglLaporan)
+                      .slice(0, 4)
+                      .map((r) => (
+                        <li key={r.tanggal}>
+                          <button
+                            type="button"
+                            onClick={() => setTglLaporanPilih(r.tanggal)}
+                          >
+                            <span className={`mgr-lap-tag is-${r.status}`}>
+                              {STATUS_LAPORAN_PENDEK[r.status]}
+                            </span>
+                            <span className="tgl">{labelTanggalPendek(r.tanggal)}</span>
+                            <span className="isi">
+                              {r.catatan || <em>tanpa catatan</em>}
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                  </ul>
+                </div>
+              )}
+            </Panel>
           </div>
         </div>
       )}
 
-      {tab === 'marketing' && (
+      {tab === 'sosmed' && (
         <div className="mgr-cols">
           <div className="mgr-col">
             <Panel
@@ -1674,7 +1757,164 @@ export function Manajemen({
                 </p>
               )}
             </Panel>
+          </div>
 
+          <div className="mgr-col mgr-col--side">
+            <Panel
+              judul="Sosmed Hari Ini"
+              sub={
+                sosmed.belumDicatat
+                  ? 'Belum ada catatan bulan ini — centang begitu satu aktivitas selesai.'
+                  : `Rentetan ${sosmed.runSekarang} hari · konsistensi ${persen(sosmed.konsistensi)} bulan ini`
+              }
+            >
+              {/*
+                Centang cepat, tanpa memilih tanggal dan tanpa memilih orang —
+                inilah satu-satunya bentuk pencatatan yang benar-benar dilakukan
+                tiap hari. Formulir lengkapnya (tanggal lain, nama pengerja,
+                tautan) ada di panel Sosial Media di bawah.
+              */}
+              {!periodeBerjalan ? (
+                <p className="mgr-empty">
+                  Periode yang sedang dilihat bukan bulan berjalan. Centang harian
+                  hanya berlaku untuk hari ini.
+                </p>
+              ) : (
+                <>
+                  <div className="mgr-sos-aksi">
+                    {AKSI_SOSMED.map((a) => (
+                      <button
+                        key={a}
+                        type="button"
+                        className={`mgr-sos-chip${logToday?.[a] ? ' is-on' : ''}`}
+                        onClick={() =>
+                          ubahSosmed(hariIni, {
+                            [a]: !logToday?.[a],
+                          } as Partial<SosmedHarian>)
+                        }
+                      >
+                        {logToday?.[a] ? '✓' : '○'} {AKSI_SOSMED_LABEL[a as AksiSosmed]}
+                      </button>
+                    ))}
+                  </div>
+                  {sosmed.bolong.length > 0 && (
+                    <p className="mgr-hint">
+                      {sosmed.bolong.length} hari bulan ini masih kosong — bisa
+                      disusulkan dari panel Sosial Media di bawah.
+                    </p>
+                  )}
+                </>
+              )}
+            </Panel>
+
+            <Panel
+              judul="Konten Minggu Ini"
+              sub={teksRitme(denyut.ritme)}
+              badge={
+                denyut.mingguIni
+                  ? `${denyut.mingguIni.beres}/${denyut.mingguIni.slot.length} slot`
+                  : undefined
+              }
+            >
+              {!denyut.mingguIni ? (
+                <p className="mgr-empty">
+                  Minggu berjalan tidak ada di periode yang sedang dilihat.
+                </p>
+              ) : (
+                <ul className="mgr-slot-ringkas">
+                  {denyut.mingguIni.slot.map((s) => (
+                    <li key={s.nomor} className={`is-${s.status}`}>
+                      <span className="ikon">
+                        {s.status === 'beres' ? '✓' : s.status === 'macet' ? '!' : '○'}
+                      </span>
+                      <span className="lbl">{s.judul}</span>
+                      <em>
+                        {s.virtual
+                          ? 'kartu belum dibuat'
+                          : (s.pic ? (namaById.get(s.pic) ?? 'PIC tidak dikenal') : 'tanpa PIC')}
+                      </em>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {denyut.macet.length > 0 && (
+                <p className="mgr-hint">
+                  Menunggak:{' '}
+                  {denyut.macet
+                    .slice(0, 3)
+                    .map((m) => `${m.judul} — ${m.tahap} (${m.telatHari} hari)`)
+                    .join(' · ')}
+                  {denyut.macet.length > 3 && ` · +${denyut.macet.length - 3} lainnya`}
+                </p>
+              )}
+            </Panel>
+
+            <Panel
+              judul="Dampak Sosmed ke Penjualan"
+              sub="Omzet harian, dibandingkan antara hari sosmed aktif dan hari pasif"
+              badge={
+                dampak.cukupSampel && dampak.selisih != null
+                  ? `${dampak.selisih >= 0 ? '+' : ''}${persen(dampak.selisih)}`
+                  : undefined
+              }
+            >
+              <DampakChart rows={dampak.perHari} />
+              <div className="mgr-mini-stats">
+                <MiniStat
+                  k={`Hari aktif (${dampak.hariAktif})`}
+                  v={formatRupiah(dampak.rataAktif)}
+                />
+                <MiniStat
+                  k={`Hari pasif (${dampak.hariPasif})`}
+                  v={formatRupiah(dampak.rataPasif)}
+                />
+                {/*
+                  Perbandingan apel-dengan-apel: Sabtu dibandingkan Sabtu, bukan
+                  Sabtu dibandingkan Selasa.
+                */}
+                <MiniStat
+                  k={`Vs hari yang sama (${dampak.banding.length} hari)`}
+                  v={
+                    dampak.liftHariSama == null
+                      ? '—'
+                      : `${dampak.liftHariSama >= 0 ? '+' : ''}${persen(dampak.liftHariSama)}`
+                  }
+                />
+              </div>
+              {dampak.cukupSampelHariSama && dampak.liftHariSama != null && (
+                <p className="mgr-hint">
+                  Dibandingkan <b>hari yang sama</b> pada 4 minggu sebelumnya
+                  (Sabtu vs Sabtu), omzet pada hari sosmed aktif{' '}
+                  {dampak.liftHariSama >= 0 ? 'lebih tinggi' : 'lebih rendah'}{' '}
+                  <b>{persen(Math.abs(dampak.liftHariSama))}</b> dari
+                  kebiasaannya. Cara ini menetralkan pola mingguan, jadi lebih
+                  layak dipercaya daripada angka aktif-vs-pasif di atas.
+                </p>
+              )}
+              <p className="mgr-hint">
+                {!dampak.cukupSampel ? (
+                  <>
+                    Belum cukup data untuk dibandingkan — butuh minimal{' '}
+                    {MIN_SAMPEL_DAMPAK} hari berlaporan di kedua sisi. Hari tanpa
+                    laporan pemasukan tidak ikut dihitung, karena omzetnya tidak
+                    diketahui (bukan nol).
+                  </>
+                ) : (
+                  <>
+                    Ini <b>korelasi, bukan sebab-akibat</b>: akhir pekan cenderung
+                    ramai sekaligus cenderung jadi hari orang rajin posting. Pakai
+                    sebagai petunjuk arah, bukan bukti.
+                  </>
+                )}
+              </p>
+            </Panel>
+          </div>
+        </div>
+      )}
+
+      {tab === 'sales' && (
+        <div className="mgr-cols">
+          <div className="mgr-col">
             <Panel
               judul="Pipeline Leads & Sales"
               sub={
@@ -1827,145 +2067,18 @@ export function Manajemen({
           </div>
 
           <div className="mgr-col mgr-col--side">
-            <Panel
-              judul="Dampak Sosmed ke Penjualan"
-              sub="Omzet harian, dibandingkan antara hari sosmed aktif dan hari pasif"
-              badge={
-                dampak.cukupSampel && dampak.selisih != null
-                  ? `${dampak.selisih >= 0 ? '+' : ''}${persen(dampak.selisih)}`
-                  : undefined
-              }
-            >
-              <DampakChart rows={dampak.perHari} />
-              <div className="mgr-mini-stats">
-                <MiniStat
-                  k={`Hari aktif (${dampak.hariAktif})`}
-                  v={formatRupiah(dampak.rataAktif)}
-                />
-                <MiniStat
-                  k={`Hari pasif (${dampak.hariPasif})`}
-                  v={formatRupiah(dampak.rataPasif)}
-                />
-                {/*
-                  Perbandingan apel-dengan-apel: Sabtu dibandingkan Sabtu, bukan
-                  Sabtu dibandingkan Selasa.
-                */}
-                <MiniStat
-                  k={`Vs hari yang sama (${dampak.banding.length} hari)`}
-                  v={
-                    dampak.liftHariSama == null
-                      ? '—'
-                      : `${dampak.liftHariSama >= 0 ? '+' : ''}${persen(dampak.liftHariSama)}`
-                  }
-                />
-              </div>
-              {dampak.cukupSampelHariSama && dampak.liftHariSama != null && (
-                <p className="mgr-hint">
-                  Dibandingkan <b>hari yang sama</b> pada 4 minggu sebelumnya
-                  (Sabtu vs Sabtu), omzet pada hari sosmed aktif{' '}
-                  {dampak.liftHariSama >= 0 ? 'lebih tinggi' : 'lebih rendah'}{' '}
-                  <b>{persen(Math.abs(dampak.liftHariSama))}</b> dari
-                  kebiasaannya. Cara ini menetralkan pola mingguan, jadi lebih
-                  layak dipercaya daripada angka aktif-vs-pasif di atas.
-                </p>
-              )}
-              <p className="mgr-hint">
-                {!dampak.cukupSampel ? (
-                  <>
-                    Belum cukup data untuk dibandingkan — butuh minimal{' '}
-                    {MIN_SAMPEL_DAMPAK} hari berlaporan di kedua sisi. Hari tanpa
-                    laporan pemasukan tidak ikut dihitung, karena omzetnya tidak
-                    diketahui (bukan nol).
-                  </>
-                ) : (
-                  <>
-                    Ini <b>korelasi, bukan sebab-akibat</b>: akhir pekan cenderung
-                    ramai sekaligus cenderung jadi hari orang rajin posting. Pakai
-                    sebagai petunjuk arah, bukan bukti.
-                  </>
-                )}
-              </p>
-            </Panel>
-
-            <Panel
-              judul="Kontribusi Konten"
-              sub="Siapa mengerjakan apa bulan ini — dasar bonus marketing"
-              badge={
-                eksekusi.jatuhTempo > 0
-                  ? `${persen(eksekusi.ketepatan)} tepat waktu`
-                  : undefined
-              }
-            >
-              {kontribusi.length === 0 ? (
-                <p className="mgr-empty">
-                  Belum ada kartu ber-PIC maupun hari sosmed yang ditandai
-                  pengerjanya. Tetapkan PIC di Papan Promosi.
-                </p>
-              ) : (
-                <div className="mgr-tabel-wrap">
-                  <table className="mgr-tabel">
-                    <thead>
-                      <tr>
-                        <th>Operator</th>
-                        <th className="num">Selesai</th>
-                        <th className="num">Telat</th>
-                        <th className="num">Berjalan</th>
-                        <th className="num">Hari sosmed</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {kontribusi.map((k) => (
-                        <tr key={k.id}>
-                          <td>
-                            <span className="mgr-orang">
-                              <Avatar
-                                name={k.nama}
-                                foto={k.foto}
-                                colorIndex={colorIndexForName(k.nama)}
-                                size="sm"
-                              />
-                              <span className="mgr-orang-teks">
-                                <span className="nm">{k.nama}</span>
-                                <span className="jb">{k.jabatan || 'Operator'}</span>
-                              </span>
-                            </span>
-                          </td>
-                          <td className="num is-kuat">{k.selesai}</td>
-                          <td className={`num${k.telat > 0 ? ' is-minus' : ''}`}>
-                            {k.telat}
-                          </td>
-                          <td className="num">{k.berjalan}</td>
-                          <td className="num">{k.hariSosmed}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-
-              {eksekusi.menunggak.length > 0 && (
-                <div className="mgr-menunggak">
-                  <b>Lewat deadline & belum selesai</b>
-                  <ul>
-                    {eksekusi.menunggak.map((m) => (
-                      <li key={m.id}>
-                        <span>{m.judul}</span>
-                        <em>
-                          telat {m.telatHari} hari
-                          {m.pic &&
-                            ` · ${data.employees.find((e) => e.id === m.pic)?.nama ?? 'PIC'}`}
-                        </em>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </Panel>
+            <KemitraanPanel
+              ringkas={mou}
+              eventBulanIni={jumlahEventBulanIni}
+              targetEvent={target.event}
+              onBuka={onLihatLeads}
+            />
           </div>
         </div>
       )}
 
-      {tab === 'uang' && (
+
+      {tab === 'keuangan' && (
         <>
         {/* ---------- KPI ---------- */}
         <div className="mgr-kpi-grid">
@@ -2125,6 +2238,33 @@ export function Manajemen({
                 </Panel>
               )}
 
+              {/*
+                Penilaian kualitatif owner. Ia BUKAN bagian dari skor empat
+                tugas (lihat Scorecard.penilaian) — dulu ia satu KPI berbobot
+                10%, artinya angka berdasarkan kesan bisa menggeser rapor yang
+                seluruh baris lainnya berasal dari data. Sekarang ia berdiri
+                sendiri: tetap terbaca saat evaluasi, tapi tidak menambal —
+                atau menghapus — apa yang ditunjukkan angka.
+              */}
+              {isOwner && (
+                <Panel
+                  judul="Penilaian Owner"
+                  sub="Catatan kualitatif untuk evaluasi bulanan. Sengaja tidak ikut menghitung skor 4 tugas."
+                  badge={
+                    kpi.penilaian.status === 'belum-aktif'
+                      ? 'Belum diisi'
+                      : `${nilaiOwner?.nilai ?? 0} dari 5`
+                  }
+                >
+                  <PenilaianOwnerBox
+                    key={monthKey}
+                    nilai={nilaiOwner?.nilai ?? 0}
+                    catatan={nilaiOwner?.catatan}
+                    onSimpan={simpanPenilaian}
+                  />
+                </Panel>
+              )}
+
               {!isOwner && (
                 <div className="mgr-locked">
                   <span className="mgr-locked-ikon">
@@ -2132,11 +2272,12 @@ export function Manajemen({
                   </span>
                   <div>
                     <div className="mgr-locked-judul">
-                      KPI, gaji &amp; kas disembunyikan
+                      Gaji &amp; kas disembunyikan
                     </div>
                     <p>
-                      Scorecard KPI Manajer, nominal gaji per karyawan, dan
-                      rekonsiliasi kas hanya bisa dibuka oleh owner.
+                      Nominal gaji per karyawan dan rekonsiliasi kas hanya bisa
+                      dibuka owner. Rapor KPI Anda sendiri tidak disembunyikan —
+                      ada di kepala tiap tab.
                     </p>
                   </div>
                 </div>
@@ -2184,6 +2325,381 @@ function Panel({
   )
 }
 
+const KATEGORI_MASALAH_ORDER: MasalahTeknis['kategori'][] = [
+  'printer',
+  'kamera',
+  'jaringan',
+  'listrik',
+  'aplikasi',
+  'lain',
+]
+const TINGKAT_MASALAH_ORDER: MasalahTeknis['tingkat'][] = [
+  'stop',
+  'ganggu',
+  'ringan',
+]
+
+/** "17 jam" / "2,5 hari" — umur & durasi dalam satuan yang enak dibaca. */
+function lamaTeks(jam: number): string {
+  if (jam < 1) return 'kurang dari sejam'
+  if (jam < 24) return `${Math.round(jam)} jam`
+  return `${(jam / 24).toFixed(1).replace('.', ',')} hari`
+}
+
+/**
+ * Log kendala teknis — tugas manajer nomor satu yang sampai sekarang tidak
+ * punya tempat di mana pun.
+ *
+ * Bentuknya sengaja formulir satu baris, bukan modal: kendala dilaporkan
+ * justru saat studio sedang repot, dan apa pun yang butuh lebih dari satu tap
+ * untuk dibuka akan berakhir sebagai "nanti saja" lalu tidak pernah tercatat.
+ * Yang wajib hanya judul; kategori & tingkat punya nilai bawaan yang benar
+ * untuk kasus paling sering.
+ */
+function MasalahTeknisPanel({
+  ringkas,
+  namaById,
+  bisaTutup,
+  onLapor,
+  onTutup,
+  onBukaLagi,
+  onHapus,
+}: {
+  ringkas: RingkasMasalah
+  namaById: Map<string, string>
+  /** Menandai selesai = keputusan pengelola. Lihat RLS migration 0055. */
+  bisaTutup: boolean
+  onLapor: (baru: Omit<MasalahTeknis, 'id' | 'dilaporkanPada'>) => void
+  onTutup: (id: string, solusi: string) => void
+  onBukaLagi: (id: string) => void
+  onHapus: (id: string) => void
+}) {
+  const [judul, setJudul] = useState('')
+  const [kategori, setKategori] = useState<MasalahTeknis['kategori']>('printer')
+  const [tingkat, setTingkat] = useState<MasalahTeknis['tingkat']>('ganggu')
+  const [catatan, setCatatan] = useState('')
+  const [buka, setBuka] = useState(false)
+  /** Id kendala yang sedang ditanyai "apa yang membereskannya?". */
+  const [menutup, setMenutup] = useState<string | null>(null)
+  const [solusi, setSolusi] = useState('')
+
+  function kirim() {
+    if (!judul.trim()) return
+    onLapor({
+      judul: judul.trim(),
+      kategori,
+      tingkat,
+      catatan: catatan.trim(),
+      solusi: '',
+    })
+    setJudul('')
+    setCatatan('')
+    setTingkat('ganggu')
+    setBuka(false)
+  }
+
+  return (
+    <Panel
+      judul="Masalah Teknis"
+      sub={
+        ringkas.belumAda
+          ? 'Belum ada kendala tercatat — laporkan begitu ada alat yang bermasalah, sekecil apa pun.'
+          : `${ringkas.beresBulanIni} dari ${ringkas.masukBulanIni} kendala bulan ini beres` +
+            (ringkas.rataJamBeres > 0
+              ? ` · rata-rata ${lamaTeks(ringkas.rataJamBeres)}`
+              : '')
+      }
+      badge={
+        ringkas.terbuka.length > 0
+          ? `${ringkas.terbuka.length} terbuka`
+          : ringkas.belumAda
+            ? undefined
+            : 'Semua beres'
+      }
+      aksi={
+        <button
+          type="button"
+          className={'mgr-aksi-btn' + (buka ? '' : ' is-utama')}
+          onClick={() => setBuka((v) => !v)}
+        >
+          {buka ? 'Tutup' : 'Lapor kendala'}
+        </button>
+      }
+    >
+      {buka && (
+        <div className="mgr-masalah-form">
+          <input
+            type="text"
+            value={judul}
+            autoFocus
+            placeholder="Apa yang bermasalah? mis. Printer 2 garis-garis"
+            onChange={(e) => setJudul(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && kirim()}
+          />
+          <div className="mgr-masalah-pilih">
+            <label>
+              <span>Alat</span>
+              <select
+                value={kategori}
+                onChange={(e) =>
+                  setKategori(e.target.value as MasalahTeknis['kategori'])
+                }
+              >
+                {KATEGORI_MASALAH_ORDER.map((k) => (
+                  <option key={k} value={k}>
+                    {KATEGORI_MASALAH_LABEL[k]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>Dampak</span>
+              <select
+                value={tingkat}
+                onChange={(e) =>
+                  setTingkat(e.target.value as MasalahTeknis['tingkat'])
+                }
+              >
+                {TINGKAT_MASALAH_ORDER.map((t) => (
+                  <option key={t} value={t}>
+                    {TINGKAT_MASALAH_LABEL[t]}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <textarea
+            rows={2}
+            value={catatan}
+            placeholder="Detail tambahan (boleh kosong)"
+            onChange={(e) => setCatatan(e.target.value)}
+          />
+          <div className="mgr-masalah-aksi">
+            <button
+              type="button"
+              className="mgr-aksi-btn is-utama"
+              disabled={!judul.trim()}
+              onClick={kirim}
+            >
+              Simpan laporan
+            </button>
+          </div>
+        </div>
+      )}
+
+      {ringkas.terbuka.length === 0 ? (
+        <p className="mgr-empty">
+          {ringkas.belumAda
+            ? 'Belum ada satu pun laporan. Selama tidak ada yang dicatat, KPI "kendala teknis dibereskan" tetap nonaktif — nol laporan bukan nol masalah.'
+            : '✅ Tidak ada kendala yang menggantung.'}
+        </p>
+      ) : (
+        <ul className="mgr-masalah-list">
+          {ringkas.terbuka.map(({ masalah: m, umurHari }) => (
+            <li key={m.id} className={`mgr-masalah-row is-${m.tingkat}`}>
+              <div className="mgr-masalah-kepala">
+                <span className={`mgr-masalah-tag is-${m.tingkat}`}>
+                  {TINGKAT_MASALAH_LABEL[m.tingkat]}
+                </span>
+                <span className="mgr-masalah-judul">{m.judul}</span>
+                <em className="mgr-masalah-umur">
+                  {umurHari === 0 ? 'hari ini' : `${umurHari} hari`}
+                </em>
+              </div>
+              <div className="mgr-masalah-meta">
+                {KATEGORI_MASALAH_LABEL[m.kategori]}
+                {m.dilaporkanOleh &&
+                  ` · ${namaById.get(m.dilaporkanOleh) ?? 'dilaporkan operator'}`}
+                {m.catatan && ` · ${m.catatan}`}
+              </div>
+              {bisaTutup &&
+                (menutup === m.id ? (
+                  <div className="mgr-masalah-tutup">
+                    <input
+                      type="text"
+                      autoFocus
+                      value={solusi}
+                      placeholder="Apa yang membereskannya?"
+                      onChange={(e) => setSolusi(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key !== 'Enter') return
+                        onTutup(m.id, solusi)
+                        setMenutup(null)
+                        setSolusi('')
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className="mgr-aksi-btn is-utama"
+                      onClick={() => {
+                        onTutup(m.id, solusi)
+                        setMenutup(null)
+                        setSolusi('')
+                      }}
+                    >
+                      Tandai selesai
+                    </button>
+                    <button
+                      type="button"
+                      className="mgr-aksi-btn"
+                      onClick={() => {
+                        setMenutup(null)
+                        setSolusi('')
+                      }}
+                    >
+                      Batal
+                    </button>
+                  </div>
+                ) : (
+                  <div className="mgr-masalah-aksi">
+                    <button
+                      type="button"
+                      className="mgr-aksi-btn"
+                      onClick={() => {
+                        setMenutup(m.id)
+                        setSolusi('')
+                      }}
+                    >
+                      Tandai selesai
+                    </button>
+                    <button
+                      type="button"
+                      className="mgr-aksi-btn"
+                      onClick={() => onHapus(m.id)}
+                    >
+                      Hapus
+                    </button>
+                  </div>
+                ))}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {ringkas.beresTerakhir.length > 0 && (
+        <div className="mgr-masalah-riwayat">
+          <b>Terakhir dibereskan</b>
+          <ul>
+            {ringkas.beresTerakhir.map((m) => (
+              <li key={m.id}>
+                <span className="mgr-masalah-beres">
+                  <span className="tgl">
+                    {labelTanggalPendek(
+                      todayKey(new Date(m.selesaiPada as string)),
+                    )}
+                  </span>
+                  <span className="isi">
+                    {m.judul}
+                    {m.solusi ? ` — ${m.solusi}` : ''}
+                  </span>
+                  {bisaTutup && (
+                    <button
+                      type="button"
+                      className="mgr-aksi-btn"
+                      onClick={() => onBukaLagi(m.id)}
+                    >
+                      Buka lagi
+                    </button>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/*
+        Alat yang paling sering rewel. Ini satu-satunya angka di panel ini yang
+        bukan antrean: ia menjawab pertanyaan pembelian, bukan pertanyaan hari
+        ini — printer yang muncul empat kali sebulan sudah bukan urusan servis.
+      */}
+      {ringkas.perKategori.length > 0 && (
+        <p className="mgr-hint">
+          Bulan ini:{' '}
+          {ringkas.perKategori
+            .map((k) => `${KATEGORI_MASALAH_LABEL[k.kategori]} ${k.jumlah}×`)
+            .join(' · ')}
+        </p>
+      )}
+    </Panel>
+  )
+}
+
+/**
+ * MoU, sponsorship & event — separuh tugas nomor dua yang selama ini tidak
+ * muncul sama sekali di dashboard.
+ *
+ * Datanya sudah lama ada (`ringkasKemitraan`, migration 0053), tapi hanya bisa
+ * dilihat dengan membuka layar Leads lalu berpindah tab. Panel ini tidak
+ * menduplikasi formulirnya — ia hanya menjawab "ada yang menunggu keputusanku?"
+ * lalu melemparkan ke layar aslinya.
+ */
+function KemitraanPanel({
+  ringkas,
+  eventBulanIni,
+  targetEvent,
+  onBuka,
+}: {
+  ringkas: RingkasKemitraan
+  eventBulanIni: number
+  targetEvent: number
+  onBuka: () => void
+}) {
+  return (
+    <Panel
+      judul="MoU, Sponsorship & Event"
+      sub={
+        ringkas.belumAda
+          ? 'Belum ada pengajuan tercatat — catat proposal yang masuk di layar Leads & Sales, tab MoU.'
+          : `${ringkas.masukBulanIni} pengajuan masuk · ${ringkas.disetujuiBulanIni} disetujui bulan ini`
+      }
+      badge={`${eventBulanIni}/${targetEvent} event`}
+      aksi={
+        <button type="button" className="mgr-aksi-btn" onClick={onBuka}>
+          Buka MoU
+        </button>
+      }
+    >
+      <div className="mgr-mini-stats">
+        <div>
+          <b>{ringkas.antre.length}</b>
+          <span>Menunggu keputusan</span>
+        </div>
+        <div>
+          <b>{ringkas.didiamkan}</b>
+          <span>Didiamkan terlalu lama</span>
+        </div>
+        <div>
+          <b>{ringkas.mouHabis.length}</b>
+          <span>MoU segera berakhir</span>
+        </div>
+      </div>
+
+      {ringkas.antre.length > 0 && (
+        <ul className="mgr-slot-ringkas">
+          {ringkas.antre.slice(0, 4).map(({ k, umurHari }) => (
+            <li key={k.id} className={umurHari >= 7 ? 'is-macet' : 'is-nanti'}>
+              <span className="ikon">{umurHari >= 7 ? '!' : '○'}</span>
+              <span className="lbl">{k.instansi}</span>
+              <em>
+                {umurHari} hari · {formatRupiah(k.nilaiDiminta)}
+              </em>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {ringkas.imbalanTertunggak.length > 0 && (
+        <p className="mgr-hint">
+          {ringkas.imbalanTertunggak.length} sponsor sudah disetujui tapi
+          imbalannya belum ditagih — uangnya sudah keluar, kompensasinya belum
+          masuk.
+        </p>
+      )}
+    </Panel>
+  )
+}
+
 const STATUS_LABEL: Record<BarisKPI['status'], string> = {
   tercapai: 'Tercapai',
   ontrack: 'On track',
@@ -2197,17 +2713,14 @@ const STATUS_LABEL: Record<BarisKPI['status'], string> = {
  *
  * Kepalanya menyebut bobot dan skor kelompok, badannya baris-baris KPI-nya.
  * Bobot ditampilkan terus-menerus karena itulah yang menjawab "kenapa skor
- * saya segini padahal semua checklist hijau" — kelompok Hasil bisnis 25%.
+ * saya segini padahal semua checklist hijau" — Keuangan berbobot 30%.
  */
 function KelompokBlok({
   kelompok,
   laju,
-  ekstra,
 }: {
   kelompok: SkorKelompok
   laju: number
-  /** Isian tambahan di bawah baris (dipakai kelompok Kepemimpinan). */
-  ekstra?: ReactNode
 }) {
   const mati = kelompok.skor == null
   return (
@@ -2242,7 +2755,6 @@ function KelompokBlok({
           <KpiRow key={b.id} baris={b} laju={laju} />
         ))}
       </div>
-      {ekstra}
     </div>
   )
 }
@@ -2251,8 +2763,9 @@ function KelompokBlok({
  * Penilaian kualitatif owner 1–5 untuk periode terpilih.
  *
  * Satu-satunya KPI yang tidak diturunkan dari data — dan itu disengaja:
- * kepemimpinan tidak punya jejak di tabel mana pun. Hanya dirender di dalam
- * panel KPI Manajer yang owner-only, jadi tidak perlu mode baca-saja.
+ * kesan owner tidak punya jejak di tabel mana pun. Hanya dirender di panel
+ * "Penilaian Owner" pada tab Keuangan yang owner-only, jadi tidak perlu mode
+ * baca-saja.
  */
 /**
  * Formulir laporan closing satu hari: pilih status, tulis ceritanya, simpan.

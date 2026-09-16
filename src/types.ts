@@ -862,6 +862,60 @@ export type LaporanHarian = {
   diperbarui?: string
 }
 
+/**
+ * Kategori alat yang bermasalah. Dipakai untuk melihat alat mana yang paling
+ * sering rewel — bukan untuk mengarahkan perbaikan, jadi daftarnya sengaja
+ * pendek dan berakhir di `lain`.
+ */
+export type KategoriMasalah =
+  | 'printer'
+  | 'kamera'
+  | 'jaringan'
+  | 'listrik'
+  | 'aplikasi'
+  | 'lain'
+
+/**
+ * Seberapa parah dampaknya ke jualan hari itu. Inilah yang mengurutkan
+ * antrean, jadi definisinya harus bisa dijawab operator dalam dua detik:
+ *
+ *   stop   — studio tidak bisa menerima pelanggan sama sekali
+ *   ganggu — masih jalan, tapi pincang (mis. satu dari dua printer mati)
+ *   ringan — mengganggu kenyamanan, tidak menahan transaksi
+ */
+export type TingkatMasalah = 'stop' | 'ganggu' | 'ringan'
+
+/**
+ * Satu kendala teknis, hidup sejak dilaporkan sampai ditandai selesai.
+ *
+ * Bedanya dengan [LaporanHarian]: laporan closing mencatat satu paragraf per
+ * HARI, jadi printer yang macet tiga hari berturut-turut terbaca sebagai tiga
+ * kejadian dan tidak ada cara tahu mana yang masih menggantung sekarang. Baris
+ * ini mencatat MASALAH-nya, jadi `selesaiPada` kosong = masih rusak hari ini.
+ *
+ * Disimpan di tabel `masalah_teknis` (migration 0055). Dilaporkan siapa pun
+ * yang menemukan; hanya pengelola yang boleh menandainya selesai.
+ */
+export type MasalahTeknis = {
+  id: string
+  judul: string
+  kategori: KategoriMasalah
+  tingkat: TingkatMasalah
+  catatan: string
+  /** `profiles.id` penemunya. */
+  dilaporkanOleh?: string
+  /** ISO. Dipakai menghitung umur kendala yang masih terbuka. */
+  dilaporkanPada: string
+  /** ISO. `undefined` = masih terbuka — inilah yang menggerakkan antrean. */
+  selesaiPada?: string
+  selesaiOleh?: string
+  /**
+   * Apa yang akhirnya membereskannya. Diisi saat menandai selesai supaya
+   * kejadian berikutnya tidak perlu didiagnosis dari nol.
+   */
+  solusi: string
+}
+
 export type FontPair = 'playful' | 'editorial' | 'modern' | 'minimal' | 'oui'
 export type FontSize = 'small' | 'normal' | 'large' | 'xlarge'
 export type TampilanMode = 'card' | 'list' | 'kalender'
@@ -1012,6 +1066,12 @@ export type AppData = {
    * Opsional supaya app tetap naik sebelum migrasinya dijalankan.
    */
   laporanHarian: LaporanHarian[]
+  /**
+   * Kendala teknis yang pernah dilaporkan. Lihat [MasalahTeknis] & migration
+   * 0055. Kosong = belum pernah dipakai (KPI "masalah teknis" ikut nonaktif —
+   * nol laporan tidak boleh terbaca sebagai nol masalah).
+   */
+  masalahTeknis: MasalahTeknis[]
   /**
    * Pipeline calon klien. Lihat [Lead] & migration 0047. Kosong = pipeline
    * belum dipakai (KPI leads ikut nonaktif).

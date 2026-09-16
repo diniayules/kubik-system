@@ -20,6 +20,7 @@ import type {
   KemitraanStatus,
   Lead,
   LaporanHarian,
+  MasalahTeknis,
   LeadTahap,
   PromoProgram,
   RitmeKonten,
@@ -2386,48 +2387,72 @@ const TARGET_MINIMUM: TargetBulanan = {
 }
 
 /**
- * Saran target otomatis: **2× rata-rata 3 bulan penuh terakhir**.
+ * Bulan yang dipakai sebagai pembanding target: **bulan tepat sebelumnya**.
  *
- * Aturan 2× hanya diterapkan pada angka yang punya baseline nyata (omzet,
- * tiket, event). Sisanya adalah komitmen aktivitas, bukan hasil, jadi
- * dipatok tetap: campaign 2/bulan, sosmed aktif hampir tiap hari, checklist
- * 90%, shift 100%.
+ * Kalau bulan itu kosong (studio tutup, atau sistem ini belum dipakai), telusur
+ * mundur sampai 12 bulan mencari bulan berisi terakhir. Yang dikembalikan
+ * bukan sekadar angkanya tapi juga `monthKey`-nya, supaya layar bisa menulis
+ * "2× September" dan bukan angka yang muncul entah dari mana — target yang
+ * tidak bisa dilacak asalnya adalah target yang akan didebat tiap bulan.
  *
- * "3 bulan penuh terakhir" sengaja TIDAK menyertakan `monthKey` sendiri —
- * bulan berjalan masih separuh jalan dan akan menyeret rata-rata ke bawah.
- * Bulan tanpa omzet juga dilewati supaya periode kosong (sebelum sistem
- * dipakai) tidak mengencerkan baseline.
+ * `null` = belum ada satu pun bulan berisi.
+ */
+export function basisTarget(
+  data: AppData,
+  monthKey: string,
+  hariIni: string,
+): { monthKey: string; ring: RingkasanBulan; berurutan: boolean } | null {
+  const sebelumnya = bulanSebelumnya(monthKey)
+  let k = sebelumnya
+  for (let i = 0; i < 12; i += 1) {
+    const ring = ringkasanBulan(data, k, hariIni)
+    if (ring.omzet > 0) {
+      return { monthKey: k, ring, berurutan: k === sebelumnya }
+    }
+    k = bulanSebelumnya(k)
+  }
+  return null
+}
+
+/** Pengali target terhadap bulan pembanding — "minimal 2× bulan lalu". */
+export const PENGALI_TARGET = 2
+
+/**
+ * Saran target otomatis: **2× bulan lalu**.
+ *
+ * Sebelumnya rumusnya 2× rata-rata tiga bulan terakhir. Rata-rata memang lebih
+ * tahan terhadap bulan ekstrem, tapi ia tidak bisa diucapkan: owner menyebut
+ * targetnya "dua kali lipat bulan kemarin", dan sebuah angka yang tidak sama
+ * dengan kalimat yang dipakai menagihnya akan selalu kalah dalam perdebatan.
+ * Jadi rumusnya mengikuti kalimatnya, dan bulan ekstrem ditangani dengan cara
+ * yang jujur: owner menimpanya manual lewat "Atur Target" (lihat
+ * [targetBerlaku] — nilai tersimpan selalu menang atas saran ini).
+ *
+ * Pengali 2× hanya untuk angka yang punya baseline nyata (omzet, tiket, event).
+ * Sisanya komitmen aktivitas, bukan hasil, jadi dipatok tetap: campaign
+ * 2/bulan, sosmed aktif hampir tiap hari, checklist 90%, shift 100%.
  */
 export function saranTarget(
   data: AppData,
   monthKey: string,
   hariIni: string,
 ): TargetBulanan {
-  const sampel: RingkasanBulan[] = []
-  let k = bulanSebelumnya(monthKey)
-  // Telusuri mundur maksimal 12 bulan untuk mengumpulkan 3 bulan yang berisi.
-  for (let i = 0; i < 12 && sampel.length < 3; i += 1) {
-    const r = ringkasanBulan(data, k, hariIni)
-    if (r.omzet > 0) sampel.push(r)
-    k = bulanSebelumnya(k)
-  }
-  if (sampel.length === 0) return { ...TARGET_MINIMUM }
-
-  const rata = (f: (r: RingkasanBulan) => number) =>
-    sampel.reduce((s, r) => s + f(r), 0) / sampel.length
-  const jumlahEvent = (r: RingkasanBulan) =>
-    r.eventPerKategori.photobooth.jumlah + r.eventPerKategori.game.jumlah
+  const basis = basisTarget(data, monthKey, hariIni)
+  if (!basis) return { ...TARGET_MINIMUM }
+  const { ring } = basis
 
   // Dibulatkan ke atas ke kelipatan yang enak dibaca supaya target terlihat
-  // seperti keputusan, bukan hasil pembagian (mis. 587 → 600).
+  // seperti keputusan, bukan hasil perkalian (mis. 587 → 600).
   const bulatkan = (n: number, kelipatan: number) =>
     Math.ceil(n / kelipatan) * kelipatan
+  const jumlahEvent =
+    ring.eventPerKategori.photobooth.jumlah + ring.eventPerKategori.game.jumlah
 
   return {
     ...TARGET_MINIMUM,
-    omzet: bulatkan(rata((r) => r.omzet) * 2, 500_000),
-    tiket: bulatkan(rata((r) => r.qtyTiket) * 2, 50),
-    event: Math.max(2, Math.ceil(rata(jumlahEvent) * 2)),
+    omzet: bulatkan(ring.omzet * PENGALI_TARGET, 500_000),
+    tiket: bulatkan(ring.qtyTiket * PENGALI_TARGET, 50),
+    event: Math.max(2, Math.ceil(jumlahEvent * PENGALI_TARGET)),
     sosmedHari: hariDalamBulan(monthKey),
   }
 }
@@ -2459,52 +2484,207 @@ export function targetBerlaku(
   }
 }
 
+/** Urutan kegentingan kendala teknis — 'stop' selalu di puncak antrean. */
+const URUT_TINGKAT: Record<MasalahTeknis['tingkat'], number> = {
+  stop: 0,
+  ganggu: 1,
+  ringan: 2,
+}
+
+export const TINGKAT_MASALAH_LABEL: Record<MasalahTeknis['tingkat'], string> = {
+  stop: 'Studio berhenti',
+  ganggu: 'Jalan tapi pincang',
+  ringan: 'Ringan',
+}
+
+export const KATEGORI_MASALAH_LABEL: Record<MasalahTeknis['kategori'], string> =
+  {
+    printer: 'Printer',
+    kamera: 'Kamera',
+    jaringan: 'Jaringan',
+    listrik: 'Listrik',
+    aplikasi: 'Aplikasi',
+    lain: 'Lain-lain',
+  }
+
+export type MasalahTerbuka = {
+  masalah: MasalahTeknis
+  /** Sudah berapa hari menggantung sejak dilaporkan. */
+  umurHari: number
+}
+
+export type RingkasMasalah = {
+  /**
+   * true = belum pernah ada satu pun laporan kendala. KPI-nya ikut nonaktif:
+   * nol laporan berarti fiturnya belum dipakai, BUKAN nol masalah — menilainya
+   * 100% akan memberi angka sempurna justru kepada studio yang tidak mencatat
+   * apa-apa.
+   */
+  belumAda: boolean
+  /** Yang masih menggantung SEKARANG, terlepas dari bulan yang dilihat. */
+  terbuka: MasalahTerbuka[]
+  /** Berapa di antaranya yang membuat studio berhenti jualan. */
+  stopTerbuka: number
+  /** Umur kendala terbuka paling lama, dalam hari. */
+  umurTerlamaHari: number
+  /** Kendala yang DILAPORKAN pada periode ini. */
+  masukBulanIni: number
+  /** Dari yang masuk bulan ini, berapa yang sudah ditutup. */
+  beresBulanIni: number
+  /** beresBulanIni ÷ masukBulanIni. Dasar KPI. */
+  rasioBeres: number
+  /** Rata-rata jam lapor → selesai untuk kendala bulan ini yang sudah beres. */
+  rataJamBeres: number
+  /** Alat yang paling sering bermasalah bulan ini, terbanyak dulu. */
+  perKategori: { kategori: MasalahTeknis['kategori']; jumlah: number }[]
+  /**
+   * Beberapa kendala yang terakhir ditutup, terbaru dulu. Ada supaya penutupan
+   * yang keliru bisa dibatalkan tanpa berburu di database — dan supaya solusi
+   * yang sudah pernah berhasil terbaca lagi saat alat yang sama rewel.
+   */
+  beresTerakhir: MasalahTeknis[]
+}
+
+/**
+ * Ringkasan kendala teknis (migration 0055).
+ *
+ * Dua sudut pandang sengaja dipisah dan TIDAK boleh dicampur:
+ *
+ *   `terbuka`  — keadaan SEKARANG, tidak peduli periode yang sedang dilihat.
+ *                Ini yang mengisi antrean: kendala yang dilaporkan bulan lalu
+ *                dan masih rusak hari ini tetap harus muncul saat manajer
+ *                membuka bulan ini.
+ *   `rasioBeres` — kinerja PERIODE, dihitung dari kendala yang masuk pada
+ *                bulan itu saja. Kalau dicampur dengan yang di atas, menutup
+ *                tunggakan lama akan menaikkan skor bulan berjalan.
+ */
+export function masalahTeknis(
+  data: AppData,
+  monthKey: string,
+  hariIni: string,
+): RingkasMasalah {
+  const semua = data.masalahTeknis ?? []
+  const terbuka = semua
+    .filter((m) => !m.selesaiPada)
+    .map((m) => ({
+      masalah: m,
+      umurHari: Math.max(0, selisihHari(hariIni, m.dilaporkanPada.slice(0, 10))),
+    }))
+    .sort(
+      (a, b) =>
+        URUT_TINGKAT[a.masalah.tingkat] - URUT_TINGKAT[b.masalah.tingkat] ||
+        b.umurHari - a.umurHari,
+    )
+
+  const bulanIni = semua.filter((m) => m.dilaporkanPada.startsWith(monthKey))
+  const beres = bulanIni.filter((m) => m.selesaiPada)
+  const jamBeres = beres.map(
+    (m) =>
+      (new Date(m.selesaiPada as string).getTime() -
+        new Date(m.dilaporkanPada).getTime()) /
+      3_600_000,
+  )
+
+  const hitungKategori = new Map<MasalahTeknis['kategori'], number>()
+  for (const m of bulanIni) {
+    hitungKategori.set(m.kategori, (hitungKategori.get(m.kategori) ?? 0) + 1)
+  }
+
+  return {
+    belumAda: semua.length === 0,
+    terbuka,
+    stopTerbuka: terbuka.filter((t) => t.masalah.tingkat === 'stop').length,
+    umurTerlamaHari: terbuka.reduce((m, t) => Math.max(m, t.umurHari), 0),
+    masukBulanIni: bulanIni.length,
+    beresBulanIni: beres.length,
+    rasioBeres: bulanIni.length > 0 ? beres.length / bulanIni.length : 0,
+    rataJamBeres:
+      jamBeres.length > 0
+        ? jamBeres.reduce((a, b) => a + b, 0) / jamBeres.length
+        : 0,
+    perKategori: [...hitungKategori.entries()]
+      .map(([kategori, jumlah]) => ({ kategori, jumlah }))
+      .sort((a, b) => b.jumlah - a.jumlah),
+    beresTerakhir: semua
+      .filter((m) => m.selesaiPada)
+      .sort((a, b) =>
+        (b.selesaiPada as string).localeCompare(a.selesaiPada as string),
+      )
+      .slice(0, 4),
+  }
+}
+
 // ---- kelompok & bobot ------------------------------------------------------
 
-export type KelompokKPI =
-  | 'operasional'
-  | 'marketing'
-  | 'sales'
-  | 'hasil'
-  | 'kepemimpinan'
+/**
+ * Kelompok penilaian = **empat tugas manajer**, bukan lagi lima kotak yang
+ * dikarang dari sumber data.
+ *
+ * Susunan lama (operasional / marketing / sales / hasil bisnis / kepemimpinan)
+ * memecah pekerjaan yang sama ke dua tempat: "campaign dieksekusi" duduk di
+ * marketing sementara "konten mingguan tepat ritme" ada di sana juga tapi
+ * dinilai dari papan lain, dan "hasil bisnis" tidak pernah bisa dikerjakan
+ * langsung oleh siapa pun — ia akibat, bukan tugas. Empat kelompok ini persis
+ * job description yang dipegang manajer, jadi satu baris merah selalu bisa
+ * ditunjuk ke satu tugas yang jelas pemiliknya.
+ */
+export type KelompokKPI = 'operasional' | 'sales' | 'sosmed' | 'keuangan'
+
+/**
+ * Area sebuah baris KPI di layar. Sama dengan [KelompokKPI], plus `owner`
+ * untuk penilaian kualitatif yang sengaja TIDAK ikut menghitung skor — lihat
+ * `Scorecard.penilaian`.
+ */
+export type AreaKPI = KelompokKPI | 'owner'
 
 export const KELOMPOK_ORDER: KelompokKPI[] = [
   'operasional',
-  'marketing',
   'sales',
-  'hasil',
-  'kepemimpinan',
+  'sosmed',
+  'keuangan',
 ]
 
-export const KELOMPOK_LABEL: Record<KelompokKPI, string> = {
+export const KELOMPOK_LABEL: Record<AreaKPI, string> = {
   operasional: 'Operasional',
-  marketing: 'Marketing',
-  sales: 'Sales & Event',
-  hasil: 'Hasil bisnis',
-  kepemimpinan: 'Kepemimpinan',
+  sales: 'Leads & Sales',
+  sosmed: 'Social Media',
+  keuangan: 'Keuangan',
+  owner: 'Penilaian owner',
+}
+
+/** Kalimat tugasnya, persis seperti yang disepakati owner & manajer. */
+export const KELOMPOK_TUGAS: Record<KelompokKPI, string> = {
+  operasional:
+    'Memastikan karyawan bekerja sesuai SOP, stok selalu terjaga, dan masalah teknis teratasi.',
+  sales: 'Memastikan usaha menjalin MoU dan berada di event.',
+  sosmed:
+    'Mencari ide konten, mengatur jadwal konten naik, memastikan sosial media aktif.',
+  keuangan: 'Menaikkan penjualan minimal 2× omzet bulan sebelumnya.',
 }
 
 /**
  * Bobot tiap kelompok. Jumlahnya 1.
  *
- * Hasil bisnis sengaja 25% — sama besar dengan operasional. Itulah yang
- * membedakan manajer dari operator: seorang operator yang rajin bisa memenuhi
- * seluruh kelompok aktivitas dan tetap gagal di kelompok ini.
+ * Operasional & keuangan sama-sama 30%. Itu disengaja dan bukan kompromi:
+ * operasional adalah lantainya — studio yang printernya mati atau kertasnya
+ * habis tidak bisa menang di tiga kelompok lain — sedangkan keuangan adalah
+ * satu-satunya kelompok yang tidak bisa dipenuhi dengan rajin saja. Sales &
+ * sosmed masing-masing 20%: keduanya mesin yang menggerakkan keuangan, jadi
+ * sebagian nilainya sudah terbayar di sana dan tidak perlu dihitung dua kali.
  */
 export const BOBOT_KELOMPOK: Record<KelompokKPI, number> = {
-  operasional: 0.25,
-  marketing: 0.2,
+  operasional: 0.3,
   sales: 0.2,
-  hasil: 0.25,
-  kepemimpinan: 0.1,
+  sosmed: 0.2,
+  keuangan: 0.3,
 }
 
 export const KELOMPOK_ALASAN: Record<KelompokKPI, string> = {
-  operasional: 'Shift ter-cover, laporan harian, kepatuhan checklist tim.',
-  marketing: 'Campaign yang benar-benar ditugaskan & konsistensi sosial media.',
-  sales: 'Leads masuk, dikejar tepat waktu, dan ditutup jadi order.',
-  hasil: 'Tiket & omzet — bagian yang tidak bisa dipenuhi dengan rajin saja.',
-  kepemimpinan: 'Seberapa sedikit owner masih harus turun tangan.',
+  operasional:
+    'Shift ter-cover, laporan harian, kepatuhan checklist, dan kendala teknis yang benar-benar dibereskan.',
+  sales: 'Leads masuk, dikejar tepat waktu, ditutup jadi order, dan event yang benar-benar terlaksana.',
+  sosmed: 'Ide masuk papan, konten naik tepat ritme, dan sosial media yang tidak pernah sepi.',
+  keuangan: 'Tiket & omzet terhadap target 2× bulan lalu — bagian yang tidak bisa dipenuhi dengan rajin saja.',
 }
 
 /** Batas atas capaian satu KPI: 150%. */
@@ -2519,6 +2699,12 @@ export const TARGET_KONTAK_CEPAT = 0.9
 export const TARGET_CAMPAIGN_SIAP = 1
 export const TARGET_JADWAL_H3 = 1
 export const TARGET_TEPAT_JADWAL = 1
+/**
+ * Seluruh kendala yang dilaporkan bulan ini harus ditutup bulan ini juga.
+ * Tidak ada toleransi bawaan: kendala yang dibiarkan menggantung persis
+ * hal yang KPI ini ada untuk mencegahnya.
+ */
+export const TARGET_MASALAH_BERES = 1
 /** Seluruh slot konten mingguan harus tepat ritme — tidak ada toleransi bawaan. */
 export const TARGET_DENYUT = 1
 
@@ -2531,7 +2717,7 @@ export type StatusKPI =
 
 export type BarisKPI = {
   id: string
-  kelompok: KelompokKPI
+  kelompok: AreaKPI
   /** Kolom "Area" pada tabel KPI. */
   area: string
   label: string
@@ -2588,6 +2774,16 @@ export type SkorKelompok = {
 export type Scorecard = {
   baris: BarisKPI[]
   kelompok: SkorKelompok[]
+  /**
+   * Penilaian kualitatif owner (1–5), SENGAJA di luar `skor`.
+   *
+   * Dulu ia satu KPI di kelompok "kepemimpinan" berbobot 10%, artinya sebuah
+   * angka yang diketik owner berdasarkan kesan bisa menggeser rapor yang
+   * seluruh baris lainnya berasal dari data. Sekarang ia berdiri di sebelah
+   * skor: tetap terbaca saat evaluasi, tapi tidak bisa menambal — atau
+   * menghapus — apa yang ditunjukkan angka.
+   */
+  penilaian: BarisKPI
   /** Σ(skor kelompok × bobot) ÷ Σ bobot kelompok aktif. 0–1.5. */
   skor: number
   /** Total bobot kelompok yang benar-benar ikut menilai, 0–1. */
@@ -2607,7 +2803,9 @@ export type Scorecard = {
 }
 
 /**
- * Susun KPI Scorecard manajer: 18 KPI dalam 5 kelompok berbobot.
+ * Susun KPI Scorecard manajer: 17 KPI dalam **4 kelompok** — satu kelompok per
+ * tugas yang benar-benar dipegang manajer (lihat [KelompokKPI]), plus penilaian
+ * owner yang berdiri di luar skor.
  *
  * Tiga angka sengaja dipisah supaya tidak ada satu pun yang menipu:
  *
@@ -2651,6 +2849,7 @@ export function skorKPI(
   const mandiri =
     hariBerlaporan > 0 ? (hariBerlaporan - hariEskalasi) / hariBerlaporan : 0
   const nilaiOwner = data.penilaianOwner?.[monthKey]
+  const masalah = masalahTeknis(data, monthKey, hariIni)
   const progres = progresBulan(monthKey, hariIni)
 
   const promoBulanIni = data.promoPrograms.filter((p) =>
@@ -2684,7 +2883,7 @@ export function skorKPI(
 
   function baris(
     id: string,
-    kelompok: KelompokKPI,
+    kelompok: AreaKPI,
     label: string,
     nilai: number,
     target: number,
@@ -2737,7 +2936,7 @@ export function skorKPI(
 
   function belum(
     id: string,
-    kelompok: KelompokKPI,
+    kelompok: AreaKPI,
     label: string,
     butuh: string,
   ): BarisKPI {
@@ -2762,7 +2961,7 @@ export function skorKPI(
   const persenTeks = (n: number) => `${Math.round(n * 100)}%`
 
   const baris_: BarisKPI[] = [
-    // ---------------- Operasional (25%) ----------------
+    // ---------------- Tugas 1 · Operasional (30%) ----------------
     jadwal.belumDisusun
       ? belum(
           'shift',
@@ -2827,11 +3026,39 @@ export function skorKPI(
           'Checklist pagi & closing',
           false,
         ),
+    /*
+      Dinilai dari kendala yang MASUK bulan ini, bukan dari yang masih terbuka
+      hari ini — kalau tidak, menutup tunggakan lama akan menaikkan skor bulan
+      berjalan, dan sebulan tanpa satu pun laporan akan terbaca sempurna.
+    */
+    masalah.belumAda || masalah.masukBulanIni === 0
+      ? belum(
+          'masalah-teknis',
+          'operasional',
+          'Kendala teknis dibereskan',
+          'Laporan kendala di panel Masalah Teknis (Operasional)',
+        )
+      : baris(
+          'masalah-teknis',
+          'operasional',
+          'Kendala teknis dibereskan',
+          masalah.rasioBeres,
+          TARGET_MASALAH_BERES,
+          `${masalah.beresBulanIni} dari ${masalah.masukBulanIni} kendala ditutup` +
+            (masalah.rataJamBeres > 0
+              ? ` · rata-rata ${masalah.rataJamBeres < 24 ? `${Math.round(masalah.rataJamBeres)} jam` : `${(masalah.rataJamBeres / 24).toFixed(1).replace('.', ',')} hari`}`
+              : '') +
+            (masalah.terbuka.length > 0
+              ? ` · ${masalah.terbuka.length} masih terbuka`
+              : ''),
+          'Log kendala teknis (lapor → tandai selesai)',
+          false,
+        ),
 
-    // ---------------- Marketing (20%) ----------------
+    // ---------------- Tugas 3 · Social Media (20%) ----------------
     baris(
       'campaign',
-      'marketing',
+      'sosmed',
       'Campaign dieksekusi',
       campaignJalan.length,
       target.campaign,
@@ -2841,13 +3068,13 @@ export function skorKPI(
     siapCampaign.dinilai === 0
       ? belum(
           'campaign-siap',
-          'marketing',
+          'sosmed',
           'Campaign ditugaskan & berdeadline',
           `Kartu campaign yang umurnya lewat ${AMBANG_TUGAS_HARI} hari di Papan Promosi`,
         )
       : baris(
           'campaign-siap',
-          'marketing',
+          'sosmed',
           'Campaign ditugaskan & berdeadline',
           siapCampaign.rasio,
           TARGET_CAMPAIGN_SIAP,
@@ -2858,13 +3085,13 @@ export function skorKPI(
     eksekusi.belumDiatur || eksekusi.jatuhTempo === 0
       ? belum(
           'eksekusi',
-          'marketing',
+          'sosmed',
           'Campaign selesai tepat jadwal',
           'Deadline pada kartu di Papan Promosi',
         )
       : baris(
           'eksekusi',
-          'marketing',
+          'sosmed',
           'Campaign selesai tepat jadwal',
           eksekusi.ketepatan,
           TARGET_TEPAT_JADWAL,
@@ -2875,13 +3102,13 @@ export function skorKPI(
     denyut.dinilai === 0
       ? belum(
           'denyut',
-          'marketing',
+          'sosmed',
           'Konten mingguan tepat ritme',
           'Ritme konten mingguan disetujui owner, lalu satu minggu yang hari tayangnya lewat',
         )
       : baris(
           'denyut',
-          'marketing',
+          'sosmed',
           'Konten mingguan tepat ritme',
           denyut.rasio,
           TARGET_DENYUT,
@@ -2895,13 +3122,13 @@ export function skorKPI(
     sosmed.belumDicatat
       ? belum(
           'sosmed',
-          'marketing',
+          'sosmed',
           'Hari sosmed aktif',
           'Log sosmed harian di Dashboard Manajemen',
         )
       : baris(
           'sosmed',
-          'marketing',
+          'sosmed',
           'Hari sosmed aktif',
           sosmed.hariAktif,
           target.sosmedHari,
@@ -2910,7 +3137,7 @@ export function skorKPI(
         ),
     baris(
       'ide',
-      'marketing',
+      'sosmed',
       'Ide baru masuk papan',
       promoBulanIni.length,
       target.ide,
@@ -2918,7 +3145,7 @@ export function skorKPI(
       'Papan Promosi (kartu baru bulan ini)',
     ),
 
-    // ---------------- Sales & Event (20%) ----------------
+    // ---------------- Tugas 2 · Leads & Sales (20%) ----------------
     pipeline.belumAda
       ? belum('leads', 'sales', 'Leads baru', 'Pipeline di layar Leads & Sales')
       : baris(
@@ -2971,10 +3198,10 @@ export function skorKPI(
       'Laporan event photobooth & game',
     ),
 
-    // ---------------- Hasil bisnis (25%) ----------------
+    // ---------------- Tugas 4 · Keuangan (30%) ----------------
     baris(
       'tiket',
-      'hasil',
+      'keuangan',
       'Tiket terjual',
       ring.qtyTiket,
       target.tiket,
@@ -2983,7 +3210,7 @@ export function skorKPI(
     ),
     baris(
       'omzet',
-      'hasil',
+      'keuangan',
       'Omzet',
       ring.omzet,
       target.omzet,
@@ -2991,40 +3218,27 @@ export function skorKPI(
       'Studio + event',
     ),
 
-    // ---------------- Kepemimpinan (10%) ----------------
+    /*
+      Kemandirian ikut Operasional, bukan kelompok "kepemimpinan" tersendiri:
+      hari yang beres tanpa menelepon owner adalah hasil dari SOP yang jalan,
+      dan memisahkannya membuat satu tugas dinilai di dua tempat.
+    */
     hariBerlaporan === 0
       ? belum(
           'mandiri',
-          'kepemimpinan',
+          'operasional',
           'Hari beres tanpa keputusan owner',
           'Laporan closing harian belum ditulis bulan ini',
         )
       : baris(
           'mandiri',
-          'kepemimpinan',
+          'operasional',
           'Hari beres tanpa keputusan owner',
           mandiri,
           target.mandiri,
           `${hariBerlaporan - hariEskalasi} dari ${hariBerlaporan} hari berlaporan` +
             ` · ${hariEskalasi} hari perlu owner`,
           'Status “eskalasi” pada laporan closing harian',
-          false,
-        ),
-    !nilaiOwner || !(nilaiOwner.nilai > 0)
-      ? belum(
-          'penilaian',
-          'kepemimpinan',
-          'Penilaian owner (1–5)',
-          'Diisi owner saat evaluasi bulanan',
-        )
-      : baris(
-          'penilaian',
-          'kepemimpinan',
-          'Penilaian owner (1–5)',
-          nilaiOwner.nilai,
-          target.penilaian,
-          `${nilaiOwner.nilai} dari 5 · target ${target.penilaian}`,
-          'Penilaian manual owner',
           false,
         ),
   ]
@@ -3060,9 +3274,29 @@ export function skorKPI(
           .reduce((s, k) => s + (k.skor as number) * k.bobot, 0) / bobotAktif
       : 0
 
+  const barisPenilaian =
+    !nilaiOwner || !(nilaiOwner.nilai > 0)
+      ? belum(
+          'penilaian',
+          'owner',
+          'Penilaian owner (1–5)',
+          'Diisi owner saat evaluasi bulanan',
+        )
+      : baris(
+          'penilaian',
+          'owner',
+          'Penilaian owner (1–5)',
+          nilaiOwner.nilai,
+          target.penilaian,
+          `${nilaiOwner.nilai} dari 5 · target ${target.penilaian}`,
+          'Penilaian manual owner',
+          false,
+        )
+
   const semuaAktif = baris_.filter((b) => b.status !== 'belum-aktif')
   return {
     baris: baris_,
+    penilaian: barisPenilaian,
     kelompok,
     skor,
     bobotAktif,

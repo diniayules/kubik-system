@@ -317,6 +317,7 @@ function Inner() {
             {screen.name === 'absensi' && (
               <Home
                 data={data}
+                setData={setData}
                 isAdmin={isAdmin}
                 currentUserId={currentUserId}
                 onPickEmployee={(id) => bukaAbsen(id)}

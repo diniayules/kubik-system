@@ -4280,3 +4280,171 @@
   .mgr-saldo-grid { grid-template-columns: 1fr; }
   .mgr-saldo-grid > span { flex-direction: row; justify-content: space-between; }
 }
+
+/* =============================================================
+   Dashboard Manajemen · 4 tugas
+   Kelas-kelas di bawah lahir bersama restrukturisasi dashboard jadi
+   empat tab = empat tugas manajer: skor rapor di hero, antrean yang
+   pindah ke kepala tiap tab, dan log kendala teknis.
+   ============================================================= */
+
+/* ---- Skor rapor gabungan di hero ---- */
+.mgr-hero-skor {
+  display: inline-flex; align-items: center; gap: 10px; margin-top: 12px;
+  padding: 8px 14px 8px 10px; border-radius: var(--radius-pill);
+  background: var(--surface-2); border: 1.5px solid var(--line);
+}
+/* Target belum disetujui → skornya simulasi, dan harus terlihat begitu. */
+.mgr-hero-skor.is-simulasi { opacity: .72; border-style: dashed; }
+.mgr-hero-skor-nilai {
+  font-family: var(--font-display); font-size: 20px; font-weight: 700;
+  color: var(--ink); font-variant-numeric: tabular-nums; line-height: 1;
+}
+.mgr-hero-skor-teks { display: flex; flex-direction: column; gap: 2px; }
+.mgr-hero-skor-teks b {
+  font-size: 11.5px; font-weight: 800; color: var(--ink-soft); line-height: 1.2;
+}
+.mgr-hero-skor-teks em {
+  font-style: normal; font-size: 10.5px; font-weight: 700; color: var(--muted);
+  line-height: 1.2;
+}
+
+/* ---- Antrean di kepala tiap tab ---- */
+.mgr-antrean { margin-top: 16px; padding-top: 14px; border-top: 1.5px solid var(--line); }
+.mgr-antrean-judul {
+  display: block; font-size: 10.5px; font-weight: 800; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--muted); margin-bottom: 10px;
+}
+
+/* ---- Log kendala teknis ---- */
+.mgr-masalah-form {
+  display: flex; flex-direction: column; gap: 10px;
+  padding: 12px; margin-bottom: 14px;
+  border-radius: var(--radius-sm); border: 1.5px dashed var(--line);
+  background: var(--surface-2);
+}
+.mgr-masalah-form input[type='text'],
+.mgr-masalah-form textarea,
+.mgr-masalah-form select {
+  width: 100%; padding: 9px 11px; border-radius: var(--radius-sm);
+  border: 1.5px solid var(--line); background: var(--surface);
+  color: var(--ink); font: inherit; font-size: 13px; font-weight: 600;
+}
+.mgr-masalah-form textarea { resize: vertical; }
+.mgr-masalah-form input:focus-visible,
+.mgr-masalah-form textarea:focus-visible,
+.mgr-masalah-form select:focus-visible { outline: none; box-shadow: var(--ring); }
+.mgr-masalah-pilih { display: flex; gap: 10px; flex-wrap: wrap; }
+.mgr-masalah-pilih label { flex: 1; min-width: 130px; display: flex; flex-direction: column; gap: 5px; }
+.mgr-masalah-pilih label > span {
+  font-size: 10.5px; font-weight: 800; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--muted);
+}
+.mgr-masalah-aksi { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.mgr-masalah-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.mgr-masalah-row {
+  display: flex; flex-direction: column; gap: 7px;
+  padding: 10px 12px; border-radius: var(--radius-sm);
+  border: 1.5px solid var(--line); background: var(--surface-2);
+}
+/* Studio berhenti jualan — satu-satunya tingkat yang boleh berteriak. */
+.mgr-masalah-row.is-stop { border-color: var(--pink-deep); background: var(--pink-bg); }
+.mgr-masalah-row.is-ganggu { border-color: var(--yellow-deep); }
+.mgr-masalah-kepala { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.mgr-masalah-judul { flex: 1; min-width: 120px; font-size: 13px; font-weight: 700; color: var(--ink); }
+.mgr-masalah-umur {
+  font-style: normal; font-size: 11px; font-weight: 800; color: var(--muted);
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.mgr-masalah-tag {
+  flex-shrink: 0; padding: 3px 9px; border-radius: var(--radius-pill);
+  font-size: 10px; font-weight: 800; letter-spacing: .03em; white-space: nowrap;
+  background: var(--surface); color: var(--ink-soft);
+}
+.mgr-masalah-tag.is-stop { background: var(--pink-deep); color: #fff; }
+.mgr-masalah-tag.is-ganggu { background: var(--yellow-bg); color: var(--yellow-deep); }
+.mgr-masalah-meta { font-size: 11.5px; font-weight: 600; color: var(--ink-soft); line-height: 1.5; }
+.mgr-masalah-tutup { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.mgr-masalah-tutup input[type='text'] {
+  flex: 1; min-width: 160px; padding: 8px 11px; border-radius: var(--radius-sm);
+  border: 1.5px solid var(--line); background: var(--surface);
+  color: var(--ink); font: inherit; font-size: 12.5px; font-weight: 600;
+}
+.mgr-masalah-tutup input:focus-visible { outline: none; box-shadow: var(--ring); }
+
+.mgr-masalah-riwayat { margin-top: 14px; }
+.mgr-masalah-riwayat > b {
+  display: block; font-size: 10.5px; font-weight: 800; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--muted); margin-bottom: 8px;
+}
+.mgr-masalah-riwayat ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.mgr-masalah-beres {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 8px 10px; border-radius: var(--radius-sm);
+  border: 1.5px solid var(--line); background: var(--surface-2);
+}
+.mgr-masalah-beres .tgl {
+  font-size: 11.5px; font-weight: 800; color: var(--ink-soft);
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.mgr-masalah-beres .isi {
+  flex: 1; min-width: 120px; font-size: 12px; font-weight: 600; color: var(--ink-soft);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* ---- Strip lapor kendala di Home (migration 0055) ---- */
+.kendala-strip {
+  margin: 0 0 20px; padding: 14px 16px;
+  border-radius: var(--radius); border: 1.5px solid var(--line);
+  background: var(--surface-2);
+  display: flex; flex-direction: column; gap: 12px;
+}
+.kendala-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.kendala-teks { flex: 1; min-width: 160px; display: flex; flex-direction: column; gap: 3px; }
+.kendala-teks b { font-size: 13.5px; font-weight: 800; color: var(--ink); }
+.kendala-teks span { font-size: 12px; font-weight: 600; color: var(--ink-soft); }
+.kendala-btn {
+  flex-shrink: 0; padding: 9px 16px; border-radius: var(--radius-pill);
+  border: 1.5px solid var(--line); background: var(--surface);
+  color: var(--ink); font: inherit; font-size: 12.5px; font-weight: 800;
+  cursor: pointer;
+}
+.kendala-btn.is-utama { background: var(--primary); border-color: var(--primary); color: #fff; }
+.kendala-btn:disabled { opacity: .5; cursor: not-allowed; }
+.kendala-btn:focus-visible { outline: none; box-shadow: var(--ring); }
+
+/* Kendala yang menghentikan studio tidak boleh bisa dilewatkan. */
+.kendala-stop { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.kendala-stop li {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 8px 10px; border-radius: var(--radius-sm);
+  background: var(--pink-bg); border: 1.5px solid var(--pink-deep);
+}
+.kendala-stop .tag {
+  padding: 3px 9px; border-radius: var(--radius-pill);
+  background: var(--pink-deep); color: #fff;
+  font-size: 10px; font-weight: 800; white-space: nowrap;
+}
+.kendala-stop .isi { flex: 1; min-width: 120px; font-size: 12.5px; font-weight: 700; color: var(--ink); }
+.kendala-stop em {
+  font-style: normal; font-size: 11px; font-weight: 800; color: var(--ink-soft);
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+
+.kendala-form { display: flex; flex-direction: column; gap: 10px; }
+.kendala-form input[type='text'],
+.kendala-form select {
+  width: 100%; padding: 9px 11px; border-radius: var(--radius-sm);
+  border: 1.5px solid var(--line); background: var(--surface);
+  color: var(--ink); font: inherit; font-size: 13px; font-weight: 600;
+}
+.kendala-form input:focus-visible,
+.kendala-form select:focus-visible { outline: none; box-shadow: var(--ring); }
+.kendala-pilih { display: flex; gap: 10px; flex-wrap: wrap; }
+.kendala-pilih label { flex: 1; min-width: 130px; display: flex; flex-direction: column; gap: 5px; }
+.kendala-pilih label > span {
+  font-size: 10.5px; font-weight: 800; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--muted);
+}
+.kendala-form > .kendala-btn { align-self: flex-start; }

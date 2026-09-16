@@ -211,6 +211,77 @@ Saat laporan income disimpan, stok kertas & amplop berkurang otomatis.
 
 ---
 
+## ✅ Dashboard Manajemen — disusun ulang jadi 4 tugas manajer
+
+Dashboard lama punya **5 tab & 16 panel** yang dibagi per *sumber data*
+("Hari Ini", "Marketing", "Uang"), sehingga satu tugas manajer tersebar ke
+beberapa layar dan antrean kerjanya menumpuk jadi satu daftar 12 baris yang
+mencampur kertas habis dengan lead yang belum ditelepon. Owner menyebutnya
+"terlalu ruwet". Sekarang strukturnya **persis job description manajer**:
+
+| Tab | Tugas | Bobot KPI |
+|---|---|---|
+| Operasional | SOP karyawan, stok terjaga, masalah teknis teratasi | 30% |
+| Leads & Sales | Menjalin MoU dan berada di event | 20% |
+| Social Media | Ide konten, jadwal konten naik, sosmed aktif | 20% |
+| Keuangan | Menaikkan penjualan minimal 2× omzet bulan sebelumnya | 30% |
+
+**Yang berubah:**
+- **Tab "Hari Ini" & "KPI Manajer" dihapus.** Antrean dipecah per tugas dan
+  muncul di kepala tab pemiliknya; badge angka di tiap label tab menggantikan
+  fungsi "Hari Ini". Skor gabungan 4 tugas pindah ke hero (terlihat dari tab
+  mana pun, tidak pernah merebut layar).
+- **Manajer sekarang melihat rapornya sendiri.** Dulu `skorKPI` hanya dihitung
+  untuk owner dan manajer cuma dapat kartu gembok. Yang tetap owner-only:
+  nominal gaji per orang, rekonsiliasi kas, dan Penilaian Owner.
+- **Penilaian owner (1–5) keluar dari skor** (`Scorecard.penilaian`). Dulu ia
+  KPI berbobot 10% — angka berdasarkan kesan bisa menggeser rapor yang seluruh
+  baris lainnya berasal dari data. Sekarang berdiri sendiri di tab Keuangan.
+- **Kelompok KPI: 5 → 4.** `hasil` dilebur ke `keuangan`, `marketing` jadi
+  `sosmed`, `kepemimpinan` dibubarkan (KPI kemandirian pindah ke `operasional`).
+  Tipe baru `AreaKPI = KelompokKPI | 'owner'` untuk baris di luar skor.
+- **Target omzet: `saranTarget` sekarang 2× BULAN LALU** (dulu 2× rata-rata 3
+  bulan). Rumusnya mengikuti kalimat yang dipakai owner menagihnya. Bulan
+  ekstrem ditangani lewat override manual owner (`targetBerlaku` — nilai
+  tersimpan selalu menang). `basisTarget()` baru mengembalikan bulan pembanding
+  supaya layar bisa menulis "2× September" dan bukan angka tanpa asal-usul.
+- **Panel "Kontribusi Konten" dihapus** (tumpang tindih dengan Sosial Media;
+  daftar campaign menunggak sudah ada di antrean). "Dampak Sosmed ke Penjualan"
+  dipertahankan di tab Social Media.
+- **MoU & Event akhirnya muncul di dashboard** (`KemitraanPanel`). Datanya sudah
+  lama ada lewat `ringkasKemitraan()` (migration 0053) tapi hanya bisa dilihat
+  dengan membuka layar Leads lalu pindah tab.
+
+### 🆕 Log kendala teknis (migration 0055)
+
+Tugas #1 menyebut "masalah teknis teratasi" tapi tidak ada tabel yang
+menyimpannya. `laporan_harian` (0052) memuat ceritanya, tapi satu paragraf per
+HARI — printer macet tiga hari berturut-turut terbaca sebagai tiga kejadian,
+dan tidak ada cara tahu mana yang masih menggantung sekarang.
+
+- **Tabel `masalah_teknis`** menyimpan MASALAH, bukan hari: satu baris hidup
+  sejak dilaporkan sampai `selesai_pada` terisi. `tingkat` (`stop`/`ganggu`/
+  `ringan`) mengurutkan antrean — `stop` berarti studio tidak bisa jualan.
+- **RLS:** semua yang login boleh SELECT & INSERT (operator di lantai yang
+  menemukan kendala; `dilaporkan_oleh` dipaksa ke dirinya sendiri untuk
+  non-pengelola). UPDATE & DELETE dikunci `is_admin()` — menandai selesai
+  adalah keputusan, jadi kendala tidak bisa ditutup sendiri oleh pelapornya.
+- **Dua jalur UI:** `KendalaStrip` di `screens/Home.tsx` (operator melapor dari
+  layar yang memang dibuka tiap pagi; kendala ber-tingkat `stop` tampil terbuka
+  supaya shift berikutnya melihatnya sebelum menyentuh apa pun), dan
+  `MasalahTeknisPanel` di tab Operasional (pengelola menutup + riwayat solusi
+  yang pernah berhasil).
+- **KPI `masalah-teknis`** dinilai dari kendala yang MASUK bulan itu, bukan dari
+  yang masih terbuka hari ini — kalau tidak, menutup tunggakan lama akan
+  menaikkan skor bulan berjalan. Nol laporan = KPI **nonaktif**, bukan 100%:
+  studio yang tidak mencatat apa pun tidak boleh dapat angka sempurna.
+
+**⚠️ Migrasi 0055 belum di-apply ke Supabase.** `fetchAppData` toleran (fallback
+`[]`), jadi app tetap naik — panel & KPI kendala teknis ikut nonaktif sampai
+migrasinya dijalankan.
+
+---
+
 ## 🔲 Phase 3 — remaining (polish / follow-ups)
 
 1. **Browser-test as both roles** (highest priority). Register the first account

@@ -3496,7 +3496,8 @@
 }
 /* Tombol batal-submit. Sengaja kecil dan tidak merah sampai disentuh: ia
    berdampingan dengan tombol simpan, jadi tidak boleh mengundang tangan. */
-.mgr-lap-hapus {
+.mgr-lap-hapus,
+.mgr-mgg-hapus {
   width: 20px; height: 20px; flex: 0 0 auto; padding: 0;
   display: inline-flex; align-items: center; justify-content: center;
   border-radius: 50%; border: 1.5px solid var(--line);
@@ -3504,10 +3505,12 @@
   font-size: 14px; font-weight: 800; line-height: 1; cursor: pointer;
   transition: background .15s, border-color .15s, color .15s;
 }
-.mgr-lap-hapus:hover {
+.mgr-lap-hapus:hover,
+.mgr-mgg-hapus:hover {
   background: var(--pink-bg); border-color: var(--pink); color: var(--pink-deep);
 }
-.mgr-lap-hapus:focus-visible { outline: none; box-shadow: var(--ring); }
+.mgr-lap-hapus:focus-visible,
+.mgr-mgg-hapus:focus-visible { outline: none; box-shadow: var(--ring); }
 .mgr-lap-status { display: flex; flex-direction: column; gap: 6px; }
 .mgr-lap-pilih {
   display: flex; align-items: center; gap: 7px;
@@ -3626,9 +3629,11 @@
 }
 
 /* ---- Denyut Mingguan: papan produksi konten take → edit → tayang ---- */
+/* Tinggal dua angka, jadi kolomnya dibatasi lebarnya — field selebar panel
+   membuat dua isian terlihat seperti formulir panjang. */
 .mgr-ritme-grid {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-  gap: 10px;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 230px));
+  justify-content: start; gap: 10px;
 }
 
 /* Pemilih minggu. Minggu berjalan diberi garis penuh, minggu yang sudah
@@ -3683,9 +3688,28 @@
   min-height: 46px;
 }
 .mgr-mgg-baris .jdl {
+  display: flex; align-items: center; gap: 6px;
   font-size: 12.5px; font-weight: 700; color: var(--ink); line-height: 1.3;
 }
+/* Judul boleh memotong kata panjang; tombol hapus didorong ke ujung kanan
+   supaya posisinya sama di semua baris, tidak ikut panjang judulnya. */
+.mgr-mgg-baris .jdl .teks { min-width: 0; overflow-wrap: anywhere; }
+.mgr-mgg-baris .jdl .mgr-mgg-hapus { margin-left: auto; }
 .mgr-mgg-baris .pic { font-size: 11px; font-weight: 600; color: var(--muted); }
+/* Penanda konten di luar kuota minimum — bukan peringatan, hanya keterangan. */
+.mgr-mgg-baris .jdl .ekstra {
+  margin-left: 6px; padding: 1px 6px; border-radius: var(--radius-pill);
+  background: var(--surface); border: 1px solid var(--line);
+  font-style: normal; font-size: 9.5px; font-weight: 800;
+  letter-spacing: .04em; text-transform: uppercase; color: var(--muted);
+}
+/* Tautan kecil untuk menjadwal ulang hari tayang kartu yang sudah ada. */
+.mgr-mgg-geser {
+  padding: 0; border: none; background: none; cursor: pointer;
+  font-size: 11px; font-weight: 800; color: var(--primary);
+  text-decoration: underline; text-underline-offset: 2px;
+}
+.mgr-mgg-geser:focus-visible { outline: none; box-shadow: var(--ring); border-radius: 3px; }
 .mgr-mgg-baris.is-beres { border-left-color: var(--mint); }
 .mgr-mgg-baris.is-macet { border-left-color: var(--pink); }
 .mgr-mgg-baris.is-jalan { border-left-color: var(--yellow); }
@@ -3724,6 +3748,21 @@
   background: var(--yellow-bg); border-color: var(--yellow); color: var(--yellow-deep);
 }
 .mgr-mgg-chip.is-nanti { opacity: .55; }
+
+/* Mode pilih hari tayang: tujuh sel baris itu berubah jadi tombol. Sengaja
+   memakai kalender yang sudah ada di layar alih-alih memunculkan kotak
+   tanggal — harinya dipilih tepat di tempat ia nanti muncul. */
+.mgr-mgg-pilih {
+  width: 100%; padding: 6px 6px; border-radius: var(--radius-sm);
+  border: 1.5px dashed var(--primary); background: transparent;
+  color: var(--primary); font-size: 10.5px; font-weight: 800;
+  cursor: pointer; line-height: 1.25;
+  transition: background .15s, color .15s;
+}
+.mgr-mgg-pilih:hover { background: var(--primary); color: var(--surface); }
+.mgr-mgg-pilih:focus-visible { outline: none; box-shadow: var(--ring); }
+/* Hari tayang yang berlaku sekarang — supaya "ganti hari" terlihat pindah dari mana. */
+.mgr-mgg-pilih.is-kini { border-style: solid; background: var(--surface-2); }
 
 /* ---- "Dikerjakan oleh": pilih banyak orang + tambah nama ---- */
 .mgr-sos-orang { display: flex; flex-direction: column; gap: 8px; }

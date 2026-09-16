@@ -1623,7 +1623,7 @@ export function kontribusiKonten(
 
 /**
  * Tahap produksi yang DIPATOK untuk semua kartu konten. Owner hanya mengatur
- * hari targetnya lewat `data.ritmeKonten`.
+ * seberapa awal produksinya dimulai, lewat `data.ritmeKonten.siapkan`.
  */
 export const TAHAP_KONTEN: TahapKonten[] = ['take', 'edit', 'tayang']
 
@@ -1637,14 +1637,68 @@ export const TAHAP_KONTEN_LABEL: Record<TahapKonten, string> = {
 export const NAMA_HARI = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min']
 
 /**
- * Ritme bawaan sebelum owner mengaturnya: 2 konten/minggu, take Senin, edit
- * Selasa, tayang Rabu. Angkanya mengikuti kebiasaan yang sudah dipakai tombol
- * cepat deadline di Papan Promosi (Rabu/Sabtu/Minggu), jadi papan langsung
- * masuk akal walau ritmenya belum disetujui.
+ * Ritme bawaan sebelum owner mengaturnya: MINIMAL 2 konten/minggu, produksi
+ * dimulai 2 hari sebelum tayang. Dua angka, dan tidak ada nama hari sama
+ * sekali — harinya urusan tiap kartu.
  */
 export const RITME_DEFAULT: RitmeKonten = {
   jumlah: 2,
-  hari: { take: 1, edit: 2, tayang: 3 },
+  siapkan: 2,
+}
+
+/** Batas atas `siapkan`: rantai tidak boleh lebih panjang dari satu minggu. */
+export const SIAPKAN_MAKS = 6
+
+/**
+ * Jarak hari tiap tahap SEBELUM hari tayang.
+ *
+ * Inilah seluruh kontrak rantai produksi, dan sengaja cuma berisi ANGKA:
+ * `siapkan` hari untuk take, lalu editing di H-1. Sebuah kartu yang tayang
+ * Sabtu jadi punya take Kamis & edit Jumat; yang tayang Rabu punya take Senin
+ * & edit Selasa. Tidak ada hari yang dipatok, jadi konten kedua dan ketiga
+ * dalam satu minggu tidak bisa menumpuk di tanggal yang sama.
+ *
+ * `jumlah` pun dibaca sebagai MINIMUM — konten boleh lebih dari itu, dan kartu
+ * yang melebihi kuota tetap digambar & tetap dinilai (lihat `denyutKonten`).
+ */
+export function jarakTahap(ritme: RitmeKonten): Record<TahapKonten, number> {
+  const take =
+    ritme.siapkan != null
+      ? Math.min(SIAPKAN_MAKS, Math.max(0, Math.round(ritme.siapkan)))
+      : // LEGACY (0051): ritme lama menyimpan nama hari. Jaraknya dipetik dari
+        // selisih hari take ke hari tayang; jarak negatif (urutan tersimpan
+        // mundur) di-nol-kan, bukan dibalik.
+        Math.min(
+          SIAPKAN_MAKS,
+          Math.max(0, (ritme.hari?.tayang ?? 3) - (ritme.hari?.take ?? 1)),
+        )
+  return {
+    take,
+    // Editing selalu menempel di hari sebelum tayang — itu tahap terakhir yang
+    // masih bisa menyelamatkan jadwal. Kalau take sendiri jatuh di hari-H,
+    // editing ikut ke hari-H; tidak ada gunanya menyediakan dial ketiga.
+    edit: Math.min(1, take),
+    tayang: 0,
+  }
+}
+
+/**
+ * Hari tayang bawaan slot ke-`indeks` (0-based) dari `jumlah` slot seminggu,
+ * sebagai offset 0..6 dari Senin.
+ *
+ * Disebar rata: 2 konten/minggu jatuh ke Selasa & Sabtu, 3 ke Selasa/Kamis/
+ * Sabtu. Ini cuma tebakan untuk slot yang BELUM punya kartu — begitu kartunya
+ * dibuat, hari tayangnya diambil alih `deadline` kartu itu. Disebar (bukan
+ * ditumpuk di satu hari bawaan) supaya papan minggu kosong sudah menggambarkan
+ * bentuk yang diharapkan, dan supaya tekanannya datang bertahap sepanjang
+ * minggu alih-alih sekaligus.
+ */
+export function hariBawaanSlot(indeks: number, jumlah: number): number {
+  const n = Math.max(1, jumlah)
+  // `floor`, bukan `round`: pembulatan ke bawah memberi jarak yang lebih merata
+  // untuk jumlah yang tidak habis membagi tujuh (4/minggu → Sen/Rab/Jum/Min,
+  // bukan Sel/Kam/Jum/Min yang dua harinya berdempet).
+  return Math.min(6, Math.max(0, Math.floor(((indeks + 0.5) * 7) / n)))
 }
 
 export type StatusTahap = 'beres' | 'telat' | 'jalan' | 'nanti'
@@ -1665,18 +1719,26 @@ export type TahapSlot = {
 export type StatusSlot = 'beres' | 'macet' | 'jalan' | 'belum'
 
 export type SlotKonten = {
-  /** Nomor urut slot dalam minggunya (1..ritme.jumlah). */
+  /** Nomor urut slot dalam minggunya, diurut menurut hari tayang. */
   nomor: number
   /** Kartu nyata di Papan Promosi; kosong kalau slot ini masih virtual. */
   id?: string
   judul: string
   pic?: string
   /**
+   * Hari tayang slot ini, `YYYY-MM-DD`. Untuk kartu nyata = `deadline`-nya
+   * sendiri (dipilih saat kartu dibuat); untuk slot virtual = hari tayang
+   * bawaan ritme. Seluruh rantai take → edit dihitung mundur dari sini.
+   */
+  tayang: string
+  /**
    * true = slot yang lahir dari ritme, BUKAN kartu yang ada. Sengaja tetap
    * digambar & tetap dinilai: kalau tidak, manajer bisa lolos dengan cara
    * tidak membuat kartu sama sekali — nol kartu = nol telat.
    */
   virtual: boolean
+  /** true = kartu di luar kuota minimum minggu ini (konten ke-3, ke-4, …). */
+  ekstra: boolean
   tahapan: TahapSlot[]
   status: StatusSlot
 }
@@ -1686,11 +1748,22 @@ export type MingguKonten = {
   mulai: string
   selesai: string
   slot: SlotKonten[]
-  /** Tanggal target tahap terakhir (tayang) — batas penilaian minggu ini. */
+  /**
+   * Kamis minggu ini — JANGKAR BULAN, mengikuti aturan ISO-8601 (sebuah minggu
+   * milik bulan tempat hari Kamisnya jatuh). Dipakai supaya minggu yang
+   * menyeberang pergantian bulan selalu jatuh ke satu bulan saja, tanpa perlu
+   * satu pun tanggal dari ritme.
+   */
+  jangkar: string
+  /**
+   * Hari tayang PALING AKHIR di minggu ini. Minggu belum boleh dinilai sebelum
+   * tanggal ini lewat, kalau tidak konten yang memang dijadwalkan Sabtu akan
+   * terhitung "belum beres" sejak Kamis.
+   */
   batas: string
   /** Batas sudah lewat → minggu ini boleh dinilai. */
   jatuhTempo: boolean
-  /** Batasnya jatuh di bulan yang sedang dilihat. */
+  /** Jangkar bulannya jatuh di bulan yang sedang dilihat. */
   dalamBulan: boolean
   /**
    * Minggu ini benar-benar ikut menghitung KPI: sudah jatuh tempo, jatuh di
@@ -1740,8 +1813,21 @@ export type DenyutKonten = {
  * konten tanpa deadline tidak muncul di papan — tapi ketidakhadirannya tetap
  * terlihat, karena slot yang kurang digambar sebagai slot virtual.
  *
- * Minggu dinilai berdasarkan bulan tempat hari TAYANG-nya jatuh, supaya minggu
- * yang menyeberang pergantian bulan tidak terhitung dua kali.
+ * TIAP KARTU PUNYA HARI TAYANGNYA SENDIRI. `ritme.jumlah` adalah jumlah
+ * MINIMUM per minggu dan `ritme.siapkan` cuma memberi jarak rantainya (lihat
+ * `jarakTahap`), jadi konten kedua, ketiga, dan seterusnya tidak menumpuk di
+ * hari yang sama seperti konten pertama — take & edit-nya ikut bergeser
+ * mengikuti hari tayang masing-masing kartu.
+ *
+ * Yang tidak bisa dihindari manajer tetap dua hal: jumlah minimum per minggu
+ * (kekurangannya digambar sebagai slot virtual) dan hari tayang yang harus
+ * tetap berada di dalam minggu itu — kartu yang digeser ke minggu berikutnya
+ * pindah minggu, bukan menghapus kewajiban minggu ini.
+ *
+ * Minggu dinilai berdasarkan bulan tempat hari KAMIS-nya jatuh (aturan
+ * ISO-8601), supaya minggu yang menyeberang pergantian bulan tidak terhitung
+ * dua kali — dan supaya bulan sebuah minggu tidak ikut berpindah tiap kali
+ * kartunya dijadwal ulang.
  *
  * PENTING — penilaian baru berlaku sejak minggu owner MENYETUJUI ritme. Papan
  * tetap menggambar slot & tenggat sebelum itu (supaya bentuknya terlihat lebih
@@ -1755,7 +1841,19 @@ export function denyutKonten(
   hariIni: string,
 ): DenyutKonten {
   const ritme = data.ritmeKonten ?? RITME_DEFAULT
-  const jumlah = Math.max(1, Math.round(ritme.jumlah))
+  const minimum = Math.max(1, Math.round(ritme.jumlah))
+  const jarak = jarakTahap(ritme)
+
+  /**
+   * Target tiap tahap untuk SATU slot, dihitung mundur dari hari tayangnya.
+   * Di-clamp ke Senin minggu itu: rantai yang mundurnya melewati awal minggu
+   * lebih baik menumpuk di Senin daripada hilang dari papan.
+   */
+  const targetTahap = (mulai: string, tayang: string) =>
+    TAHAP_KONTEN.map((kunci) => {
+      const target = geserHari(tayang, -jarak[kunci])
+      return { kunci, target: target < mulai ? mulai : target }
+    })
 
   // Kartu konten berdeadline, dikelompokkan ke minggu hari tayangnya.
   const perMingguKartu = new Map<string, PromoProgram[]>()
@@ -1786,22 +1884,34 @@ export function denyutKonten(
   const perMinggu: MingguKonten[] = [...seninSet]
     .sort((a, b) => a.localeCompare(b))
     .map((mulai) => {
-      const targetTahap = TAHAP_KONTEN.map((k) => ({
-        kunci: k,
-        // hari 1..7 → offset 0..6 dari Senin. Nilai di luar rentang di-clamp
-        // supaya ritme yang tersimpan salah tidak melempar tanggal entah ke mana.
-        target: geserHari(mulai, Math.min(6, Math.max(0, (ritme.hari[k] ?? 1) - 1))),
-      }))
-      const batas = targetTahap[targetTahap.length - 1].target
+      // Diurut menurut hari tayang supaya baris papan terbaca sebagai urutan
+      // waktu, bukan urutan pembuatan kartu.
+      const kartu = (perMingguKartu.get(mulai) ?? []).slice().sort(
+        (a, b) =>
+          (a.deadline ?? '').localeCompare(b.deadline ?? '') ||
+          (a.createdAt ?? '').localeCompare(b.createdAt ?? ''),
+      )
 
-      const kartu = (perMingguKartu.get(mulai) ?? [])
-        .slice()
-        .sort((a, b) => (a.createdAt ?? '').localeCompare(b.createdAt ?? ''))
+      // Dibangun dulu tanpa nomor: nomornya baru bisa diberikan setelah slot
+      // kartu & slot kosong diurut bersama menurut hari tayang masing-masing.
+      const mentah = Array.from(
+        { length: Math.max(minimum, kartu.length) },
+        (_, i) => {
+          const p = kartu[i]
+          return {
+            p,
+            // Kartu memakai hari tayangnya sendiri; slot yang belum punya
+            // kartu memakai hari bawaan yang disebar rata sepanjang minggu.
+            tayang: p?.deadline ?? geserHari(mulai, hariBawaanSlot(i, minimum)),
+            ekstra: i >= minimum,
+          }
+        },
+      ).sort((a, b) => a.tayang.localeCompare(b.tayang))
 
       const slot: SlotKonten[] = []
-      for (let i = 0; i < Math.max(jumlah, kartu.length); i += 1) {
-        const p = kartu[i]
-        const tahapan: TahapSlot[] = targetTahap.map(({ kunci, target }) => {
+      for (let i = 0; i < mentah.length; i += 1) {
+        const { p, tayang, ekstra } = mentah[i]
+        const tahapan: TahapSlot[] = targetTahap(mulai, tayang).map(({ kunci, target }) => {
           const jejak = p?.tahapan?.find((t) => t.kunci === kunci)
           // ADA entri = tahap ini sudah dicentang. Tanggalnya jatuh ke hari ini
           // selama stempel server belum kembali, supaya centang yang baru saja
@@ -1837,7 +1947,9 @@ export function denyutKonten(
           id: p?.id,
           judul,
           pic: p?.pic,
+          tayang,
           virtual: !p,
+          ekstra,
           tahapan,
           status: tahapan.every((t) => t.status === 'beres')
             ? 'beres'
@@ -1869,12 +1981,18 @@ export function denyutKonten(
         }
       }
 
+      // Batas penilaian ikut slot yang dijadwalkan paling belakang — minggu
+      // tidak boleh "ditutup" selagi masih ada konten yang memang belum
+      // waktunya tayang.
+      const batas = slot.reduce((akhir, s) => (s.tayang > akhir ? s.tayang : akhir), mulai)
+      const jangkar = geserHari(mulai, 3)
       const jatuhTempo = batas < hariIni
-      const dalamBulan = batas.startsWith(monthKey)
+      const dalamBulan = jangkar.startsWith(monthKey)
       return {
         mulai,
         selesai: geserHari(mulai, 6),
         slot,
+        jangkar,
         batas,
         jatuhTempo,
         dalamBulan,

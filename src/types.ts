@@ -457,10 +457,30 @@ export type TahapanKartu = {
  * ritme ini hanya simulasi dan tidak boleh dipakai menilai orang.
  */
 export type RitmeKonten = {
-  /** Berapa konten yang harus tayang tiap minggu. Ini yang melahirkan slot. */
+  /**
+   * Konten MINIMUM yang harus tayang tiap minggu. Ini yang melahirkan slot:
+   * kekurangannya digambar sebagai slot kosong dan disebar rata sepanjang
+   * minggu. Lebih dari angka ini boleh — kartu ekstra tetap masuk papan dan
+   * tetap dinilai.
+   */
   jumlah: number
-  /** Hari target tiap tahap. 1 = Senin … 7 = Minggu. */
-  hari: Record<TahapKonten, number>
+  /**
+   * Berapa hari sebelum tayang produksi dimulai (take). Editing jatuh di H-1.
+   *
+   * Hanya JARAK, bukan nama hari: hari tayang tiap kartu dipilih sendiri di
+   * papan lewat `deadline`, dan take/edit bergeser mengikutinya. Satu angka
+   * inilah seluruh kontrak rantainya — lihat `jarakTahap()`.
+   */
+  siapkan?: number
+  /**
+   * LEGACY (migration 0051): hari target tiap tahap, 1 = Senin … 7 = Minggu.
+   *
+   * Dulu ritme memaksa satu rantai hari tetap untuk seluruh minggu, sehingga
+   * konten kedua & ketiga menumpuk di tanggal yang sama. Digantikan `siapkan`.
+   * Masih dibaca supaya baris yang tersimpan sebelum perubahan tetap punya
+   * jarak yang benar; tidak pernah ditulis lagi.
+   */
+  hari?: Record<TahapKonten, number>
   disetujui?: boolean
   /** ISO timestamp saat owner menyetujui. */
   disetujuiPada?: string

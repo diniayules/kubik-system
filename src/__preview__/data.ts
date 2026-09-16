@@ -126,7 +126,10 @@ export const PREVIEW_DATA: AppData = {
   promoPrograms: [
     { id: 'pr1', judul: 'Promo Balik Sekolah', deskripsi: '', tahap: 'berjalan', status: 'disetujui', jenis: 'campaign', pic: RIZKY, deadline: `${BULAN_INI}-12`, createdAt: iso(`${BULAN_INI}-02`) },
     { id: 'pr2', judul: 'Giveaway Reels', deskripsi: '', tahap: 'rencana', status: 'menunggu', jenis: 'campaign', createdAt: iso(`${BULAN_INI}-07`) },
-    { id: 'pr3', judul: 'Konten #1 · 7 Sep', deskripsi: '', tahap: 'berjalan', status: 'disetujui', jenis: 'konten', pic: AYU, deadline: `${BULAN_INI}-09`, createdAt: iso(`${BULAN_INI}-07`), tahapan: [{ kunci: 'take', oleh: AYU }] },
+    // Dua konten di minggu yang sama tapi hari tayangnya beda — memperlihatkan
+    // rantai take/edit yang bergeser mengikuti masing-masing kartu.
+    { id: 'pr3', judul: 'Reels testimoni', deskripsi: '', tahap: 'berjalan', status: 'disetujui', jenis: 'konten', pic: AYU, deadline: `${BULAN_INI}-09`, createdAt: iso(`${BULAN_INI}-07`), tahapan: [{ kunci: 'take', oleh: AYU }] },
+    { id: 'pr4', judul: 'Carousel harga', deskripsi: '', tahap: 'rencana', status: 'disetujui', jenis: 'konten', pic: RIZKY, deadline: `${BULAN_INI}-12`, createdAt: iso(`${BULAN_INI}-08`), tahapan: [] },
   ],
   // Dikosongkan supaya target jatuh ke saran otomatis (2x bulan lalu) dan
   // banner "Simulasi — belum disetujui" ikut terlihat.
@@ -145,7 +148,10 @@ export const PREVIEW_DATA: AppData = {
       { id: 'j3', label: 'Follow up MoU SMA 3' },
     ],
   },
-  ritmeKonten: { jumlah: 2, hari: { take: 1, edit: 3, tayang: 5 }, disetujui: true },
+  // Bentuk baru: dua angka saja. Baris lama yang masih menyimpan `hari` tetap
+  // terbaca (lihat `jarakTahap`), dan ikut dinormalkan begitu ritme disimpan
+  // sekali dari layar.
+  ritmeKonten: { jumlah: 2, siapkan: 2, disetujui: true },
   sosmedHarian: [
     { tanggal: `${BULAN_INI}-14`, posting: true, story: true, repost: false, engagement: true, olehList: [AYU] },
     { tanggal: `${BULAN_INI}-15`, posting: false, story: true, repost: false, engagement: true, olehList: [AYU] },

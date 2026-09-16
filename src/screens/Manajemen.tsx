@@ -31,6 +31,8 @@ import {
   dampakSosmed,
   MIN_SAMPEL_DAMPAK,
   denyutKonten,
+  jarakTahap,
+  SIAPKAN_MAKS,
   eksekusiKonten,
   kesiapanJadwal,
   NAMA_HARI,
@@ -71,7 +73,6 @@ import type {
   RingkasKemitraan,
   RingkasMasalah,
   HariDampak,
-  MingguKonten,
   SkorKelompok,
 } from '../manajemen'
 import { isPengelola } from '../lib/roles'
@@ -139,12 +140,31 @@ function tanggalMinggu(mulai: string): string[] {
   })
 }
 
-/** "2 konten/minggu · Take video Sen · Editing Sel · Tayang Rab". */
+/**
+ * "min. 2 konten/minggu · Take video H-2 · Editing H-1".
+ *
+ * Disebut sebagai JARAK, bukan nama hari, karena itulah yang sebenarnya
+ * mengikat sejak tiap kartu punya hari tayangnya sendiri (lihat `jarakTahap`).
+ */
 function teksRitme(r: RitmeKonten): string {
-  const tahap = TAHAP_KONTEN.map(
-    (k) => `${TAHAP_KONTEN_LABEL[k]} ${NAMA_HARI[Math.min(6, Math.max(0, (r.hari[k] ?? 1) - 1))]}`,
+  const jarak = jarakTahap(r)
+  const tahap = TAHAP_KONTEN.filter((k) => k !== 'tayang').map(
+    (k) => `${TAHAP_KONTEN_LABEL[k]} ${jarak[k] === 0 ? 'hari-H' : `H-${jarak[k]}`}`,
   )
-  return [`${r.jumlah} konten/minggu`, ...tahap].join(' · ')
+  return [`min. ${r.jumlah} konten/minggu`, ...tahap].join(' · ')
+}
+
+/**
+ * Contoh konkret dari satu angka `siapkan`: "kartu yang tayang Sabtu di-take
+ * Kamis, diedit Jumat". Angka H-2 benar tapi abstrak; nama hari membuat owner
+ * langsung tahu apa yang ia setujui. Sabtu dipakai sebagai contoh karena cukup
+ * jauh dari awal minggu untuk menampung rantai terpanjang yang masuk akal.
+ */
+function contohRantai(siapkan: number): string {
+  const CONTOH = 5 // indeks Sabtu pada NAMA_HARI (0 = Senin)
+  const take = NAMA_HARI[Math.max(0, CONTOH - siapkan)]
+  const edit = NAMA_HARI[Math.max(0, CONTOH - Math.min(1, siapkan))]
+  return `contohnya tayang ${NAMA_HARI[CONTOH]} berarti take ${take}, editing ${edit}`
 }
 
 function rupiahRingkas(n: number): string {
@@ -486,6 +506,12 @@ export function Manajemen({
   // ---- Denyut Mingguan -------------------------------------------------
   const [mingguPilih, setMingguPilih] = useState<string | null>(null)
   const [editRitme, setEditRitme] = useState(false)
+  /**
+   * Slot yang sedang memilih hari tayang, `"<senin>#<nomor>"`. Selama terisi,
+   * tujuh sel hari pada baris itu berubah jadi tombol pilih — pemilih tanggal
+   * yang memakai kalender yang sudah ada di layar, bukan dialog baru.
+   */
+  const [pilihHari, setPilihHari] = useState<string | null>(null)
   // Minggu yang ditampilkan papan: pilihan manual, kalau tidak ada jatuh ke
   // minggu berjalan, lalu ke minggu terakhir di bulan itu (untuk bulan lampau).
   const mingguAktif =
@@ -520,19 +546,21 @@ export function Manajemen({
   }
 
   /**
-   * Wujudkan satu slot virtual jadi kartu sungguhan di Papan Promosi, dengan
-   * deadline = hari tayang minggu itu. Judul & detailnya disunting di Papan
+   * Wujudkan satu slot jadi kartu sungguhan di Papan Promosi, dengan deadline =
+   * hari tayang YANG DIPILIH di baris itu. Harinya ditanyakan (bukan dipatok ke
+   * hari ritme) supaya konten kedua, ketiga, dan seterusnya dalam satu minggu
+   * tidak menumpuk di tanggal yang sama. Judul & detailnya disunting di Papan
    * Promosi — papan ini sengaja tidak menduplikasi formulir kartu.
    */
-  function buatKartuKonten(m: MingguKonten, nomor: number) {
+  function buatKartuKonten(tayang: string) {
     const kartu: PromoProgram = {
       id: uid(),
-      judul: `Konten #${nomor} · ${labelTanggalPendek(m.mulai)}`,
+      judul: `Konten · ${labelHariTanggal(tayang)}`,
       deskripsi: '',
       tahap: 'rencana',
       status: 'disetujui',
       jenis: 'konten',
-      deadline: m.batas,
+      deadline: tayang,
       dibuatOleh: meId,
       createdAt: new Date().toISOString(),
       tahapan: [],
@@ -541,9 +569,48 @@ export function Manajemen({
   }
 
   /**
-   * Simpan ritme. Selama `disetujui` belum true, KPI "konten mingguan tepat
-   * ritme" tetap dihitung tapi ditandai simulasi — pola yang sama dengan
-   * persetujuan target bulanan.
+   * Hapus satu kartu konten langsung dari papan — kartunya hilang juga dari
+   * Papan Promosi, karena itu kartu yang sama.
+   *
+   * Yang TIDAK ikut terhapus adalah kewajibannya: kalau minggu itu jadi kurang
+   * dari minimum, barisnya kembali muncul sebagai slot kosong. Menghapus kartu
+   * tidak pernah bisa dipakai untuk mengosongkan papan.
+   */
+  function hapusKartuKonten(kartuId: string) {
+    setData({
+      ...data,
+      promoPrograms: data.promoPrograms.filter((p) => p.id !== kartuId),
+    })
+  }
+
+  /**
+   * Pindahkan hari tayang sebuah kartu konten — jadwal ulang yang jujur:
+   * target take & edit ikut bergeser mengikuti hari tayang yang baru.
+   *
+   * Yang TIDAK ikut bergeser adalah tanggal centangnya: `selesaiPada`
+   * distempel database (0051), jadi menggeser jadwal hanya memindahkan target,
+   * bukan mengarang ulang kapan pekerjaannya benar-benar terjadi. Sama persis
+   * dengan mengubah deadline kartu di Papan Promosi.
+   */
+  function geserTayang(kartuId: string, tayang: string) {
+    setData({
+      ...data,
+      promoPrograms: data.promoPrograms.map((p) =>
+        p.id === kartuId ? { ...p, deadline: tayang } : p,
+      ),
+    })
+  }
+
+  /**
+   * Simpan ritme — dari owner maupun manajer. Selama `disetujui` belum true,
+   * KPI "konten mingguan tepat ritme" tetap dihitung tapi ditandai simulasi,
+   * pola yang sama dengan persetujuan target bulanan.
+   *
+   * Siapa yang boleh menyetujui ditentukan di RitmeEditor, bukan di sini; RLS
+   * `app_config` sendiri memang membuka tulis untuk pengelola (owner &
+   * manajer, lihat 0042), jadi pembatasannya bersifat alur kerja — cukup untuk
+   * satu owner + satu manajer, dan terlihat di layar owner kalau ritmenya
+   * berubah jadi belum disetujui.
    */
   function simpanRitme(r: RitmeKonten) {
     setData({ ...data, ritmeKonten: r })
@@ -1606,21 +1673,24 @@ export function Manajemen({
               }
               badge={denyut.dinilai > 0 ? persen(denyut.rasio) : undefined}
               aksi={
-                isOwner ? (
-                  <button
-                    type="button"
-                    className={'mgr-aksi-btn' + (denyut.disetujui ? '' : ' is-utama')}
-                    onClick={() => setEditRitme((v) => !v)}
-                  >
-                    {editRitme ? 'Tutup' : 'Atur ritme'}
-                  </button>
-                ) : undefined
+                // Terbuka untuk manajer juga — layar ini memang cuma dicapai
+                // pengelola (owner & manajer), dan manajer-lah yang paling tahu
+                // ritme produksi yang sanggup ia jalankan. Yang tetap owner-only
+                // adalah MENYETUJUINYA; lihat RitmeEditor.
+                <button
+                  type="button"
+                  className={'mgr-aksi-btn' + (denyut.disetujui ? '' : ' is-utama')}
+                  onClick={() => setEditRitme((v) => !v)}
+                >
+                  {editRitme ? 'Tutup' : 'Atur ritme'}
+                </button>
               }
             >
-              {editRitme && isOwner && (
+              {editRitme && (
                 <RitmeEditor
                   ritme={denyut.ritme}
                   disetujui={denyut.disetujui}
+                  bolehSetujui={isOwner}
                   onSimpan={simpanRitme}
                   onBatal={() => setEditRitme(false)}
                 />
@@ -1629,9 +1699,10 @@ export function Manajemen({
               {!editRitme && !denyut.disetujui && (
                 <p className="mgr-hint">
                   {denyut.belumDiatur
-                    ? 'Papan memakai ritme bawaan — belum pernah diatur owner.'
+                    ? 'Papan memakai ritme bawaan — belum pernah diatur.'
                     : 'Ritme ini belum disetujui owner.'}{' '}
-                  Slot & tenggatnya tetap digambar, tapi skornya masih simulasi.
+                  Slot &amp; tenggatnya tetap digambar, tapi skornya masih
+                  simulasi{isOwner ? '' : ' sampai owner menyetujuinya'}.
                 </p>
               )}
 
@@ -1670,67 +1741,138 @@ export function Manajemen({
                       </div>
                     ))}
 
-                    {mingguAktif.slot.map((slot) => (
-                      <Fragment key={slot.nomor}>
-                        <div className={`mgr-mgg-baris is-${slot.status}`}>
-                          <span className="jdl">{slot.judul}</span>
-                          {slot.virtual ? (
-                            <button
-                              type="button"
-                              className="mgr-mgg-buat"
-                              onClick={() => buatKartuKonten(mingguAktif, slot.nomor)}
-                            >
-                              + Buat kartu
-                            </button>
-                          ) : (
-                            <span className="pic">
-                              {slot.pic
-                                ? (namaById.get(slot.pic) ?? 'PIC tidak dikenal')
-                                : 'Tanpa PIC'}
-                            </span>
-                          )}
-                        </div>
-                        {tanggalMinggu(mingguAktif.mulai).map((t) => (
-                          <div key={t} className="mgr-mgg-sel">
-                            {slot.tahapan
-                              .filter((th) => th.target === t)
-                              .map((th) => (
+                    {mingguAktif.slot.map((slot) => {
+                      const kunciSlot = `${mingguAktif.mulai}#${slot.nomor}`
+                      const memilih = pilihHari === kunciSlot
+                      return (
+                        <Fragment key={kunciSlot}>
+                          <div className={`mgr-mgg-baris is-${slot.status}`}>
+                            <span className="jdl">
+                              <span className="teks">{slot.judul}</span>
+                              {slot.ekstra && <em className="ekstra">ekstra</em>}
+                              {slot.id && (
                                 <button
-                                  key={th.kunci}
                                   type="button"
-                                  className={`mgr-mgg-chip is-${th.status}`}
-                                  disabled={slot.virtual}
-                                  title={
-                                    slot.virtual
-                                      ? 'Buat kartunya dulu untuk bisa mencentang tahap ini'
-                                      : th.selesaiPada
-                                        ? `Selesai ${labelTanggalPendek(th.selesaiPada)}` +
-                                          (th.status === 'telat'
-                                            ? ` · telat ${th.telatHari} hari`
-                                            : ' · tepat waktu')
-                                        : th.status === 'telat'
-                                          ? `Lewat tenggat ${th.telatHari} hari`
-                                          : `Target ${labelTanggalPendek(th.target)}`
-                                  }
-                                  onClick={() => slot.id && toggleTahap(slot.id, th.kunci)}
+                                  className="mgr-mgg-hapus"
+                                  title="Hapus kartu konten ini"
+                                  aria-label={`Hapus kartu ${slot.judul}`}
+                                  onClick={() => {
+                                    const jejak = slot.tahapan.filter((t) => t.selesaiPada)
+                                    if (
+                                      confirm(
+                                        `Hapus kartu "${slot.judul}"? Kartunya hilang juga dari Papan Promosi` +
+                                          (jejak.length > 0
+                                            ? `, berikut ${jejak.length} tahap yang sudah dicentang`
+                                            : '') +
+                                          '. Kalau minggu ini jadi kurang dari minimal, slotnya kembali kosong.',
+                                      )
+                                    ) {
+                                      if (pilihHari === kunciSlot) setPilihHari(null)
+                                      hapusKartuKonten(slot.id!)
+                                    }
+                                  }}
                                 >
-                                  <b>
-                                    {th.status === 'beres'
-                                      ? '✓'
-                                      : th.status === 'telat'
-                                        ? '!'
-                                        : '○'}
-                                  </b>{' '}
-                                  {th.label}
+                                  ×
                                 </button>
-                              ))}
+                              )}
+                            </span>
+                            {slot.virtual ? (
+                              <button
+                                type="button"
+                                className="mgr-mgg-buat"
+                                onClick={() => setPilihHari(memilih ? null : kunciSlot)}
+                              >
+                                {memilih ? 'Batal' : '+ Buat kartu'}
+                              </button>
+                            ) : (
+                              <span className="pic">
+                                {slot.pic
+                                  ? (namaById.get(slot.pic) ?? 'PIC tidak dikenal')
+                                  : 'Tanpa PIC'}
+                                {' · '}
+                                <button
+                                  type="button"
+                                  className="mgr-mgg-geser"
+                                  onClick={() => setPilihHari(memilih ? null : kunciSlot)}
+                                >
+                                  {memilih ? 'batal' : 'ganti hari tayang'}
+                                </button>
+                              </span>
+                            )}
                           </div>
-                        ))}
-                      </Fragment>
-                    ))}
+                          {tanggalMinggu(mingguAktif.mulai).map((t) =>
+                            memilih ? (
+                              // Sel harinya sendiri yang jadi pemilih tanggal:
+                              // hari tayang dipilih di kalender tempat ia akan
+                              // muncul, bukan di kotak tanggal terpisah.
+                              <div key={t} className="mgr-mgg-sel">
+                                <button
+                                  type="button"
+                                  className={
+                                    'mgr-mgg-pilih' + (t === slot.tayang ? ' is-kini' : '')
+                                  }
+                                  title={`Tayang ${labelHariTanggal(t)}`}
+                                  onClick={() => {
+                                    if (slot.virtual) buatKartuKonten(t)
+                                    else if (slot.id) geserTayang(slot.id, t)
+                                    setPilihHari(null)
+                                  }}
+                                >
+                                  Tayang
+                                </button>
+                              </div>
+                            ) : (
+                              <div key={t} className="mgr-mgg-sel">
+                                {slot.tahapan
+                                  .filter((th) => th.target === t)
+                                  .map((th) => (
+                                    <button
+                                      key={th.kunci}
+                                      type="button"
+                                      className={`mgr-mgg-chip is-${th.status}`}
+                                      disabled={slot.virtual}
+                                      title={
+                                        slot.virtual
+                                          ? 'Buat kartunya dulu untuk bisa mencentang tahap ini'
+                                          : th.selesaiPada
+                                            ? `Selesai ${labelTanggalPendek(th.selesaiPada)}` +
+                                              (th.status === 'telat'
+                                                ? ` · telat ${th.telatHari} hari`
+                                                : ' · tepat waktu')
+                                            : th.status === 'telat'
+                                              ? `Lewat tenggat ${th.telatHari} hari`
+                                              : `Target ${labelTanggalPendek(th.target)}`
+                                      }
+                                      onClick={() => slot.id && toggleTahap(slot.id, th.kunci)}
+                                    >
+                                      <b>
+                                        {th.status === 'beres'
+                                          ? '✓'
+                                          : th.status === 'telat'
+                                            ? '!'
+                                            : '○'}
+                                      </b>{' '}
+                                      {th.label}
+                                    </button>
+                                  ))}
+                              </div>
+                            ),
+                          )}
+                        </Fragment>
+                      )
+                    })}
                   </div>
                 </div>
               )}
+
+              <p className="mgr-hint">
+                Hari tayang dipilih per kartu: klik <b>+ Buat kartu</b> (atau{' '}
+                <b>ganti hari tayang</b>), lalu pilih harinya di baris itu —
+                take &amp; editing bergeser sendiri mengikuti. Baris yang masih
+                bertombol <b>+ Buat kartu</b> adalah kekurangan dari minimal{' '}
+                {denyut.ritme.jumlah} konten/minggu; konten lebih dari itu boleh
+                dan ikut dinilai.
+              </p>
 
               {denyut.macet.length > 0 && (
                 <p className="mgr-hint">
@@ -1817,7 +1959,11 @@ export function Manajemen({
                       <em>
                         {s.virtual
                           ? 'kartu belum dibuat'
-                          : (s.pic ? (namaById.get(s.pic) ?? 'PIC tidak dikenal') : 'tanpa PIC')}
+                          : `${labelHariTanggal(s.tayang)} · ${
+                              s.pic
+                                ? (namaById.get(s.pic) ?? 'PIC tidak dikenal')
+                                : 'tanpa PIC'
+                            }`}
                       </em>
                     </li>
                   ))}
@@ -3136,35 +3282,57 @@ const FIELD_TARGET: {
  * ditawarkan, bukan dipaksakan.
  */
 /**
- * Kontrak ritme konten mingguan: berapa konten per minggu, dan hari target
- * tiap tahap. Tahapannya sendiri DIPATOK (take → edit → tayang) — yang bisa
- * bergeser cuma harinya.
+ * Kontrak ritme konten mingguan — DUA ANGKA, tidak ada nama hari.
+ *
+ * Bentuk sebelumnya meminta hari untuk take, edit, dan tayang, dan itulah yang
+ * membuatnya salah: satu rantai hari tetap untuk seluruh minggu berarti konten
+ * kedua & ketiga menumpuk di tanggal yang sama, dan tidak ada cara memilih
+ * kapan masing-masing tayang. Sekarang harinya milik tiap kartu (dipilih di
+ * papan), sementara yang disepakati di sini cuma seberapa sering dan seberapa
+ * awal disiapkan.
  */
 function RitmeEditor({
   ritme,
   disetujui,
+  bolehSetujui,
   onSimpan,
   onBatal,
 }: {
   ritme: RitmeKonten
   disetujui: boolean
+  /**
+   * Owner. Manajer boleh MENGUSULKAN ritme tapi tidak menyetujuinya: ritme
+   * adalah patokan yang dipakai menilai manajer sendiri, jadi kalau ia boleh
+   * mengesahkan angkanya, scorecard-nya berhenti berarti.
+   */
+  bolehSetujui: boolean
   onSimpan: (r: RitmeKonten) => void
   onBatal: () => void
 }) {
-  const [draf, setDraf] = useState<RitmeKonten>(ritme)
-
-  // Urutan hari tidak boleh mundur: konten tidak bisa tayang sebelum diedit.
-  // Ditahan di sini, bukan di `denyutKonten()`, supaya ritme yang tersimpan
-  // selalu masuk akal alih-alih dikoreksi diam-diam saat dinilai.
-  const urut = TAHAP_KONTEN.map((k) => draf.hari[k] ?? 1)
-  const mundur = urut.some((h, i) => i > 0 && h < urut[i - 1])
+  // Ritme lama (berbasis nama hari) langsung dinormalkan ke bentuk baru begitu
+  // editor dibuka, jadi menyimpan sekali saja sudah membuang sisa `hari`.
+  const [draf, setDraf] = useState<RitmeKonten>(() => ({
+    jumlah: ritme.jumlah,
+    siapkan: jarakTahap(ritme).take,
+    disetujui: ritme.disetujui,
+    disetujuiPada: ritme.disetujuiPada,
+  }))
+  const siapkan = draf.siapkan ?? 0
+  // Tidak ada lagi keadaan yang tidak sah untuk ditahan (dua-duanya angka yang
+  // sudah di-clamp), jadi yang tersisa cuma: perlu tidaknya disetujui ulang.
+  // Ritme lama yang masih berbentuk nama hari selalu dianggap berubah, supaya
+  // persetujuannya ikut memindahkannya ke bentuk baru.
+  const berubah =
+    ritme.siapkan == null ||
+    draf.jumlah !== ritme.jumlah ||
+    siapkan !== jarakTahap(ritme).take
 
   return (
     <div className="mgr-target-editor">
       <div className="mgr-ritme-grid">
         <label className="mgr-target-field">
           <span>
-            Konten per minggu<em>slot</em>
+            Minimal per minggu<em>konten</em>
           </span>
           <input
             type="number"
@@ -3180,31 +3348,42 @@ function RitmeEditor({
             }
           />
         </label>
-        {TAHAP_KONTEN.map((k) => (
-          <label key={k} className="mgr-target-field">
-            <span>{TAHAP_KONTEN_LABEL[k]}<em>hari</em></span>
-            <select
-              value={draf.hari[k] ?? 1}
-              onChange={(e) =>
-                setDraf((d) => ({
-                  ...d,
-                  hari: { ...d.hari, [k]: Number(e.target.value) },
-                }))
-              }
-            >
-              {NAMA_HARI.map((nama, i) => (
-                <option key={nama} value={i + 1}>
-                  {nama}
-                </option>
-              ))}
-            </select>
-          </label>
-        ))}
+        <label className="mgr-target-field">
+          <span>
+            Siapkan sejak<em>H-…</em>
+          </span>
+          <input
+            type="number"
+            inputMode="numeric"
+            min={0}
+            max={SIAPKAN_MAKS}
+            value={siapkan}
+            onChange={(e) =>
+              setDraf((d) => ({
+                ...d,
+                siapkan: Math.min(
+                  SIAPKAN_MAKS,
+                  Math.max(0, Math.round(Number(e.target.value) || 0)),
+                ),
+              }))
+            }
+          />
+        </label>
       </div>
-      {mundur && (
+      <p className="mgr-hint">
+        {teksRitme(draf)} — {contohRantai(siapkan)}. Hari tayangnya sendiri
+        dipilih per kartu di papan, jadi konten boleh terbit hari apa saja dan
+        boleh lebih dari {draf.jumlah}× seminggu; angka itu batas bawah, bukan
+        kuota.
+      </p>
+      {!bolehSetujui && (
         <p className="mgr-hint">
-          Urutan harinya mundur — konten tidak bisa tayang sebelum di-take atau
-          diedit.
+          Angkanya boleh Anda ubah, tapi yang mengesahkan tetap owner — inilah
+          patokan yang dipakai menilai Anda. Selama belum disetujui, papan tetap
+          jalan dan skornya dihitung sebagai simulasi.
+          {berubah && disetujui
+            ? ' Menyimpan perubahan ini mencabut persetujuan yang sekarang.'
+            : ''}
         </p>
       )}
       <div className="mgr-target-aksi">
@@ -3214,26 +3393,36 @@ function RitmeEditor({
         </button>
         <button
           type="button"
-          className="mgr-aksi-btn"
-          disabled={mundur}
-          onClick={() => onSimpan(draf)}
-        >
-          Simpan
-        </button>
-        <button
-          type="button"
-          className="mgr-aksi-btn is-utama"
-          disabled={mundur || (disetujui && draf === ritme)}
+          className={'mgr-aksi-btn' + (bolehSetujui ? '' : ' is-utama')}
           onClick={() =>
-            onSimpan({
-              ...draf,
-              disetujui: true,
-              disetujuiPada: new Date().toISOString(),
-            })
+            onSimpan(
+              // Usulan manajer yang mengubah angkanya mencabut persetujuan
+              // lama: patokannya berubah, jadi harus disahkan ulang. Simpan
+              // milik owner sendiri tidak perlu itu — ia memang pengesahnya.
+              bolehSetujui || !berubah
+                ? draf
+                : { ...draf, disetujui: false, disetujuiPada: undefined },
+            )
           }
         >
-          {disetujui ? 'Simpan & setujui ulang' : 'Setujui ritme'}
+          {bolehSetujui ? 'Simpan' : 'Simpan usulan'}
         </button>
+        {bolehSetujui && (
+          <button
+            type="button"
+            className="mgr-aksi-btn is-utama"
+            disabled={disetujui && !berubah}
+            onClick={() =>
+              onSimpan({
+                ...draf,
+                disetujui: true,
+                disetujuiPada: new Date().toISOString(),
+              })
+            }
+          >
+            {disetujui ? 'Simpan & setujui ulang' : 'Setujui ritme'}
+          </button>
+        )}
       </div>
     </div>
   )

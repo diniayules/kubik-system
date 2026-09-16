@@ -20,10 +20,25 @@
 --     tanpa slot yang digambar dari ritme, manajer bisa "lolos" dengan cara
 --     tidak membuat kartu sama sekali — nol kartu = nol telat.
 --
+--     CATATAN (perubahan sesudahnya, bentuk kolomnya TIDAK berubah karena
+--     jsonb). Ritme di atas ternyata salah bentuk: satu rantai hari tetap untuk
+--     seluruh minggu berarti konten kedua & ketiga menumpuk di tanggal yang
+--     sama, dan tidak ada cara memilih kapan masing-masing tayang. Bentuk yang
+--     dipakai sekarang cuma dua angka:
+--       { "jumlah": 2, "siapkan": 2, "disetujui": true, "disetujuiPada": "..." }
+--     `jumlah` = MINIMUM per minggu (boleh lebih), `siapkan` = berapa hari
+--     sebelum tayang produksi dimulai (editing selalu H-1). Hari tayang tiap
+--     kartu berdiri sendiri di `promo_programs.deadline`, dan take/edit ikut
+--     bergeser mengikutinya. `hari` yang lama masih DIBACA untuk baris yang
+--     tersimpan sebelum perubahan, tapi tidak pernah ditulis lagi — menyimpan
+--     ritme sekali dari layar sudah menggantinya. Lihat `jarakTahap()` dan
+--     `denyutKonten()` di src/manajemen.ts.
+--
 --  2. `promo_programs.tahapan` — centang tiap tahap pada satu kartu:
 --       [{ "kunci": "take", "selesaiPada": "2026-09-08", "oleh": "…" }]
 --     Tahapannya DIPATOK di aplikasi (take → edit → tayang); yang boleh
---     diatur owner hanyalah hari targetnya, lewat `ritme_konten`.
+--     diatur owner hanyalah seberapa awal produksinya dimulai, lewat
+--     `ritme_konten.siapkan`.
 --
 -- Sama seperti `selesai_pada` (0046), TANGGAL TIAP TAHAP DISTEMPEL DATABASE,
 -- bukan dikirim dari layar — kalau tidak, tahap yang dicentang menyusul tak

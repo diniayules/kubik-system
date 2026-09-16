@@ -283,8 +283,13 @@ dan tidak ada cara tahu mana yang masih menggantung sekarang.
   menaikkan skor bulan berjalan. Nol laporan = KPI **nonaktif**, bukan 100%:
   studio yang tidak mencatat apa pun tidak boleh dapat angka sempurna.
 
-**⚠️ Migrasi 0055 belum di-apply ke Supabase — dan kode ini AMAN tanpa itu.**
-`AppData.masalahTeknisSiap` (dari `!masalahRes.error` di `fetchAppData`) memisah
+**✅ Migrasi 0055 sudah di-apply** ke `jbmpohlxmkbidrumotrq` (2026-09-16, via
+MCP). Tabel `masalah_teknis` ada: 12 kolom, 4 policy, RLS aktif. Panel Masalah
+Teknis & `KendalaStrip` sekarang hidup.
+
+Kode ini tetap **AMAN kalau tabelnya tidak terbaca** (mis. project lain yang
+belum dimigrasi). `AppData.masalahTeknisSiap` (dari `!masalahRes.error` di
+`fetchAppData`) memisah
 "tabelnya belum ada" dari "tabelnya ada tapi kosong". Saat `false`:
 - panel Masalah Teknis jadi baca-saja + menerangkan sebabnya (tombol lapor,
   tandai selesai, buka lagi, riwayat & tally semuanya disembunyikan);
@@ -299,10 +304,12 @@ Sisa dashboard tidak terpengaruh. Migrasinya idempoten (`create table if not
 exists`, `drop policy if exists`) dan seluruh dependensinya sudah ada:
 `touch_updated_at()` (0001), `is_admin()` (0002), `gen_random_uuid()` (0001).
 
-**⚠️ Project ref perlu dipastikan.** Dokumen ini menyebut `jbmpohlxmkbidrumotrq`
-(Phase 1), sedangkan `VITE_SUPABASE_URL` di environment menunjuk
-`mdfibmiujwrhnkufaaco`. Konfirmasi mana yang produksi sebelum menjalankan
-migrasi apa pun.
+**Project ref: `jbmpohlxmkbidrumotrq` — satu-satunya, tidak ada yang lain.**
+Dipakai `.env.local`, `.mcp.json`, dan env Production Vercel
+(`kubikteam/kubik-system`). Versi dokumen sebelumnya memperingatkan adanya ref
+kedua `mdfibmiujwrhnkufaaco`; ref itu tidak pernah ada (DNS-nya tidak resolve,
+dan `GET /v1/projects` hanya memulangkan satu project). Peringatan itu ditulis
+agen yang berjalan di environment Claude web, yang env-nya bukan env produksi.
 
 ### Preview lokal tanpa Supabase
 `src/__preview__/` + `preview.html` / `home-preview.html` merender Dashboard
@@ -334,11 +341,16 @@ entry.
    `setData` diff (not transactional). Low risk on a single kiosk; for safety
    add a `salah_cetak_catat(kertas_id, jumlah, …)` SQL RPC (`security definer`)
    that does both in one transaction and call it directly.
-5. **Delete dead code:** `src/screens/PinGate.tsx` and
-   `src/screens/AddEmployeeModal.tsx` are no longer imported (PIN flow removed).
-   Strip the localStorage data bits from `src/storage.ts` (`loadData`,
-   `saveData`, the `migrasi*` helpers, `EMPTY`) — keep `hashPin`, `uid`,
-   `todayKey`, and the `HARGA_*_DEFAULT` consts (db.ts imports those).
+5. ✅ **Dead code dihapus** (2026-09-16): `src/screens/PinGate.tsx` +
+   `src/components/Keypad.tsx` (satu-satunya pemakainya) + `hashPin()` di
+   `src/storage.ts`. Bit localStorage di `storage.ts` sudah lebih dulu bersih —
+   yang tersisa cuma `uid`, `todayKey`, dan konstanta `HARGA_*_DEFAULT` yang
+   di-import `db.ts`. `AddEmployeeModal.tsx` **masih dipakai** `App.tsx`,
+   jangan dihapus (catatan lama di sini keliru).
+
+   Sisa jejak PIN yang **sengaja dibiarkan**: `Employee.pinHash` (`types.ts`)
+   dan kolom `profiles.pin_hash`. Keduanya terikat ke skema dan ke diff
+   write-through `persistChanges`; mencabutnya bukan sekadar hapus file.
 6. **Realtime (optional):** `supabase.channel().on('postgres_changes', …)` on
    `absen_records` for a live "sedang kerja" dashboard. Polling/refetch
    (`reload()`) is fine for v1.

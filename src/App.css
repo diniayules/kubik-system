@@ -1776,6 +1776,7 @@
 .shift-toggle:hover { border-color: var(--primary-2); }
 .shift-toggle.on { background: var(--primary); border-color: var(--primary); color: #fff; }
 .closing-cfg-warn { font-size: 11.5px; font-weight: 700; color: var(--pink-deep); }
+.closing-cfg-mulai { font-size: 11.5px; font-weight: 700; color: var(--ink-soft); opacity: .75; }
 .closing-cfg-actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
 
 .edit-panel {

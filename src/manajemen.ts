@@ -420,6 +420,20 @@ export function taskUntukShift<T extends ClosingTask>(
   return list.filter((t) => !t.shifts || t.shifts.length === 0 || t.shifts.includes(shift))
 }
 
+/**
+ * Task yang berlaku untuk sebuah shift PADA tanggal tertentu. Task yang baru
+ * ditambahkan admin (punya `mulai`) tidak dinilai mundur ke hari-hari sebelum
+ * ia ada — kalau tidak, tugas baru langsung tampil "terlewat" sebulan penuh.
+ * Task lama tanpa `mulai` dianggap berlaku sejak awal.
+ */
+export function taskBerlaku<T extends ClosingTask>(
+  list: T[],
+  shift: Shift,
+  tanggal: string,
+): T[] {
+  return taskUntukShift(list, shift).filter((t) => !t.mulai || tanggal >= t.mulai)
+}
+
 export type KepatuhanOrang = {
   id: string
   nama: string
@@ -505,7 +519,7 @@ export function kepatuhanChecklist(
     if (mulai !== undefined && rec.tanggal < mulai) continue
 
     if (sudahMasuk(rec)) {
-      const wajib = taskUntukShift(data.openingChecklist ?? [], rec.shift)
+      const wajib = taskBerlaku(data.openingChecklist ?? [], rec.shift, rec.tanggal)
       const done = new Set((rec.checklistMasuk ?? []).map((x) => x.id))
       orang.pagiWajib += wajib.length
       for (const t of wajib) {
@@ -516,7 +530,7 @@ export function kepatuhanChecklist(
     }
 
     if (sudahPulang(rec)) {
-      const wajib = taskUntukShift(data.closingChecklist ?? [], rec.shift)
+      const wajib = taskBerlaku(data.closingChecklist ?? [], rec.shift, rec.tanggal)
       const done = new Set((rec.checklistPulang ?? []).map((x) => x.id))
       orang.pulangWajib += wajib.length
       for (const t of wajib) {

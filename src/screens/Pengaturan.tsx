@@ -7,7 +7,7 @@ import type {
   Shift,
   TampilanMode,
 } from '../types'
-import { uid } from '../storage'
+import { uid, todayKey } from '../storage'
 import { SHIFT_LABEL, SHIFT_LIST } from '../attendance'
 import {
   DEFAULTS,
@@ -22,6 +22,17 @@ import { Icons } from '../components/Icons'
 import { useToast } from '../components/Toast'
 import { useLang, type Lang } from '../i18n'
 import { usePrefs, setPref, resetPrefs } from '../lib/prefs'
+
+// "2026-09-16" -> "16 Sep 2026", untuk catatan kecil kapan tugas mulai dinilai.
+function tglSingkat(tanggal: string): string {
+  const [y, m, d] = tanggal.split('-').map(Number)
+  if (!y || !m || !d) return tanggal
+  return new Date(y, m - 1, d).toLocaleDateString('id-ID', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  })
+}
 
 type Props = {
   data: AppData
@@ -75,6 +86,18 @@ export function Pengaturan({
     data.incomeSub ?? DEFAULTS.incomeSub,
   )
 
+  // Tugas yang baru pertama kali disimpan dicap tanggal hari ini (`mulai`).
+  // Penilaian SOP di Dashboard Manajemen memakai cap itu supaya tugas baru tidak
+  // dihitung mundur ke hari-hari sebelum ia ada. Tugas lama yang belum punya cap
+  // dibiarkan apa adanya — riwayatnya memang berlaku sejak awal.
+  function capMulai(draft: ClosingTask[], tersimpan: ClosingTask[]) {
+    const lama = new Set(tersimpan.map((t) => t.id))
+    const hariIni = todayKey()
+    return draft.map((t) =>
+      t.mulai || lama.has(t.id) ? t : { ...t, mulai: hariIni },
+    )
+  }
+
   // Draft lokal daftar closing checklist (task sebelum clock out). Diedit di sini
   // lalu disimpan sekaligus ke app_config, sama polanya seperti Teks & Branding.
   const [closingTasks, setClosingTasks] = useState<ClosingTask[]>(
@@ -115,7 +138,7 @@ export function Pengaturan({
     })
   }
   function simpanChecklist() {
-    const bersih = closingTasks
+    const bersih = capMulai(closingTasks, data.closingChecklist)
       .map((t) => ({ ...t, label: t.label.trim() }))
       .filter((t) => t.label)
     setClosingTasks(bersih)
@@ -168,7 +191,7 @@ export function Pengaturan({
     })
   }
   function simpanChecklistPagi() {
-    const bersih = openingTasks
+    const bersih = capMulai(openingTasks, data.openingChecklist)
       .map((t) => ({ ...t, label: t.label.trim() }))
       .filter((t) => t.label)
     setOpeningTasks(bersih)
@@ -719,6 +742,11 @@ export function Pengaturan({
                         ⚠️ tak muncul di shift mana pun
                       </span>
                     )}
+                    {t.mulai && (
+                      <span className="closing-cfg-mulai">
+                        dinilai sejak {tglSingkat(t.mulai)}
+                      </span>
+                    )}
                   </div>
                 </div>
               )
@@ -826,6 +854,11 @@ export function Pengaturan({
                     {shifts.length === 0 && (
                       <span className="closing-cfg-warn">
                         ⚠️ tak muncul di shift mana pun
+                      </span>
+                    )}
+                    {t.mulai && (
+                      <span className="closing-cfg-mulai">
+                        dinilai sejak {tglSingkat(t.mulai)}
                       </span>
                     )}
                   </div>

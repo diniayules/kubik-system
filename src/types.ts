@@ -85,11 +85,16 @@ export type AbsenEvent = {
  * `shifts` menentukan di shift mana task ini muncul (pagi/sore/full berbeda
  * karena tugas closing-nya beda). `undefined`/kosong dianggap "semua shift"
  * demi kompatibilitas data lama.
+ *
+ * `mulai` (YYYY-MM-DD) = tanggal task ini pertama kali disimpan admin. Dipakai
+ * penilaian SOP di Dashboard Manajemen supaya task baru TIDAK dihitung mundur
+ * ke hari-hari sebelum ia ada. `undefined` = task lama, berlaku sejak awal.
  */
 export type ClosingTask = {
   id: string
   label: string
   shifts?: Shift[]
+  mulai?: string
 }
 
 /**

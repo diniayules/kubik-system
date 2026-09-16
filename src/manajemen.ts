@@ -2628,32 +2628,46 @@ export function masalahTeknis(
  * job description yang dipegang manajer, jadi satu baris merah selalu bisa
  * ditunjuk ke satu tugas yang jelas pemiliknya.
  */
-export type KelompokKPI = 'operasional' | 'sales' | 'sosmed' | 'keuangan'
+/** Empat tugas manajer — ini yang jadi tab di layar. */
+export type TugasManajer = 'operasional' | 'sales' | 'sosmed' | 'keuangan'
 
 /**
- * Area sebuah baris KPI di layar. Sama dengan [KelompokKPI], plus `owner`
- * untuk penilaian kualitatif yang sengaja TIDAK ikut menghitung skor — lihat
- * `Scorecard.penilaian`.
+ * Kelompok penilaian: empat tugas manajer, **plus penilaian owner**.
+ *
+ * Susunan lama (operasional / marketing / sales / hasil bisnis / kepemimpinan)
+ * memecah pekerjaan yang sama ke dua tempat: "campaign dieksekusi" duduk di
+ * marketing sementara "konten mingguan tepat ritme" ada di sana juga tapi
+ * dinilai dari papan lain, dan "hasil bisnis" tidak pernah bisa dikerjakan
+ * langsung oleh siapa pun — ia akibat, bukan tugas. Empat kelompok pertama
+ * kini persis job description yang dipegang manajer, jadi satu baris merah
+ * selalu bisa ditunjuk ke satu tugas yang jelas pemiliknya.
+ *
+ * `owner` bukan tugas dan karena itu tidak punya tab, tapi ia tetap kelompok
+ * berbobot penuh: ada hal yang tidak meninggalkan jejak di tabel mana pun —
+ * cara manajer menghadapi komplain, apakah ia mengabari sebelum ditanya —
+ * dan satu-satunya alat ukurnya memang mata owner.
  */
-export type AreaKPI = KelompokKPI | 'owner'
+export type KelompokKPI = TugasManajer | 'owner'
 
-export const KELOMPOK_ORDER: KelompokKPI[] = [
+export const TUGAS_ORDER: TugasManajer[] = [
   'operasional',
   'sales',
   'sosmed',
   'keuangan',
 ]
 
-export const KELOMPOK_LABEL: Record<AreaKPI, string> = {
+export const KELOMPOK_ORDER: KelompokKPI[] = [...TUGAS_ORDER, 'owner']
+
+export const KELOMPOK_LABEL: Record<KelompokKPI, string> = {
   operasional: 'Operasional',
   sales: 'Leads & Sales',
   sosmed: 'Social Media',
   keuangan: 'Keuangan',
-  owner: 'Penilaian owner',
+  owner: 'Penilaian Owner',
 }
 
 /** Kalimat tugasnya, persis seperti yang disepakati owner & manajer. */
-export const KELOMPOK_TUGAS: Record<KelompokKPI, string> = {
+export const KELOMPOK_TUGAS: Record<TugasManajer, string> = {
   operasional:
     'Memastikan karyawan bekerja sesuai SOP, stok selalu terjaga, dan masalah teknis teratasi.',
   sales: 'Memastikan usaha menjalin MoU dan berada di event.',
@@ -2665,18 +2679,22 @@ export const KELOMPOK_TUGAS: Record<KelompokKPI, string> = {
 /**
  * Bobot tiap kelompok. Jumlahnya 1.
  *
- * Operasional & keuangan sama-sama 30%. Itu disengaja dan bukan kompromi:
+ * Operasional & keuangan sama-sama 25%. Itu disengaja dan bukan kompromi:
  * operasional adalah lantainya — studio yang printernya mati atau kertasnya
  * habis tidak bisa menang di tiga kelompok lain — sedangkan keuangan adalah
  * satu-satunya kelompok yang tidak bisa dipenuhi dengan rajin saja. Sales &
  * sosmed masing-masing 20%: keduanya mesin yang menggerakkan keuangan, jadi
  * sebagian nilainya sudah terbayar di sana dan tidak perlu dihitung dua kali.
+ *
+ * Penilaian owner 10% — cukup untuk menggeser rapor yang nyaris seimbang,
+ * tidak cukup untuk menyelamatkan bulan yang datanya merah di mana-mana.
  */
 export const BOBOT_KELOMPOK: Record<KelompokKPI, number> = {
-  operasional: 0.3,
+  operasional: 0.25,
   sales: 0.2,
   sosmed: 0.2,
-  keuangan: 0.3,
+  keuangan: 0.25,
+  owner: 0.1,
 }
 
 export const KELOMPOK_ALASAN: Record<KelompokKPI, string> = {
@@ -2685,6 +2703,7 @@ export const KELOMPOK_ALASAN: Record<KelompokKPI, string> = {
   sales: 'Leads masuk, dikejar tepat waktu, ditutup jadi order, dan event yang benar-benar terlaksana.',
   sosmed: 'Ide masuk papan, konten naik tepat ritme, dan sosial media yang tidak pernah sepi.',
   keuangan: 'Tiket & omzet terhadap target 2× bulan lalu — bagian yang tidak bisa dipenuhi dengan rajin saja.',
+  owner: 'Hal yang tidak meninggalkan jejak di tabel mana pun, dan hanya bisa dinilai owner.',
 }
 
 /** Batas atas capaian satu KPI: 150%. */
@@ -2717,7 +2736,7 @@ export type StatusKPI =
 
 export type BarisKPI = {
   id: string
-  kelompok: AreaKPI
+  kelompok: KelompokKPI
   /** Kolom "Area" pada tabel KPI. */
   area: string
   label: string
@@ -2774,16 +2793,6 @@ export type SkorKelompok = {
 export type Scorecard = {
   baris: BarisKPI[]
   kelompok: SkorKelompok[]
-  /**
-   * Penilaian kualitatif owner (1–5), SENGAJA di luar `skor`.
-   *
-   * Dulu ia satu KPI di kelompok "kepemimpinan" berbobot 10%, artinya sebuah
-   * angka yang diketik owner berdasarkan kesan bisa menggeser rapor yang
-   * seluruh baris lainnya berasal dari data. Sekarang ia berdiri di sebelah
-   * skor: tetap terbaca saat evaluasi, tapi tidak bisa menambal — atau
-   * menghapus — apa yang ditunjukkan angka.
-   */
-  penilaian: BarisKPI
   /** Σ(skor kelompok × bobot) ÷ Σ bobot kelompok aktif. 0–1.5. */
   skor: number
   /** Total bobot kelompok yang benar-benar ikut menilai, 0–1. */
@@ -2803,9 +2812,9 @@ export type Scorecard = {
 }
 
 /**
- * Susun KPI Scorecard manajer: 17 KPI dalam **4 kelompok** — satu kelompok per
- * tugas yang benar-benar dipegang manajer (lihat [KelompokKPI]), plus penilaian
- * owner yang berdiri di luar skor.
+ * Susun KPI Scorecard manajer: 18 KPI dalam **5 kelompok** — satu kelompok per
+ * tugas yang benar-benar dipegang manajer, plus penilaian owner yang tidak
+ * punya tab tapi tetap berbobot penuh (lihat [KelompokKPI]).
  *
  * Tiga angka sengaja dipisah supaya tidak ada satu pun yang menipu:
  *
@@ -2883,7 +2892,7 @@ export function skorKPI(
 
   function baris(
     id: string,
-    kelompok: AreaKPI,
+    kelompok: KelompokKPI,
     label: string,
     nilai: number,
     target: number,
@@ -2936,7 +2945,7 @@ export function skorKPI(
 
   function belum(
     id: string,
-    kelompok: AreaKPI,
+    kelompok: KelompokKPI,
     label: string,
     butuh: string,
   ): BarisKPI {
@@ -3241,6 +3250,25 @@ export function skorKPI(
           'Status “eskalasi” pada laporan closing harian',
           false,
         ),
+
+    // ---------------- Penilaian Owner (10%) ----------------
+    !nilaiOwner || !(nilaiOwner.nilai > 0)
+      ? belum(
+          'penilaian',
+          'owner',
+          'Penilaian owner (1–5)',
+          'Diisi owner saat evaluasi bulanan',
+        )
+      : baris(
+          'penilaian',
+          'owner',
+          'Penilaian owner (1–5)',
+          nilaiOwner.nilai,
+          target.penilaian,
+          `${nilaiOwner.nilai} dari 5 · target ${target.penilaian}`,
+          'Penilaian manual owner',
+          false,
+        ),
   ]
 
   // ---- skor per kelompok, lalu skor akhir tertimbang ----
@@ -3274,29 +3302,9 @@ export function skorKPI(
           .reduce((s, k) => s + (k.skor as number) * k.bobot, 0) / bobotAktif
       : 0
 
-  const barisPenilaian =
-    !nilaiOwner || !(nilaiOwner.nilai > 0)
-      ? belum(
-          'penilaian',
-          'owner',
-          'Penilaian owner (1–5)',
-          'Diisi owner saat evaluasi bulanan',
-        )
-      : baris(
-          'penilaian',
-          'owner',
-          'Penilaian owner (1–5)',
-          nilaiOwner.nilai,
-          target.penilaian,
-          `${nilaiOwner.nilai} dari 5 · target ${target.penilaian}`,
-          'Penilaian manual owner',
-          false,
-        )
-
   const semuaAktif = baris_.filter((b) => b.status !== 'belum-aktif')
   return {
     baris: baris_,
-    penilaian: barisPenilaian,
     kelompok,
     skor,
     bobotAktif,

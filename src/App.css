@@ -4311,6 +4311,8 @@
 
 /* ---- Antrean di kepala tiap tab ---- */
 .mgr-antrean { margin-top: 16px; padding-top: 14px; border-top: 1.5px solid var(--line); }
+/* Tanpa blok rapor di atasnya (akun manajer) tidak ada yang perlu dipisah. */
+.mgr-antrean.is-sendiri { margin-top: 0; padding-top: 0; border-top: none; }
 .mgr-antrean-judul {
   display: block; font-size: 10.5px; font-weight: 800; letter-spacing: .06em;
   text-transform: uppercase; color: var(--muted); margin-bottom: 10px;
@@ -4372,6 +4374,10 @@
   color: var(--ink); font: inherit; font-size: 12.5px; font-weight: 600;
 }
 .mgr-masalah-tutup input:focus-visible { outline: none; box-shadow: var(--ring); }
+
+/* Daftar yang menyusul kartu mini-stat butuh jarak; tanpa ini keduanya
+   menempel dan terbaca seperti satu blok. */
+.mgr-mini-stats + .mgr-slot-ringkas { margin-top: 12px; }
 
 .mgr-masalah-riwayat { margin-top: 14px; }
 .mgr-masalah-riwayat > b {

@@ -231,15 +231,22 @@ mencampur kertas habis dengan lead yang belum ditelepon. Owner menyebutnya
   muncul di kepala tab pemiliknya; badge angka di tiap label tab menggantikan
   fungsi "Hari Ini". Skor gabungan 4 tugas pindah ke hero (terlihat dari tab
   mana pun, tidak pernah merebut layar).
-- **Manajer sekarang melihat rapornya sendiri.** Dulu `skorKPI` hanya dihitung
-  untuk owner dan manajer cuma dapat kartu gembok. Yang tetap owner-only:
-  nominal gaji per orang, rekonsiliasi kas, dan Penilaian Owner.
-- **Penilaian owner (1–5) keluar dari skor** (`Scorecard.penilaian`). Dulu ia
-  KPI berbobot 10% — angka berdasarkan kesan bisa menggeser rapor yang seluruh
-  baris lainnya berasal dari data. Sekarang berdiri sendiri di tab Keuangan.
-- **Kelompok KPI: 5 → 4.** `hasil` dilebur ke `keuangan`, `marketing` jadi
-  `sosmed`, `kepemimpinan` dibubarkan (KPI kemandirian pindah ke `operasional`).
-  Tipe baru `AreaKPI = KelompokKPI | 'owner'` untuk baris di luar skor.
+- **Scorecard tetap OWNER-ONLY** — keputusan produk, bukan kelalaian. Ini
+  penilaian ATAS manajer; memperlihatkannya kepada yang dinilai mengubah
+  perilakunya (kejar angka, bukan kejar hasil) dan membocorkan target yang
+  belum disetujui. Untuk owner, blok rapor diselipkan di kepala tiap tab
+  antara kalimat tugas dan antreannya. Manajer melihat kalimat tugas + seluruh
+  antreannya — bahan kerjanya, bukan rapornya. Hero chip skor, banner
+  "Simulasi", tombol "Atur target", dan antrean Keuangan (yang menyebut selisih
+  terhadap target) semuanya ikut tertutup.
+- **Penilaian owner (1–5) TETAP kelompok berbobot penuh (10%).** Ia tidak punya
+  tab — bukan tugas yang bisa dikerjakan manajer — jadi dirender di panel
+  "Penilaian Owner" pada tab Keuangan, bersama panel owner-only lainnya.
+- **Kelompok KPI: `operasional` · `sales` · `sosmed` · `keuangan` · `owner`.**
+  `hasil` dilebur ke `keuangan`, `marketing` jadi `sosmed`, `kepemimpinan`
+  dibubarkan (KPI kemandirian pindah ke `operasional`). Bobot: 25 / 20 / 20 /
+  25 / 10. Tipe baru `TugasManajer` = empat yang pertama, dipakai sebagai
+  `TabMgr`; `KelompokKPI = TugasManajer | 'owner'`.
 - **Target omzet: `saranTarget` sekarang 2× BULAN LALU** (dulu 2× rata-rata 3
   bulan). Rumusnya mengikuti kalimat yang dipakai owner menagihnya. Bulan
   ekstrem ditangani lewat override manual owner (`targetBerlaku` — nilai

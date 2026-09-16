@@ -42,6 +42,7 @@ import {
   JENDELA_PEMAKAIAN,
   kontribusiSales,
   KATEGORI_MASALAH_LABEL,
+  KELOMPOK_LABEL,
   KELOMPOK_TUGAS,
   TINGKAT_MASALAH_LABEL,
   basisTarget,
@@ -65,7 +66,7 @@ import {
 import type {
   AksiSosmed,
   BarisKPI,
-  KelompokKPI,
+  TugasManajer,
   RingkasKemitraan,
   RingkasMasalah,
   HariDampak,
@@ -171,14 +172,20 @@ function formatPace(pace: number): string {
  * duduk di layar lain sama sekali, sementara antrean kerjanya menumpuk jadi
  * satu daftar dua belas baris yang mencampur kertas habis dengan lead yang
  * belum ditelepon. Sekarang tabnya persis job description manajer, dan tiap
- * tab berbentuk sama: **rapor tugas ini → antrean tugas ini → detailnya**.
+ * tab berbentuk sama: **tugas ini → antreannya → detailnya**.
  *
  * Tab "Hari Ini" sengaja DIHAPUS, bukan dipindah: antrean gabungan memaksa
  * manajer menyortir sendiri mana yang tugasnya yang mana. Sekarang tiap
  * antrean muncul di tab pemiliknya, dan angka di label tab yang memberi tahu
  * ada berapa tunggakan tanpa perlu membukanya.
+ *
+ * Untuk OWNER, tiap tab menyelipkan satu blok rapor di antara kalimat tugas
+ * dan antreannya. Blok itu tidak pernah terlihat oleh manajer — lihat `kpi`
+ * di dalam komponen. Kelompok KPI kelima, "Penilaian Owner", tidak punya tab
+ * karena ia bukan tugas yang bisa dikerjakan; ia dirender di tab Keuangan
+ * bersama panel owner-only lainnya.
  */
-type TabMgr = KelompokKPI
+type TabMgr = TugasManajer
 
 const TAB_MGR: { id: TabMgr; label: string; sub: string }[] = [
   { id: 'operasional', label: 'Operasional', sub: 'SOP · stok · kendala teknis' },
@@ -241,15 +248,19 @@ export function Manajemen({
     [data, monthKey, hariIni, isOwner],
   )
   /*
-    Dulu scorecard ini hanya dihitung untuk owner, dan manajer cuma melihat
-    kartu gembok "KPI disembunyikan". Rapor yang tidak bisa dibaca oleh orang
-    yang dinilai tidak mengubah apa pun — ia hanya jadi bahan sidang di akhir
-    bulan. Sekarang manajer melihat rapornya sendiri; yang tetap tertutup
-    adalah hal yang memang bukan urusannya: nominal gaji & rekonsiliasi kas.
+    Scorecard OWNER-ONLY, dan itu keputusan produk, bukan kelalaian: ini
+    penilaian ATAS manajer yang dipakai owner saat evaluasi. Memperlihatkannya
+    kepada yang dinilai mengubah perilakunya (kejar angka, bukan kejar hasil)
+    dan membocorkan target yang belum disetujui.
+
+    Yang TIDAK ikut disembunyikan adalah antrean kerjanya: manajer tetap
+    melihat apa yang harus dibereskan di tiap tugas — bahan kerjanya, bukan
+    rapornya. Karena itu `tindakan` di bawah sengaja tidak bersandar pada
+    objek ini, kecuali satu baris omzet yang memang ikut ditutup.
   */
   const kpi = useMemo(
-    () => skorKPI(data, monthKey, hariIni),
-    [data, monthKey, hariIni],
+    () => (isOwner ? skorKPI(data, monthKey, hariIni) : null),
+    [data, monthKey, hariIni, isOwner],
   )
   const masalah = useMemo(
     () => masalahTeknis(data, monthKey, hariIni),
@@ -627,10 +638,12 @@ export function Manajemen({
    *
    * Diambil dari baris KPI omzet, bukan dihitung ulang di sini — kalau tidak,
    * angka di antrean bisa berbeda dari angka di rapor tepat di halaman yang
-   * sama. 0 kalau sudah sejajar, atau kalau KPI-nya belum bisa dinilai
-   * (target belum diisi / periode belum berjalan).
+   * sama. 0 kalau sudah sejajar, kalau KPI-nya belum bisa dinilai (target
+   * belum diisi / periode belum berjalan), atau kalau yang membuka bukan
+   * owner — angka ini menyebut selisih terhadap target, jadi ia ikut tertutup
+   * bersama rapornya.
    */
-  const barisOmzet = kpi.baris.find((b) => b.id === 'omzet')
+  const barisOmzet = kpi?.baris.find((b) => b.id === 'omzet')
   const kurangOmzet =
     barisOmzet && barisOmzet.status !== 'belum-aktif'
       ? Math.max(0, Math.round(barisOmzet.pace - barisOmzet.nilai))
@@ -804,7 +817,13 @@ export function Manajemen({
       */
       tugas: 'keuangan' as TabMgr,
       bobot: 0,
-      jumlah: kurangOmzet,
+      /*
+        `jumlah` adalah BANYAKNYA hal yang harus dibereskan — angka di dalam
+        pill bulat, sama seperti baris lain. Selisih rupiahnya tidak boleh
+        masuk ke sini: "3305000" meluber dari pill-nya dan terbaca seolah ada
+        tiga juta antrean. Nominalnya tetap disebut, di labelnya.
+      */
+      jumlah: kurangOmzet > 0 ? 1 : 0,
       label: `Omzet tertinggal dari laju target (kurang ${rupiahRingkas(kurangOmzet)})`,
       aksi: 'Lihat tren & komposisi',
       onClick: () => setTab('keuangan'),
@@ -887,8 +906,10 @@ export function Manajemen({
     })
   }
 
-  /** Blok rapor untuk tugas yang sedang dibuka. */
-  const kelompokAktif = kpi.kelompok.find((g) => g.id === tab)
+  /** Blok rapor untuk tugas yang sedang dibuka — owner saja. */
+  const kelompokAktif = kpi?.kelompok.find((g) => g.id === tab)
+  /** Penilaian owner: kelompok berbobot yang tidak punya tab sendiri. */
+  const kelompokOwner = kpi?.kelompok.find((g) => g.id === 'owner')
   /** Bulan pembanding target — dipakai menerangkan dari mana angka 2× berasal. */
   const basis = useMemo(
     () => basisTarget(data, monthKey, hariIni),
@@ -914,25 +935,30 @@ export function Manajemen({
             berjalan · rata-rata {formatRupiah(kini.rataPerHari)}/hari
           </p>
           {/*
-            Skor gabungan empat tugas, ditaruh di hero dan bukan di tab
-            tersendiri: begitu ia punya halaman sendiri, halaman itu jadi
-            satu-satunya yang isinya menilai tanpa bisa dikerjakan. Di sini ia
-            terlihat dari tab mana pun, tanpa pernah merebut layar.
+            Skor gabungan, ditaruh di hero dan bukan di tab tersendiri: begitu
+            ia punya halaman sendiri, halaman itu jadi satu-satunya yang isinya
+            menilai tanpa bisa dikerjakan. Di sini ia terlihat dari tab mana
+            pun, tanpa pernah merebut layar.
+
+            OWNER-ONLY, sama seperti scorecard-nya — ini angka penilaian atas
+            manajer, bukan alat kerjanya.
           */}
-          <div
-            className={
-              'mgr-hero-skor' + (kpi.targetDisetujui ? '' : ' is-simulasi')
-            }
-          >
-            <span className="mgr-hero-skor-nilai">{persen(kpi.skor)}</span>
-            <span className="mgr-hero-skor-teks">
-              <b>Rapor 4 tugas</b>
-              <em>
-                bulan {persen(kpi.progres)} berjalan ·{' '}
-                {kpi.targetDisetujui ? 'target disetujui' : 'simulasi'}
-              </em>
-            </span>
-          </div>
+          {isOwner && kpi && (
+            <div
+              className={
+                'mgr-hero-skor' + (kpi.targetDisetujui ? '' : ' is-simulasi')
+              }
+            >
+              <span className="mgr-hero-skor-nilai">{persen(kpi.skor)}</span>
+              <span className="mgr-hero-skor-teks">
+                <b>Rapor manajer</b>
+                <em>
+                  bulan {persen(kpi.progres)} berjalan ·{' '}
+                  {kpi.targetDisetujui ? 'target disetujui' : 'simulasi'}
+                </em>
+              </span>
+            </div>
+          )}
         </div>
         <label className="mgr-periode">
           <span>Periode</span>
@@ -973,48 +999,56 @@ export function Manajemen({
         })}
       </nav>
 
-      {/* ---------- Kepala tiap tab: rapor tugas ini, lalu antreannya ---------- */}
+      {/* ---------- Kepala tiap tab: tugasnya, lalu antreannya ---------- */}
       {/*
-        Bentuk yang sama di keempat tab, dan urutannya disengaja: rapor dulu
-        (aku sedang menang atau kalah di tugas ini), baru antrean (jadi apa
-        yang harus kukerjakan). Dibalik, antrean akan selalu dikerjakan tanpa
-        pernah ada yang bertanya apakah mengerjakannya cukup.
+        Urutannya disengaja: apa tugas ini (dan, untuk owner, sedang menang
+        atau kalah) dulu — baru apa yang harus dikerjakan. Dibalik, antrean
+        akan selalu dikerjakan tanpa pernah ada yang bertanya apakah
+        mengerjakannya cukup.
+
+        Blok rapor di tengah hanya muncul untuk owner. Manajer tetap mendapat
+        kalimat tugasnya dan seluruh antreannya — bahan kerjanya, bukan
+        rapornya.
       */}
-      {kelompokAktif && (
-        <Panel
-          judul={`Tugas: ${kelompokAktif.label}`}
-          sub={KELOMPOK_TUGAS[tab]}
-          badge={
-            kelompokAktif.skor != null
+      <Panel
+        judul={`Tugas: ${KELOMPOK_LABEL[tab]}`}
+        sub={KELOMPOK_TUGAS[tab]}
+        badge={
+          kelompokAktif
+            ? kelompokAktif.skor != null
               ? `Capaian ${persen(kelompokAktif.skor)} · bobot ${persen(kelompokAktif.bobot)}`
               : 'Belum bisa dinilai'
-          }
-          aksi={
-            isOwner ? (
-              <button
-                type="button"
-                className="mgr-aksi-btn"
-                onClick={() => setEditTarget((v) => !v)}
-              >
-                {editTarget ? 'Tutup' : 'Atur target'}
-              </button>
-            ) : undefined
-          }
-        >
-          {!kpi.targetDisetujui && (
-            <div className="mgr-simulasi">
-              <div>
-                <b>Simulasi — belum disetujui.</b>{' '}
-                {kpi.targetSaran
-                  ? `Target periode ini masih saran otomatis (${PENGALI_TARGET}× ${
-                      basis
-                        ? `${labelBulan(basis.monthKey)}${basis.berurutan ? '' : ' — bulan berisi terakhir'}`
-                        : 'bulan lalu'
-                    }).`
-                  : 'Target sudah diisi tapi belum disetujui owner.'}{' '}
-                Skor di bawah belum boleh dipakai menilai orang.
-              </div>
-              {isOwner && (
+            : antreanTab.length > 0
+              ? `${antreanTab.length} antrean`
+              : undefined
+        }
+        aksi={
+          isOwner ? (
+            <button
+              type="button"
+              className="mgr-aksi-btn"
+              onClick={() => setEditTarget((v) => !v)}
+            >
+              {editTarget ? 'Tutup' : 'Atur target'}
+            </button>
+          ) : undefined
+        }
+      >
+        {isOwner && kpi && kelompokAktif && (
+          <>
+            {!kpi.targetDisetujui && (
+              <div className="mgr-simulasi">
+                <div>
+                  <b>Simulasi — belum disetujui.</b>{' '}
+                  {kpi.targetSaran
+                    ? `Target periode ini masih saran otomatis (${PENGALI_TARGET}× ${
+                        basis
+                          ? `${labelBulan(basis.monthKey)}${basis.berurutan ? '' : ' — bulan berisi terakhir'}`
+                          : 'bulan lalu'
+                      }).`
+                    : 'Target sudah diisi tapi belum disetujui owner.'}{' '}
+                  Skor di bawah belum boleh dipakai menilai orang.
+                </div>
                 <button
                   type="button"
                   className="mgr-aksi-btn is-utama"
@@ -1022,59 +1056,57 @@ export function Manajemen({
                 >
                   Setujui target
                 </button>
-              )}
-            </div>
-          )}
-          {editTarget && (
-            <TargetEditor
-              awal={targetBerlaku(data, monthKey, hariIni).target}
-              saran={saranTarget(data, monthKey, hariIni)}
-              onSimpan={simpanTarget}
-              onBatal={() => setEditTarget(false)}
-            />
-          )}
-          <div
-            className={
-              'mgr-kpi-kelompok-list' + (kpi.targetDisetujui ? '' : ' is-simulasi')
-            }
-          >
-            <KelompokBlok kelompok={kelompokAktif} laju={kpi.progres} />
-          </div>
-
-          {/* ---------- Antrean tugas ini ---------- */}
-          <div className="mgr-antrean">
-            <b className="mgr-antrean-judul">
-              Yang harus dibereskan di tugas ini
-            </b>
-            {antreanTab.length === 0 ? (
-              <p className="mgr-empty">
-                ✅ Tidak ada antrean. Semua sudah tertangani.
-              </p>
-            ) : (
-              <ul className="mgr-todo">
-                {antreanTab.map((t) => (
-                  <li key={t.label}>
-                    <span className={`mgr-todo-num mgr-todo-num--${t.nada}`}>
-                      {t.jumlah}
-                    </span>
-                    <span className="mgr-todo-teks">
-                      <span className="lbl">{t.label}</span>
-                      <button
-                        type="button"
-                        className="mgr-todo-aksi"
-                        onClick={t.onClick}
-                      >
-                        {t.aksi} <Icons.chevron />
-                      </button>
-                    </span>
-                  </li>
-                ))}
-              </ul>
+              </div>
             )}
-          </div>
-        </Panel>
-      )}
+            {editTarget && (
+              <TargetEditor
+                awal={targetBerlaku(data, monthKey, hariIni).target}
+                saran={saranTarget(data, monthKey, hariIni)}
+                onSimpan={simpanTarget}
+                onBatal={() => setEditTarget(false)}
+              />
+            )}
+            <div
+              className={
+                'mgr-kpi-kelompok-list' +
+                (kpi.targetDisetujui ? '' : ' is-simulasi')
+              }
+            >
+              <KelompokBlok kelompok={kelompokAktif} laju={kpi.progres} />
+            </div>
+          </>
+        )}
 
+        {/* ---------- Antrean tugas ini ---------- */}
+        <div className={'mgr-antrean' + (isOwner ? '' : ' is-sendiri')}>
+          <b className="mgr-antrean-judul">Yang harus dibereskan di tugas ini</b>
+          {antreanTab.length === 0 ? (
+            <p className="mgr-empty">
+              ✅ Tidak ada antrean. Semua sudah tertangani.
+            </p>
+          ) : (
+            <ul className="mgr-todo">
+              {antreanTab.map((t) => (
+                <li key={t.label}>
+                  <span className={`mgr-todo-num mgr-todo-num--${t.nada}`}>
+                    {t.jumlah}
+                  </span>
+                  <span className="mgr-todo-teks">
+                    <span className="lbl">{t.label}</span>
+                    <button
+                      type="button"
+                      className="mgr-todo-aksi"
+                      onClick={t.onClick}
+                    >
+                      {t.aksi} <Icons.chevron />
+                    </button>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </Panel>
 
       {tab === 'operasional' && (
         <div className="mgr-cols">
@@ -2239,23 +2271,33 @@ export function Manajemen({
               )}
 
               {/*
-                Penilaian kualitatif owner. Ia BUKAN bagian dari skor empat
-                tugas (lihat Scorecard.penilaian) — dulu ia satu KPI berbobot
-                10%, artinya angka berdasarkan kesan bisa menggeser rapor yang
-                seluruh baris lainnya berasal dari data. Sekarang ia berdiri
-                sendiri: tetap terbaca saat evaluasi, tapi tidak menambal —
-                atau menghapus — apa yang ditunjukkan angka.
+                Penilaian kualitatif owner — kelompok KPI berbobot penuh (10%)
+                yang tidak punya tab sendiri, karena ia bukan tugas yang bisa
+                dikerjakan manajer. Ditaruh di sini, bersama panel owner-only
+                lainnya, dan bukan di kepala tab mana pun: yang mengisinya
+                cuma owner, dan mengisinya adalah pekerjaan akhir bulan.
               */}
-              {isOwner && (
+              {isOwner && kpi && kelompokOwner && (
                 <Panel
                   judul="Penilaian Owner"
-                  sub="Catatan kualitatif untuk evaluasi bulanan. Sengaja tidak ikut menghitung skor 4 tugas."
+                  // Alasan kelompoknya sudah ditulis KelompokBlok di bawah —
+                  // mengulanginya di sini membuat kalimat yang sama tampil dua
+                  // kali beruntun.
+                  sub={`Diisi saat evaluasi bulanan. Bobot ${persen(kelompokOwner.bobot)} dari skor manajer.`}
                   badge={
-                    kpi.penilaian.status === 'belum-aktif'
-                      ? 'Belum diisi'
-                      : `${nilaiOwner?.nilai ?? 0} dari 5`
+                    kelompokOwner.skor != null
+                      ? `${nilaiOwner?.nilai ?? 0} dari 5`
+                      : 'Belum diisi'
                   }
                 >
+                  <div
+                    className={
+                      'mgr-kpi-kelompok-list' +
+                      (kpi.targetDisetujui ? '' : ' is-simulasi')
+                    }
+                  >
+                    <KelompokBlok kelompok={kelompokOwner} laju={kpi.progres} />
+                  </div>
                   <PenilaianOwnerBox
                     key={monthKey}
                     nilai={nilaiOwner?.nilai ?? 0}
@@ -2272,12 +2314,12 @@ export function Manajemen({
                   </span>
                   <div>
                     <div className="mgr-locked-judul">
-                      Gaji &amp; kas disembunyikan
+                      KPI, gaji &amp; kas disembunyikan
                     </div>
                     <p>
-                      Nominal gaji per karyawan dan rekonsiliasi kas hanya bisa
-                      dibuka owner. Rapor KPI Anda sendiri tidak disembunyikan —
-                      ada di kepala tiap tab.
+                      Scorecard KPI Manajer, nominal gaji per karyawan, dan
+                      rekonsiliasi kas hanya bisa dibuka oleh owner. Antrean
+                      kerja tiap tugas tetap terbuka di kepala tiap tab.
                     </p>
                   </div>
                 </div>
@@ -2661,18 +2703,9 @@ function KemitraanPanel({
       }
     >
       <div className="mgr-mini-stats">
-        <div>
-          <b>{ringkas.antre.length}</b>
-          <span>Menunggu keputusan</span>
-        </div>
-        <div>
-          <b>{ringkas.didiamkan}</b>
-          <span>Didiamkan terlalu lama</span>
-        </div>
-        <div>
-          <b>{ringkas.mouHabis.length}</b>
-          <span>MoU segera berakhir</span>
-        </div>
+        <MiniStat k="Menunggu" v={String(ringkas.antre.length)} />
+        <MiniStat k="Didiamkan" v={String(ringkas.didiamkan)} />
+        <MiniStat k="MoU habis" v={String(ringkas.mouHabis.length)} />
       </div>
 
       {ringkas.antre.length > 0 && (

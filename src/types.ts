@@ -1073,6 +1073,17 @@ export type AppData = {
    */
   masalahTeknis: MasalahTeknis[]
   /**
+   * false = tabel `masalah_teknis` TIDAK TERBACA (migration 0055 belum
+   * dijalankan, atau pembacaannya ditolak).
+   *
+   * Dibedakan dari `masalahTeknis: []` yang berarti "tabelnya ada, isinya
+   * masih kosong". Bedanya menentukan apakah tombol lapor boleh tampil:
+   * formulir yang menerima ketikan lalu gagal menyimpannya lebih buruk
+   * daripada formulir yang jujur bilang fiturnya belum aktif — laporannya
+   * hilang tanpa jejak, dan yang melapor mengira sudah tercatat.
+   */
+  masalahTeknisSiap: boolean
+  /**
    * Pipeline calon klien. Lihat [Lead] & migration 0047. Kosong = pipeline
    * belum dipakai (KPI leads ikut nonaktif).
    */

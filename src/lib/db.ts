@@ -776,6 +776,9 @@ export async function fetchAppData(): Promise<AppData> {
           ? [r.oleh]
           : [],
     })),
+    // Semua bentuk kegagalan baca diperlakukan sama: kalau tabelnya tidak bisa
+    // dibaca, layar tidak boleh menawarkan tombol menulis ke sana.
+    masalahTeknisSiap: !masalahRes.error,
     masalahTeknis: masalahRows.map((r) => ({
       id: r.id,
       judul: r.judul,

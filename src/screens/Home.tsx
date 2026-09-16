@@ -897,6 +897,18 @@ function KendalaStrip({
 
   const mendesak = ringkas.terbuka.filter((t) => t.masalah.tingkat === 'stop')
 
+  /*
+    Tanpa tabelnya (migration 0055 belum jalan), strip ini TIDAK ditampilkan
+    sama sekali — bukan ditampilkan dengan tombol mati.
+
+    Layar ini dibuka operator, bukan pengelola: keterangan "jalankan migrasi"
+    tidak berarti apa-apa baginya, dan tombol lapor yang bisa ditekan akan
+    menerima ketikannya lalu membuangnya diam-diam (insert gagal → hook
+    write-through menarik ulang data → laporannya lenyap). Pengelola tetap
+    diberi tahu sebabnya, di panel Masalah Teknis pada Dashboard Manajemen.
+  */
+  if (!data.masalahTeknisSiap) return null
+
   return (
     <section className="kendala-strip">
       <div className="kendala-head">

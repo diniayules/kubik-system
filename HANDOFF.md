@@ -283,9 +283,35 @@ dan tidak ada cara tahu mana yang masih menggantung sekarang.
   menaikkan skor bulan berjalan. Nol laporan = KPI **nonaktif**, bukan 100%:
   studio yang tidak mencatat apa pun tidak boleh dapat angka sempurna.
 
-**⚠️ Migrasi 0055 belum di-apply ke Supabase.** `fetchAppData` toleran (fallback
-`[]`), jadi app tetap naik — panel & KPI kendala teknis ikut nonaktif sampai
-migrasinya dijalankan.
+**⚠️ Migrasi 0055 belum di-apply ke Supabase — dan kode ini AMAN tanpa itu.**
+`AppData.masalahTeknisSiap` (dari `!masalahRes.error` di `fetchAppData`) memisah
+"tabelnya belum ada" dari "tabelnya ada tapi kosong". Saat `false`:
+- panel Masalah Teknis jadi baca-saja + menerangkan sebabnya (tombol lapor,
+  tandai selesai, buka lagi, riwayat & tally semuanya disembunyikan);
+- `KendalaStrip` di Home **tidak dirender sama sekali** — operator tidak perlu
+  membaca instruksi migrasi, dan tombol yang bisa ditekan akan menerima
+  laporannya lalu membuangnya diam-diam (insert gagal -> `useAppData` menarik
+  ulang dari server -> ketikannya lenyap);
+- KPI "Kendala teknis dibereskan" berstatus `belum-aktif`, jadi ia keluar dari
+  pembagi skor, bukan dihitung nol.
+
+Sisa dashboard tidak terpengaruh. Migrasinya idempoten (`create table if not
+exists`, `drop policy if exists`) dan seluruh dependensinya sudah ada:
+`touch_updated_at()` (0001), `is_admin()` (0002), `gen_random_uuid()` (0001).
+
+**⚠️ Project ref perlu dipastikan.** Dokumen ini menyebut `jbmpohlxmkbidrumotrq`
+(Phase 1), sedangkan `VITE_SUPABASE_URL` di environment menunjuk
+`mdfibmiujwrhnkufaaco`. Konfirmasi mana yang produksi sebelum menjalankan
+migrasi apa pun.
+
+### Preview lokal tanpa Supabase
+`src/__preview__/` + `preview.html` / `home-preview.html` merender Dashboard
+Manajemen & Home dengan data contoh, tanpa login. `npm run dev` lalu buka
+`/preview.html`. Tombol di pojok menukar sudut pandang Owner <-> Manajer
+(dipakai memastikan scorecard tidak bocor ke manajer), dan sakelar
+`masalahTeknisSiap` di `data.ts` mensimulasikan keadaan sebelum migrasi. Tidak
+ikut ke bundel produksi — `vite build` hanya memakai `index.html` sebagai
+entry.
 
 ---
 

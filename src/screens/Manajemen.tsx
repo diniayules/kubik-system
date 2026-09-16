@@ -1413,6 +1413,7 @@ export function Manajemen({
             </Panel>
 
             <MasalahTeknisPanel
+              siap={data.masalahTeknisSiap}
               ringkas={masalah}
               namaById={namaById}
               bisaTutup={bisaKelolaMasalah}
@@ -2399,6 +2400,7 @@ function lamaTeks(jam: number): string {
  * untuk kasus paling sering.
  */
 function MasalahTeknisPanel({
+  siap,
   ringkas,
   namaById,
   bisaTutup,
@@ -2407,6 +2409,8 @@ function MasalahTeknisPanel({
   onBukaLagi,
   onHapus,
 }: {
+  /** false = tabelnya belum ada; panel jadi baca-saja & menerangkan sebabnya. */
+  siap: boolean
   ringkas: RingkasMasalah
   namaById: Map<string, string>
   /** Menandai selesai = keputusan pengelola. Lihat RLS migration 0055. */
@@ -2444,30 +2448,52 @@ function MasalahTeknisPanel({
     <Panel
       judul="Masalah Teknis"
       sub={
-        ringkas.belumAda
-          ? 'Belum ada kendala tercatat — laporkan begitu ada alat yang bermasalah, sekecil apa pun.'
-          : `${ringkas.beresBulanIni} dari ${ringkas.masukBulanIni} kendala bulan ini beres` +
-            (ringkas.rataJamBeres > 0
-              ? ` · rata-rata ${lamaTeks(ringkas.rataJamBeres)}`
-              : '')
+        !siap
+          ? 'Fitur ini belum aktif — tabelnya belum ada di database.'
+          : ringkas.belumAda
+            ? 'Belum ada kendala tercatat — laporkan begitu ada alat yang bermasalah, sekecil apa pun.'
+            : `${ringkas.beresBulanIni} dari ${ringkas.masukBulanIni} kendala bulan ini beres` +
+              (ringkas.rataJamBeres > 0
+                ? ` · rata-rata ${lamaTeks(ringkas.rataJamBeres)}`
+                : '')
       }
       badge={
-        ringkas.terbuka.length > 0
-          ? `${ringkas.terbuka.length} terbuka`
-          : ringkas.belumAda
-            ? undefined
-            : 'Semua beres'
+        !siap
+          ? 'Belum aktif'
+          : ringkas.terbuka.length > 0
+            ? `${ringkas.terbuka.length} terbuka`
+            : ringkas.belumAda
+              ? undefined
+              : 'Semua beres'
       }
       aksi={
-        <button
-          type="button"
-          className={'mgr-aksi-btn' + (buka ? '' : ' is-utama')}
-          onClick={() => setBuka((v) => !v)}
-        >
-          {buka ? 'Tutup' : 'Lapor kendala'}
-        </button>
+        siap ? (
+          <button
+            type="button"
+            className={'mgr-aksi-btn' + (buka ? '' : ' is-utama')}
+            onClick={() => setBuka((v) => !v)}
+          >
+            {buka ? 'Tutup' : 'Lapor kendala'}
+          </button>
+        ) : undefined
       }
     >
+      {/*
+        Tanpa tabelnya, satu-satunya hal jujur yang bisa dilakukan panel ini
+        adalah menerangkan kenapa ia kosong. Menampilkan tombol lapor akan
+        menerima laporan lalu membuangnya diam-diam: insert-nya gagal, hook
+        write-through menarik ulang data dari server, dan ketikan operator
+        lenyap seolah tidak pernah ada.
+      */}
+      {!siap && (
+        <p className="mgr-empty">
+          Jalankan migrasi <code>0055_masalah_teknis.sql</code> di Supabase
+          untuk mengaktifkan log kendala. Sampai itu dilakukan, panel ini kosong
+          dan KPI “Kendala teknis dibereskan” tidak ikut dinilai — sisa
+          dashboard tidak terpengaruh.
+        </p>
+      )}
+
       {buka && (
         <div className="mgr-masalah-form">
           <input
@@ -2529,7 +2555,7 @@ function MasalahTeknisPanel({
         </div>
       )}
 
-      {ringkas.terbuka.length === 0 ? (
+      {!siap ? null : ringkas.terbuka.length === 0 ? (
         <p className="mgr-empty">
           {ringkas.belumAda
             ? 'Belum ada satu pun laporan. Selama tidak ada yang dicatat, KPI "kendala teknis dibereskan" tetap nonaktif — nol laporan bukan nol masalah.'
@@ -2618,7 +2644,7 @@ function MasalahTeknisPanel({
         </ul>
       )}
 
-      {ringkas.beresTerakhir.length > 0 && (
+      {siap && ringkas.beresTerakhir.length > 0 && (
         <div className="mgr-masalah-riwayat">
           <b>Terakhir dibereskan</b>
           <ul>
@@ -2655,7 +2681,7 @@ function MasalahTeknisPanel({
         bukan antrean: ia menjawab pertanyaan pembelian, bukan pertanyaan hari
         ini — printer yang muncul empat kali sebulan sudah bukan urusan servis.
       */}
-      {ringkas.perKategori.length > 0 && (
+      {siap && ringkas.perKategori.length > 0 && (
         <p className="mgr-hint">
           Bulan ini:{' '}
           {ringkas.perKategori

@@ -4213,8 +4213,19 @@
 .mgr-todo-aksi svg { width: 12px; height: 12px; }
 .mgr-todo-aksi:hover { text-decoration: underline; }
 
+/* ---------- Kesehatan operasional ---------- */
+/* Ringkasan sisa stok: satu baris yang boleh melipat, bukan grid kartu. */
+.mgr-ops-ringkas {
+  display: flex; flex-wrap: wrap; gap: 4px 14px;
+  font-size: 12px; font-weight: 600; color: var(--ink-soft);
+}
+.mgr-ops-ringkas b {
+  font-size: 13.5px; font-weight: 800; color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
 /* ---------- Stok kritis ---------- */
-.mgr-stok { list-style: none; margin: 16px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.mgr-stok { list-style: none; margin: 14px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .mgr-stok li {
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
   padding: 10px 12px; border-radius: var(--radius-sm);

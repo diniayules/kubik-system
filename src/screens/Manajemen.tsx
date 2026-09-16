@@ -66,6 +66,7 @@ import {
 import type {
   AksiSosmed,
   BarisKPI,
+  Operasional,
   TugasManajer,
   RingkasKemitraan,
   RingkasMasalah,
@@ -1362,55 +1363,7 @@ export function Manajemen({
           </div>
 
           <div className="mgr-col mgr-col--side">
-            <Panel
-              judul="Kesehatan Operasional"
-              sub={`${ops.salahCetakBulan} lembar salah cetak bulan ini`}
-            >
-              <div className="mgr-mini-stats">
-                <MiniStat k="Kertas" v={`${ops.totalKertas}`} />
-                <MiniStat k="Frame" v={`${ops.totalFrame}`} />
-                <MiniStat k="Tinta" v={`${ops.totalTinta}`} />
-                <MiniStat k="Amplop" v={`${ops.amplop}`} />
-              </div>
-              {ops.stokKritis.length === 0 ? (
-                <p className="mgr-empty">
-                  Tidak ada stok yang perlu dibeli minggu ini.
-                </p>
-              ) : (
-                <ul className="mgr-stok">
-                  {ops.stokKritis.map((s) => (
-                    <li
-                      key={s.nama}
-                      className={
-                        (s.stok === 0 ? 'is-habis' : '') +
-                        (s.tingkat === 'merah' ? ' is-merah' : ' is-kuning')
-                      }
-                    >
-                      <span className="nm">{s.nama}</span>
-                      <span className="vl">
-                        {s.stok} {s.satuan}
-                        {/*
-                          Hari sisa mengalahkan ambang tetap: 10 lembar yang laku
-                          1/hari tidak mendesak, 10 lembar yang laku 5/hari harus
-                          dibeli hari ini.
-                        */}
-                        <em>
-                          {s.hariSisa != null
-                            ? `± ${Math.floor(s.hariSisa)} hari lagi habis`
-                            : `ambang ${s.ambang} · belum ada data pemakaian`}
-                        </em>
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              <p className="mgr-hint">
-                Urutan memakai <b>hari sisa</b> = stok ÷ rata-rata pemakaian{' '}
-                {JENDELA_PEMAKAIAN} hari terakhir. Merah = kurang dari{' '}
-                {HARI_SISA_MERAH} hari. Item tanpa riwayat pemakaian (mis. tinta)
-                tetap memakai ambang tetap.
-              </p>
-            </Panel>
+            <KesehatanOpsPanel ops={ops} />
 
             <MasalahTeknisPanel
               siap={data.masalahTeknisSiap}
@@ -2365,6 +2318,100 @@ function Panel({
       </div>
       <div className="mgr-panel-body">{children}</div>
     </section>
+  )
+}
+
+/**
+ * Stok & salah cetak.
+ *
+ * Panel ini hampir selalu berkata "aman", jadi bentuk bawaannya sengaja cuma
+ * dua baris: satu kalimat status di kepala, satu baris sisa stok di badannya.
+ * Daftar item yang harus dibeli — beserta hitungan hari sisanya — baru
+ * dibuka kalau ditekan, supaya kolom samping tidak habis dipakai angka yang
+ * tidak perlu dibaca hari itu.
+ */
+function KesehatanOpsPanel({ ops }: { ops: Operasional }) {
+  const [buka, setBuka] = useState(false)
+  const perlu = ops.stokKritis.length
+  // Badge dipakai untuk urgensi, bukan untuk mengulang hitungan di sub.
+  const mendesak = ops.stokKritis.filter((s) => s.tingkat === 'merah').length
+  return (
+    <Panel
+      judul="Kesehatan Operasional"
+      sub={
+        (perlu === 0
+          ? 'Stok aman minggu ini'
+          : `${perlu} item perlu dibeli`) +
+        ` · ${ops.salahCetakBulan} lembar salah cetak bulan ini`
+      }
+      badge={mendesak > 0 ? `${mendesak} mendesak` : undefined}
+      aksi={
+        <button
+          type="button"
+          className="mgr-aksi-btn"
+          onClick={() => setBuka((v) => !v)}
+          aria-expanded={buka}
+        >
+          {buka ? 'Tutup' : 'Lihat stok'}
+        </button>
+      }
+    >
+      {/* Sisa stok total: satu baris, cukup untuk tahu perlu dibuka atau tidak. */}
+      <div className="mgr-ops-ringkas">
+        <span>
+          <b>{ops.totalKertas}</b> lembar kertas
+        </span>
+        <span>
+          <b>{ops.totalFrame}</b> frame
+        </span>
+        <span>
+          <b>{ops.totalTinta}</b> botol tinta
+        </span>
+        <span>
+          <b>{ops.amplop}</b> amplop
+        </span>
+      </div>
+
+      {buka &&
+        (perlu === 0 ? (
+          <p className="mgr-empty">Tidak ada stok yang perlu dibeli minggu ini.</p>
+        ) : (
+          <>
+            <ul className="mgr-stok">
+              {ops.stokKritis.map((s) => (
+                <li
+                  key={s.nama}
+                  className={
+                    (s.stok === 0 ? 'is-habis' : '') +
+                    (s.tingkat === 'merah' ? ' is-merah' : ' is-kuning')
+                  }
+                >
+                  <span className="nm">{s.nama}</span>
+                  <span className="vl">
+                    {s.stok} {s.satuan}
+                    {/*
+                      Hari sisa mengalahkan ambang tetap: 10 lembar yang laku
+                      1/hari tidak mendesak, 10 lembar yang laku 5/hari harus
+                      dibeli hari ini.
+                    */}
+                    <em>
+                      {s.hariSisa != null
+                        ? `± ${Math.floor(s.hariSisa)} hari lagi habis`
+                        : `ambang ${s.ambang} · belum ada data pemakaian`}
+                    </em>
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <p className="mgr-hint">
+              Urutan memakai <b>hari sisa</b> = stok ÷ rata-rata pemakaian{' '}
+              {JENDELA_PEMAKAIAN} hari terakhir. Merah = kurang dari{' '}
+              {HARI_SISA_MERAH} hari. Item tanpa riwayat pemakaian (mis. tinta)
+              tetap memakai ambang tetap.
+            </p>
+          </>
+        ))}
+    </Panel>
   )
 }
 

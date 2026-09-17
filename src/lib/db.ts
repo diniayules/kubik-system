@@ -21,6 +21,7 @@ import type {
   HargaTiket,
   HargaUpgrade,
   JadwalShift,
+  KlaimSosmed,
   JenisFrame,
   Kemitraan,
   KemitraanImbalan,
@@ -238,8 +239,10 @@ type KemitraanRow = {
 }
 type SosmedRow = Omit<
   SosmedHarian,
-  'catatan' | 'tautan' | 'oleh' | 'olehList'
+  'catatan' | 'tautan' | 'oleh' | 'olehList' | 'live'
 > & {
+  /** Belum ada sebelum migrasi 0058 — dibaca dengan fallback `false`. */
+  live?: boolean | null
   catatan: string | null
   tautan: string | null
   oleh: string | null
@@ -262,11 +265,23 @@ type MasalahTeknisRow = {
   selesai_oleh: string | null
   solusi: string | null
 }
+type KlaimSosmedRow = {
+  tanggal: string
+  employee_id: string
+  jenis: KlaimSosmed['jenis']
+  status: KlaimSosmed['status']
+  tautan: string | null
+  catatan: string | null
+  disetujui_oleh: string | null
+  disetujui_pada: string | null
+}
 type JadwalShiftRow = {
   tanggal: string
   employee_id: string
   shift: JadwalShift['shift']
   catatan: string | null
+  /** Belum ada sebelum migrasi 0059 — dibaca dengan fallback `false`. */
+  live?: boolean | null
 }
 type PenarikanUangBesarRow = {
   id: string
@@ -355,6 +370,7 @@ export async function fetchAppData(): Promise<AppData> {
     inactiveRes,
     promoRes,
     jadwalRes,
+    klaimRes,
     sosmedRes,
     laporanHarianRes,
     leadsRes,
@@ -417,13 +433,30 @@ export async function fetchAppData(): Promise<AppData> {
     // melihat jadwalnya sendiri). Lihat migration 0044.
     supabase
       .from('jadwal_shift')
-      .select('tanggal, employee_id, shift, catatan')
+      // `live` = rencana siaran langsung (migrasi 0059). Kolom yang disebut di
+      // sini WAJIB ada: PostgREST menolak kolom asing, dan penolakan itu di
+      // bawah diperlakukan sama dengan "tabel tidak terbaca" → roster kosong.
+      .select('tanggal, employee_id, shift, catatan, live')
+      .order('tanggal', { ascending: true }),
+    // Laporan tugas sosmed operator: semua user login boleh membaca. Operator
+    // perlu melihat progresnya sendiri — itu seluruh guna papan ini — dan
+    // pengelola perlu antrean yang harus diperiksa. Lihat migration 0060.
+    supabase
+      .from('klaim_sosmed')
+      .select(
+        'tanggal, employee_id, jenis, status, tautan, catatan, disetujui_oleh, disetujui_pada',
+      )
       .order('tanggal', { ascending: true }),
     // Log sosmed harian: semua user login boleh membaca (operator perlu tahu
     // hari mana yang masih kosong). Lihat migration 0046.
     supabase
       .from('sosmed_harian')
-      .select('tanggal, posting, story, repost, engagement, catatan, tautan, oleh')
+      // `oleh_list` & `live` WAJIB ikut di sini. Tanpa `oleh_list`, hari yang
+      // dikerjakan berdua cuma memulangkan satu nama dan orang kedua kehilangan
+      // haknya atas bonus sosmed; tanpa `live`, target live tidak pernah terbaca.
+      .select(
+        'tanggal, posting, story, repost, engagement, live, catatan, tautan, oleh, oleh_list',
+      )
       .order('tanggal', { ascending: true }),
     // Laporan closing harian: RLS mengunci baca & tulis ke pengelola saja —
     // isinya menyebut nama operator. Lihat migration 0052.
@@ -495,6 +528,10 @@ export async function fetchAppData(): Promise<AppData> {
   const jadwal = (jadwalRes.error ? [] : (jadwalRes.data ?? [])) as JadwalShiftRow[]
   // Toleran kalau tabel `sosmed_harian` belum ada (migrasi 0046 belum
   // dijalankan) — fallback [] agar app tetap jalan.
+  // Toleran kalau tabel `klaim_sosmed` belum ada (migrasi 0060 belum
+  // dijalankan) — fallback [] agar app tetap jalan; papan klaim di layar
+  // Jadwal jadi kosong, bukan rusak.
+  const klaim = (klaimRes.error ? [] : (klaimRes.data ?? [])) as KlaimSosmedRow[]
   const sosmed = (sosmedRes.error ? [] : (sosmedRes.data ?? [])) as SosmedRow[]
   // Toleran kalau tabel `laporan_harian` belum ada (migrasi 0052 belum
   // dijalankan) — fallback [] agar app tetap jalan. Untuk operator, RLS
@@ -804,12 +841,25 @@ export async function fetchAppData(): Promise<AppData> {
         dibuatOleh: r.created_by ?? undefined,
       }),
     ),
+    klaimSosmed: klaim.map((r) => ({
+      tanggal: r.tanggal,
+      employeeId: r.employee_id,
+      jenis: r.jenis,
+      status: r.status,
+      tautan: r.tautan ?? undefined,
+      catatan: r.catatan ?? undefined,
+      disetujuiOleh: r.disetujui_oleh ?? undefined,
+      disetujuiPada: r.disetujui_pada ?? undefined,
+    })),
     sosmedHarian: sosmed.map((r) => ({
       tanggal: r.tanggal,
       posting: r.posting,
       story: r.story,
       repost: r.repost,
       engagement: r.engagement,
+      // `?? false` hanya menjaga dari nilai null, BUKAN dari kolom yang hilang:
+      // kolomnya sudah ikut di `.select()` di atas, jadi migrasi 0058 wajib.
+      live: r.live ?? false,
       catatan: r.catatan ?? undefined,
       tautan: r.tautan ?? undefined,
       oleh: r.oleh ?? undefined,
@@ -848,6 +898,9 @@ export async function fetchAppData(): Promise<AppData> {
       employeeId: j.employee_id,
       shift: j.shift,
       catatan: j.catatan ?? undefined,
+      // Sama seperti sosmed: `?? false` menjaga dari null, bukan dari kolom
+      // yang hilang. Kolomnya ikut di `.select()`, jadi migrasi 0059 wajib.
+      live: j.live ?? false,
     })),
     gajiPembayaranVia: Object.fromEntries(
       pembayaranVia.map((r) => [
@@ -1286,6 +1339,7 @@ export async function persistChanges(
       story: r.story,
       repost: r.repost,
       engagement: r.engagement,
+      live: r.live ?? false,
       catatan: r.catatan ?? '',
       tautan: r.tautan ?? '',
       // Kolom lama tetap diisi entri PROFIL pertama (ia ber-foreign-key, jadi
@@ -1337,6 +1391,9 @@ export async function persistChanges(
 
   // ---- jadwal_shift (kunci komposit tanggal+employee_id) ----
   syncJadwal(jobs, prev.jadwalShift ?? [], next.jadwalShift ?? [], userId)
+
+  // ---- klaim_sosmed (kunci komposit tanggal+employee_id+jenis) ----
+  syncKlaim(jobs, prev.klaimSosmed ?? [], next.klaimSosmed ?? [])
 
   // ---- app_config (prices + branding text) ----
   const configFields: (keyof AppData)[] = [
@@ -1448,6 +1505,7 @@ function syncJadwal(
       employee_id: j.employeeId,
       shift: j.shift,
       catatan: j.catatan ?? '',
+      live: j.live ?? false,
       ...(prevMap.has(kunci(j)) || !userId ? {} : { created_by: userId }),
     }))
 
@@ -1484,6 +1542,64 @@ function syncJadwal(
 // Generic insert(new)/upsert(changed)/delete(removed) sync for a table
 // keyed by a stable id. `createdByUser` (if given) stamps created_by on
 // NEW rows only (so updates never reassign ownership).
+/**
+ * Sinkronkan `klaim_sosmed`. Tidak bisa memakai {@link syncRows} karena kunci
+ * primernya tiga kolom, sementara syncRows menghapus lewat satu kolom saja.
+ *
+ * `disetujui_oleh` & `disetujui_pada` TIDAK pernah dikirim: keduanya distempel
+ * trigger `protect_klaim_sosmed` di server. Mengirimnya dari sini akan membuat
+ * jejak persetujuan bisa dikarang dari layar — dan seluruh jaminan bonus ini
+ * bertumpu pada jejak itu.
+ */
+function syncKlaim(
+  jobs: Promise<unknown>[],
+  prev: KlaimSosmed[],
+  next: KlaimSosmed[],
+): void {
+  const kunci = (k: KlaimSosmed) => `${k.tanggal}::${k.employeeId}::${k.jenis}`
+  const prevMap = new Map(prev.map((k) => [kunci(k), k]))
+  const nextKeys = new Set(next.map(kunci))
+
+  const upserts = next
+    .filter((k) => {
+      const p = prevMap.get(kunci(k))
+      return !p || !eq(p, k)
+    })
+    .map((k) => ({
+      tanggal: k.tanggal,
+      employee_id: k.employeeId,
+      jenis: k.jenis,
+      status: k.status,
+      tautan: k.tautan ?? '',
+      catatan: k.catatan ?? '',
+    }))
+
+  if (upserts.length) {
+    jobs.push(
+      Promise.resolve(
+        supabase
+          .from('klaim_sosmed')
+          .upsert(upserts, { onConflict: 'tanggal,employee_id,jenis' }),
+      ).then(throwIfError),
+    )
+  }
+
+  // Penghapusan dicocokkan per baris: kunci tiga kolom tidak bisa dipendekkan
+  // jadi satu `.in()`. Jumlahnya selalu kecil — satu klik mencabut satu klaim.
+  for (const k of prev) {
+    if (nextKeys.has(kunci(k))) continue
+    jobs.push(
+      Promise.resolve(
+        supabase.from('klaim_sosmed').delete().match({
+          tanggal: k.tanggal,
+          employee_id: k.employeeId,
+          jenis: k.jenis,
+        }),
+      ).then(throwIfError),
+    )
+  }
+}
+
 function syncRows<T>(
   jobs: Promise<unknown>[],
   table: string,

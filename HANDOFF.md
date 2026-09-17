@@ -359,6 +359,266 @@ entry.
 
 ---
 
+## 🆕 Bonus sosial media → gaji pokok operator (migration 0058)
+
+Aturan yang dijanjikan ke operator: **gaji pokok naik Rp 800.000 → Rp 1.000.000
+untuk satu bulan kalau KETIGA target sosial media terpenuhi di bulan itu.**
+Kurang satu pun, tarifnya tetap angka dasar — sengaja "semua atau tidak sama
+sekali" supaya janjinya muat dalam satu kalimat dan tidak bisa dipenuhi lewat
+syarat yang paling mudah saja.
+
+| Target | Bukti yang dibaca | Patokan |
+|---|---|---|
+| Story konten tiap hari kerja | `klaim_sosmed` jenis `story`, status `disetujui` (**0060**) | jumlah hari `emp` benar-benar masuk kerja di bulan itu |
+| Konten min. 4/bulan | `promo_programs` `jenis='konten'`, `pic=emp`, `tahap='selesai'`, `selesai_pada` di bulan itu | 4 |
+| Live min. 1×/minggu | `klaim_sosmed` jenis `live`, status `disetujui` (**0060**) | jumlah minggu penuh bulan itu |
+
+> ⚠️ **Sumber story & live PINDAH di migrasi 0060.** Versi pertama membacanya
+> dari `sosmed_harian.story`/`.live` dengan atribusi lewat `oleh_list`. Itu
+> sudah tidak berlaku — lihat bagian "Operator melapor, pengelola menyetujui"
+> di bawah. Kolom lamanya tetap ada untuk baris lama dan sudah dipindahkan ke
+> `klaim_sosmed` oleh backfill 0060.
+
+Semua logikanya murni di **`src/bonusSosmed.ts`** (`capaianBonus`,
+`gajiPokokBerlaku`, `mingguDinilai`) — `gaji.ts` **tidak berubah sama sekali**.
+Bonus bekerja dengan menaikkan **tarif gaji pokok** yang dioper ke
+`hitungSlipGaji`, bukan dengan menambah baris bonus baru: yang dijanjikan
+memang "gaji pokoknya naik", dan gaji pokok di sini diakru per hari hadir.
+
+Keputusan yang jangan diubah tanpa memikirkan ulang alasannya:
+
+- **Penyebut story = hari `emp` masuk kerja**, bukan 30 hari. Studio cuma punya
+  satu akun; yang bertanggung jawab atas story hari ini adalah yang sedang
+  shift. Adil dua arah — operator yang jarang masuk punya penyebut kecil tapi
+  tetap harus mengisi SEMUA harinya. Definisi "hari kerja" disalin persis dari
+  `hariHadir` di `gaji.ts` (cuti/libur/bersih/pantau tidak termasuk), dan
+  dipotong di `hariIni`.
+- **Dinilai saat BULAN TUTUP**, bukan real-time. Selama bulan berjalan slip
+  memakai tarif dasar dan hanya menampilkan progres + proyeksi. Kalau kenaikan
+  dipakai real-time, nominal gaji yang sudah dilihat operator bisa TURUN lagi
+  besoknya begitu satu hari bolong — angka gaji tidak boleh bergerak mundur.
+- **Minggu yang dinilai = minggu yang ≥4 harinya jatuh di bulan itu**
+  (`MIN_HARI_MINGGU_DINILAI`). Efeknya: setiap minggu kalender dimiliki **tepat
+  satu** bulan, jadi setahun = 52 live, persis "1× seminggu". September 2026
+  dapat 4 minggu, Oktober 2026 dapat 5 — itu benar, bukan bug.
+- **Atribusi** tidak lagi ditebak dari `olehList`: sejak 0060 tiap laporan
+  memang milik satu orang (`klaim_sosmed.employee_id`). Aturan lama
+  "`olehList` kosong = diakui untuk siapa pun" sudah dihapus bersama masalah
+  yang melahirkannya.
+- **Konten hanya dihitung dari `selesai_pada`** (stempel trigger database),
+  berbeda dari `kontribusiKonten()` di `manajemen.ts` yang juga menerima
+  `deadline`/`createdAt` sebagai perkiraan. Untuk uang, perkiraan tidak cukup.
+- **Anti-curang**: operator boleh MELAPOR, tidak boleh MENYETUJUI. Trigger
+  `protect_klaim_sosmed` (0060) memaksa tiap tulisan non-pengelola jadi
+  `'menunggu'` atas nama dirinya sendiri, dan `selesai_pada` konten distempel
+  database (0046). Tidak ada satu pun jalan dari layar operator ke angka yang
+  dihitung.
+- **`Math.max(dasar, 1.000.000)`** menjaga karyawan yang gaji dasarnya sudah di
+  atas patokan tidak justru TURUN karena berprestasi. Konsekuensinya bonus ini
+  tidak berarti apa-apa bagi mereka; kalau suatu saat ada operator senior
+  seperti itu, ubah jadi tambahan (dasar + selisih), bukan patokan absolut.
+
+### 🐞 Bug lama yang ikut ketahuan & diperbaiki
+
+`db.ts` men-`select` `sosmed_harian` **tanpa `oleh_list`**, padahal mapper-nya
+membaca `r.oleh_list`. Akibatnya sejak migrasi 0049 hari yang dikerjakan BERDUA
+selalu terbaca satu orang saja (jatuh ke kolom lama `oleh`). Tidak terasa
+sebelum ini — begitu `hariSosmed` dipakai menghitung uang, orang kedua
+kehilangan haknya atas bonus. Sekarang `oleh_list` & `live` ikut di-`select`.
+
+⚠️ **Konsekuensi**: kolom yang disebut di `.select()` WAJIB ada. PostgREST
+menolak kolom asing, dan di `db.ts` penolakan itu diperlakukan sama dengan
+"tabel tidak terbaca" → slice-nya jatuh ke `[]`. Jadi komentar "toleran kalau
+migrasi belum jalan" **tidak berlaku** untuk kolom yang ikut di select; `?? false`
+di mapper hanya menjaga dari nilai null.
+
+### Perubahan yang menyertainya
+
+- `SosmedHarian.live` (`types.ts`) + kolom `sosmed_harian.live` (**migrasi 0058
+  sudah di-apply** ke `jbmpohlxmkbidrumotrq`, 2026-09-17 via MCP). `db.ts`
+  membacanya dengan fallback `false` supaya app lama tetap jalan.
+- `AKSI_SOSMED` bertambah `'live'`; label `story` diubah jadi **"Story konten"**
+  dan ada `AKSI_SOSMED_HINT` baru. Batas story-konten vs repost menentukan uang,
+  jadi ditulis sebagai `title` chip + catatan di tab Social Media — tempat
+  centangnya dibuat, bukan cuma di dokumentasi ini.
+- `GajiKaryawan.tsx`: komponen `BonusSosmed` di dalam slip (3 baris progres +
+  status), disembunyikan kalau gaji dasar 0 atau sudah ≥ Rp 1.000.000.
+  **PENTING** — kolom input gaji pokok mengedit `bonus.gajiPokokDasar`, BUKAN
+  `slip.gajiPokok` (yang sudah termasuk kenaikan). Kalau tertukar, satu blur
+  akan menyimpan Rp 1.000.000 sebagai gaji dasar permanen.
+- `kas.ts` & rekap bulanan di `LaporanIncome.tsx` ikut memakai
+  `gajiPokokBerlaku()` — kalau tidak, uang yang keluar dari kas tidak sama
+  dengan slip yang dibayarkan.
+- `geserHari()` di `manajemen.ts` sekarang di-export (dipakai `bonusSosmed.ts`).
+  Ia sengaja memakai waktu lokal; jangan diganti `toISOString()`, yang menggeser
+  tanggal satu hari di GMT+7.
+
+**Belum diuji di browser dengan data sungguhan** — `npx tsc -b` & `npx vite
+build` bersih, dan logikanya diverifikasi lewat skrip sekali-pakai (7 skenario:
+lulus, bulan berjalan, story bolong 1 hari, konten kurang 1, atribusi ke orang
+lain, bulan baru mulai, gaji dasar di atas patokan).
+
+---
+
+## 🆕 Giliran Live di layar Jadwal (migration 0059)
+
+Dari tiga target bonus, hanya **live** yang belum punya jadwal — story sudah
+terjawab roster (yang shift hari itu, dialah yang story) dan konten sudah punya
+`deadline` di Papan Promosi + papan "Denyut Mingguan". Membuat baris story atau
+konten di sini akan jadi grid kedua yang mengulang papan yang sudah ada, dan
+tanggal konten yang bisa diatur dari dua layar pasti akan berbeda. **Jangan
+tambahkan keduanya.**
+
+- **`jadwal_shift.live`** (kolom baru) = RENCANA. Ditempel ke baris roster, bukan
+  tabel sendiri, karena live tidak bisa berdiri di luar shift: yang siaran
+  adalah yang sedang di studio. Aturan itu jadi berlaku sendiri — `setSel()`
+  menggugurkan `live` begitu selnya berubah jadi cuti/libur/kosong, dan
+  mempertahankannya untuk pagi ↔ sore ↔ penuh (cuma geser jam).
+- **`sosmed_harian.live`** (0058) = REALISASI, tetap dicentang pengelola di
+  Dashboard Manajemen. Layar Jadwal hanya MEMBACANYA dan mengunci selnya —
+  pola yang sama persis dengan cuti ACC yang menimpa rencana. Tidak ada jalur
+  tulis baru, jadi tidak ada lubang anti-curang baru.
+
+Pasangannya jadi sejajar: `jadwal_shift` ↔ `absen`, `jadwal_shift.live` ↔
+`sosmed_harian.live`.
+
+Empat keadaan sel Live, semuanya perlu dibedakan:
+
+| Sel | Arti |
+|---|---|
+| kosong | belum dijadwalkan |
+| biru bergaris | dijadwalkan, tanggalnya belum lewat |
+| **merah** | dijadwalkan tapi tanggalnya lewat **tanpa** catatan live |
+| hijau (terkunci) | live terlaksana, dari log sosmed |
+| redup | tidak ada yang bertugas hari itu — tidak ada yang bisa ditunjuk |
+
+Yang merah itu **wajib ada**. Tanpa state itu, jadwal yang meleset tampil sama
+dengan jadwal yang masih akan datang, dan gunanya papan ini hilang.
+
+**Rekap per minggu di bawah tabel adalah inti panelnya**: lubang minggu ini
+harus terlihat hari SENIN, bukan ketahuan saat bulan sudah tutup. Definisi
+minggunya dipinjam dari `mingguDinilai()` di `bonusSosmed.ts` supaya papan ini
+dan hitungan gajinya tidak pernah memotong minggu di tempat berbeda —
+konsekuensinya tanggal di ujung bulan bisa masuk minggu milik bulan sebelah,
+dan selnya menyebut itu di `title`.
+
+**Rencana TIDAK ikut menghitung bonus.** `bonusSosmed.ts` hanya membaca
+realisasi. Menjadwalkan live bukan bukti live.
+
+**Preview:** `jadwal-preview.html` → `src/__preview__/jadwal.tsx`. Roster
+sebulan penuh dirakit di berkas preview itu, bukan di `data.ts`, supaya preview
+Dashboard Manajemen (yang menilai cakupan shift) tidak ikut berubah.
+
+---
+
+## 🆕 Operator melapor, pengelola menyetujui (migrations 0060 & 0061)
+
+**Perubahan arah, dan ia MEMBATALKAN sebagian rancangan 0058/0059.** Sebelum
+ini story & live hanya bisa dicatat pengelola. Aman dari sisi anti-curang, tapi
+seluruh beban pencatatan jatuh ke satu orang: kalau manajer telat mencentang,
+**operator** yang kehilangan bonusnya — padahal bukan dia yang lalai.
+
+Alurnya sekarang memakai idiom yang sudah dipakai dua kali di aplikasi ini
+(`absen_records.status`, dan lampiran desain di 0057): **operator MELAPOR →
+`'menunggu'` → pengelola MEMERIKSA → `'disetujui'` → baru dihitung.**
+
+### `klaim_sosmed` (0060) — story & live
+
+- PK `(tanggal, employee_id, jenis)`. Grain-nya per ORANG, bukan per tanggal
+  seperti `sosmed_harian`: story dua operator di hari yang sama harus terpisah,
+  karena yang dinilai dan dibayar adalah orangnya.
+- **Tabel sendiri, BUKAN kolom di `jadwal_shift`** — ini koreksi penting atas
+  rancangan 0059. Klaim tidak boleh bergantung pada roster terisi: penyebut
+  bonus diambil dari **presensi**, jadi hari yang rosternya bolong tetap
+  menghitung, dan operator harus tetap bisa melapor di hari itu.
+- `jadwal_shift.live` (0059) **tetap dipakai** dan tetap berarti RENCANA
+  ("minggu ini live hari Rabu"). Pasangan rencana ↔ realisasi utuh:
+  `jadwal_shift` ↔ `absen`, `jadwal_shift.live` ↔ `klaim_sosmed` jenis live.
+- Trigger `protect_klaim_sosmed`: non-admin → `employee_id := auth.uid()`,
+  `status := 'menunggu'`, dan klaim yang sudah di-ACC **dikembalikan ke `old`**
+  (kalau tidak, pelapor tinggal menunggu ACC lalu mengganti isinya). Admin →
+  `disetujui_oleh`/`disetujui_pada` distempel server, tidak pernah dari client
+  (`syncKlaim` di `db.ts` sengaja tidak mengirim dua kolom itu).
+- RLS: SELECT semua yang login (operator perlu melihat progresnya — itu seluruh
+  guna papan ini). DELETE oleh operator **hanya** selama `status='menunggu'`.
+- **Backfill**: `sosmed_harian.story/.live` lama dipindah jadi klaim
+  `'disetujui'`. Tanpa itu slip bulan lampau akan berubah sendiri. Trigger
+  dimatikan sementara selama backfill — ia bersandar pada `auth.uid()` yang
+  null saat migrasi jalan.
+
+### `promo_programs.tahapan` dibuka untuk PIC (0061)
+
+Konten **tidak** ikut ke `klaim_sosmed`: satuannya KARTU, bukan tanggal, dan
+kartunya sudah punya centang take → edit → tayang (0051) yang sebelumnya
+admin-only. 0061 membuka `tahapan` — **hanya kolom itu, hanya untuk `old.pic =
+auth.uid()`, dan hanya selama kartunya belum `'selesai'`**. Semua kolom lain
+tetap dibekukan oleh `protect_promo_status`.
+
+Alur ACC-nya sudah ada, tidak perlu status baru:
+
+| Aksi | Siapa | Arti |
+|---|---|---|
+| centang `tayang` | PIC | klaim — **tidak dihitung apa pun** |
+| pindahkan kartu ke `selesai` | pengelola | ACC — `selesai_pada` distempel, inilah yang dihitung bonus |
+
+`bonusSosmed.ts` tidak pernah membaca `tahapan`, jadi membukanya tidak membuka
+satu pun jalan ke uang. UI-nya di `screens/Promosi.tsx` (papan yang memang
+dilihat operator), bukan di Denyut Mingguan yang pengelola-only.
+
+### Layar Jadwal jadi papan lapor
+
+Di bawah roster: satu baris per **(orang × tugas)** — Story & Live — plus satu
+baris **Konten tayang** yang BACA-SAJA (diturunkan dari kartu promo; menaruh
+jalur tulis kedua di sini akan melahirkan dua tanggal "konten selesai" yang
+bisa berbeda).
+
+Satu klik memutar status, dan urutannya berbeda menurut penekannya:
+
+| | kosong | menunggu | disetujui |
+|---|---|---|---|
+| **pengelola** | → disetujui | → disetujui (ACC) | → kosong (cabut) |
+| **operator (barisnya sendiri)** | → menunggu | → kosong (cabut) | terkunci |
+
+Warna selnya: `○` biru = live dijadwalkan · `•` kuning = dilaporkan, belum
+diperiksa · `✓` hijau = disetujui · `✕` merah = **terlewat**.
+
+Merah hanya menyala untuk kewajiban yang benar-benar ada: story pada hari orang
+itu MASUK KERJA (dari presensi, aturan disalin persis dari `bonusSosmed.ts`),
+live pada hari yang memang dijadwalkan untuknya. **Kuning sengaja bukan hijau**
+— yang belum di-ACC tidak menambah apa pun dan warnanya tidak boleh menjanjikan
+sebaliknya.
+
+### Story & Live dipensiunkan dari Dashboard Manajemen
+
+`AKSI_SOSMED` sekarang **hanya** `posting · repost · engagement` (log akun
+studio). Satu tempat centang per satu hal — kalau story bisa dicentang di dua
+layar, cepat atau lambat angkanya berbeda dan kamu harus memilih mana yang
+benar. Yang ikut menyesuaikan:
+
+- `aktivitasSosmed()` & `dampakSosmed()` — hari dengan klaim `'disetujui'` tetap
+  terhitung **aktif**, walau tidak ada posting/repost/engagement.
+- `kontribusiKonten().hariSosmed` — dihitung dari klaim disetujui per orang.
+  Ini justru lebih tepat dari sebelumnya: `olehList` tidak pernah memisahkan
+  kontribusi dua orang dengan benar (lihat bug `oleh_list` di atas).
+- Panel Social Media menulis di layar ke mana story & live pindah, supaya orang
+  tidak mencarinya di tempat yang salah lalu menyangka fiturnya hilang.
+
+### Yang masih perlu diputuskan
+
+**Target live dihitung PER ORANG** (tiap operator butuh 1 live/minggu), sama
+seperti story. Dengan 2 operator berarti 2 live seminggu untuk studio. Kalau
+yang dimaksud owner adalah 1 live seminggu untuk STUDIO (siapa pun yang
+mengerjakan), `capaianBonus()` di `bonusSosmed.ts` yang perlu diubah — bukan
+papannya.
+
+**Belum diuji di browser dengan akun operator sungguhan.** Yang sudah: `tsc -b`
+& `vite build` bersih, dan papannya dilihat lewat `jadwal-preview.html` dalam
+keadaan lengkap (disetujui, menunggu, terlewat, dijadwalkan, hari libur).
+Trigger & RLS 0060/0061 **belum pernah diadu dengan sesi operator asli** — itu
+uji yang paling penting berikutnya.
+
+---
+
 ## Build / run
 - `npm run dev` (Vite, port 5173). `npm run build` = `tsc -b && vite build`.
 - After editing `.env.local`, **restart** dev server.

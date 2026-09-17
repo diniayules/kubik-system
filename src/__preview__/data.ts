@@ -152,9 +152,17 @@ export const PREVIEW_DATA: AppData = {
   // terbaca (lihat `jarakTahap`), dan ikut dinormalkan begitu ritme disimpan
   // sekali dari layar.
   ritmeKonten: { jumlah: 2, siapkan: 2, disetujui: true },
+  klaimSosmed: [
+    { tanggal: `${BULAN_INI}-14`, employeeId: AYU, jenis: 'story', status: 'disetujui' },
+    { tanggal: `${BULAN_INI}-15`, employeeId: AYU, jenis: 'story', status: 'disetujui' },
+    { tanggal: `${BULAN_INI}-15`, employeeId: AYU, jenis: 'live', status: 'disetujui' },
+    // Baru dilaporkan, belum diperiksa — inilah yang harus terlihat sebagai
+    // antrean di layar Jadwal.
+    { tanggal: `${BULAN_INI}-16`, employeeId: RIZKY, jenis: 'story', status: 'menunggu' },
+  ],
   sosmedHarian: [
-    { tanggal: `${BULAN_INI}-14`, posting: true, story: true, repost: false, engagement: true, olehList: [AYU] },
-    { tanggal: `${BULAN_INI}-15`, posting: false, story: true, repost: false, engagement: true, olehList: [AYU] },
+    { tanggal: `${BULAN_INI}-14`, posting: true, story: true, repost: false, engagement: true, live: false, olehList: [AYU] },
+    { tanggal: `${BULAN_INI}-15`, posting: false, story: true, repost: false, engagement: true, live: true, olehList: [AYU] },
   ],
   laporanHarian: [
     { tanggal: `${BULAN_INI}-12`, status: 'aman', catatan: 'Ramai, tidak ada kendala.', oleh: MANAJER, diperbarui: iso(`${BULAN_INI}-12`, '21:30') },
@@ -188,4 +196,5 @@ export const PREVIEW_DATA: AppData = {
   dashJudul: 'Dashboard Manajemen',
 }
 
-export const PREVIEW_IDS = { OWNER, MANAJER }
+export const PREVIEW_IDS = { OWNER, MANAJER, RIZKY, AYU }
+export const PREVIEW_BULAN = BULAN_INI

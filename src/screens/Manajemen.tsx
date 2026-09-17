@@ -25,6 +25,7 @@ import {
   kinerjaKaryawan,
   operasional,
   AKSI_SOSMED,
+  AKSI_SOSMED_HINT,
   AKSI_SOSMED_LABEL,
   aktivitasSosmed,
   cakupanShift,
@@ -428,6 +429,7 @@ export function Manajemen({
       story: false,
       repost: false,
       engagement: false,
+      live: false,
       ...list.find((r) => r.tanggal === tanggal),
       ...patch,
     }
@@ -1635,6 +1637,7 @@ export function Manajemen({
                       key={a}
                       type="button"
                       className={`mgr-sos-chip${logHariIni?.[a] ? ' is-on' : ''}`}
+                      title={AKSI_SOSMED_HINT[a as AksiSosmed]}
                       onClick={() =>
                         ubahSosmed(tglSosmed, { [a]: !logHariIni?.[a] } as Partial<SosmedHarian>)
                       }
@@ -1643,6 +1646,16 @@ export function Manajemen({
                     </button>
                   ))}
                 </div>
+                {/* Story & Live sudah TIDAK dicentang di sini sejak migrasi
+                    0060 — keduanya dilaporkan operator & disetujui pengelola di
+                    layar Jadwal. Ditulis di layar supaya orang tidak mencarinya
+                    di tempat yang salah lalu menyangka fiturnya hilang. */}
+                <p className="mgr-hint">
+                  <strong>Story</strong> &amp; <strong>Live</strong> tidak lagi
+                  dicentang di sini: operator melaporkannya sendiri di{' '}
+                  <strong>Jadwal Karyawan</strong>, dan kamu yang menyetujuinya
+                  di sana. Yang tersisa di panel ini adalah log akun studio.
+                </p>
                 <input
                   className="mgr-sos-tautan"
                   type="url"

@@ -14,6 +14,11 @@ import { todayKey } from '../storage'
 import { Icons } from '../components/Icons'
 import RupiahInput from '../components/RupiahInput'
 import { isPengelola } from '../lib/roles'
+import {
+  GAJI_POKOK_LULUS,
+  capaianBonus,
+  type CapaianBonus,
+} from '../bonusSosmed'
 
 type Props = {
   data: AppData
@@ -128,26 +133,31 @@ export function GajiKaryawan({ data, setData, isAdmin, currentUserId }: Props) {
           if (!mulai) return periodeAktif === bulanIni
           return periodeAktif >= mulai
         })
-        .map((emp) => ({
-          emp,
-          slip: hitungSlipGaji(
+        .map((emp) => {
+          // Bonus sosmed menaikkan TARIF gaji pokoknya, bukan menambah baris
+          // terpisah: yang dijanjikan ke operator adalah "gaji pokok naik jadi
+          // Rp 1.000.000", dan gaji pokok di sini diakru per hari hadir.
+          const bonus = capaianBonus(
             emp,
             data.gajiPokok[emp.id] ?? 0,
-            recordsBulan,
-            laporanBulan,
-            hariSeharusnyaKaryawan(emp, periodeAktif, hariIni),
-          ),
-        })),
-    [
-      karyawan,
-      data.gajiPokok,
-      recordsBulan,
-      laporanBulan,
-      hariIni,
-      mulaiBulanMap,
-      periodeAktif,
-      bulanIni,
-    ],
+            data,
+            periodeAktif,
+            hariIni,
+          )
+          return {
+            emp,
+            bonus,
+            slip: hitungSlipGaji(
+              emp,
+              bonus.gajiPokokEfektif,
+              recordsBulan,
+              laporanBulan,
+              hariSeharusnyaKaryawan(emp, periodeAktif, hariIni),
+            ),
+          }
+        }),
+    // `data` utuh: capaianBonus ikut membaca sosmedHarian & promoPrograms.
+    [karyawan, data, recordsBulan, laporanBulan, hariIni, mulaiBulanMap, periodeAktif, bulanIni],
   )
 
   // KPI total.
@@ -305,8 +315,9 @@ export function GajiKaryawan({ data, setData, isAdmin, currentUserId }: Props) {
             </div>
           ) : (
             <div className="gaji-grid">
-              {belumDibayar.map(({ emp, slip }) => (
+              {belumDibayar.map(({ emp, slip, bonus }) => (
                 <SlipCard
+                  bonus={bonus}
                   key={emp.id}
                   empId={emp.id}
                   nama={emp.nama}
@@ -335,8 +346,9 @@ export function GajiKaryawan({ data, setData, isAdmin, currentUserId }: Props) {
                 </h2>
               </div>
               <div className="gaji-grid">
-                {sudahDibayar.map(({ emp, slip }) => (
+                {sudahDibayar.map(({ emp, slip, bonus }) => (
                   <SlipCard
+                    bonus={bonus}
                     key={emp.id}
                     empId={emp.id}
                     nama={emp.nama}
@@ -363,11 +375,72 @@ export function GajiKaryawan({ data, setData, isAdmin, currentUserId }: Props) {
   )
 }
 
+/**
+ * Progres tiga target sosial media yang menaikkan gaji pokok operator.
+ *
+ * Tampil di dalam slip, bukan di layar sendiri: yang perlu dilihat operator
+ * adalah "kenapa gaji pokok saya segini", dan jawabannya hanya berarti kalau
+ * berdiri tepat di sebelah angkanya.
+ */
+function BonusSosmed({ bonus }: { bonus: CapaianBonus }) {
+  const status = bonus.bulanTutup
+    ? bonus.lulus
+      ? 'is-lulus'
+      : 'is-gagal'
+    : bonus.onTrack
+      ? 'is-ontrack'
+      : 'is-tertinggal'
+
+  const judul = bonus.bulanTutup
+    ? bonus.lulus
+      ? `Target tercapai — gaji pokok naik ke ${formatRupiah(bonus.gajiPokokEfektif)}`
+      : `Target tidak tercapai — gaji pokok tetap ${formatRupiah(bonus.gajiPokokDasar)}`
+    : bonus.onTrack
+      ? `Masih on-track — kalau tuntas sampai akhir bulan, gaji pokok jadi ${formatRupiah(GAJI_POKOK_LULUS)}`
+      : `Ada yang tertinggal — gaji pokok baru naik ke ${formatRupiah(GAJI_POKOK_LULUS)} kalau ketiganya tuntas`
+
+  return (
+    <div className={`gaji-bonus ${status}`}>
+      <div className="gaji-bonus-head">
+        <span className="gaji-bonus-tag">Bonus sosial media</span>
+        <span className="gaji-bonus-judul">{judul}</span>
+      </div>
+      <div className="gaji-bonus-list">
+        {bonus.syarat.map((sy) => {
+          // Target 0 (mis. belum ada hari kerja tercatat) digambar penuh —
+          // batang kosong akan terbaca "gagal" padahal belum ada yang ditagih.
+          const rasio = sy.target > 0 ? Math.min(1, sy.capai / sy.target) : 1
+          const ok = bonus.bulanTutup ? sy.lulus : sy.onTrack
+          return (
+            <div key={sy.kunci} className="gaji-bonus-baris">
+              <span className="gaji-bonus-ikon">{ok ? '✓' : '•'}</span>
+              <span className="gaji-bonus-lbl">{sy.label}</span>
+              <span className="gaji-bonus-angka">
+                {sy.capai}/{sy.target} {sy.satuan}
+              </span>
+              <span className="gaji-bonus-bar">
+                <i style={{ width: `${Math.round(rasio * 100)}%` }} />
+              </span>
+            </div>
+          )
+        })}
+      </div>
+      {!bonus.bulanTutup && (
+        <p className="gaji-bonus-nota">
+          Dinilai saat bulan tutup. Selama berjalan, slip ini masih memakai tarif{' '}
+          {formatRupiah(bonus.gajiPokokDasar)}.
+        </p>
+      )}
+    </div>
+  )
+}
+
 function SlipCard({
   empId,
   nama,
   jabatan,
   slip,
+  bonus,
   readOnly,
   printTitle,
   onGajiPokok,
@@ -381,6 +454,7 @@ function SlipCard({
   nama: string
   jabatan: string
   slip: SlipGaji
+  bonus: CapaianBonus
   readOnly: boolean
   printTitle: string
   onGajiPokok: (v: number) => void
@@ -392,16 +466,19 @@ function SlipCard({
 }) {
   // Input gaji pokok pakai draft lokal supaya tidak menulis DB tiap ketukan;
   // commit saat blur / Enter.
-  const [draft, setDraft] = useState(
-    slip.gajiPokok ? String(slip.gajiPokok) : '',
-  )
+  // PENTING — kolom ini mengedit gaji pokok DASAR (angka yang diatur owner),
+  // bukan `slip.gajiPokok` yang sudah termasuk kenaikan bonus. Kalau yang
+  // dipakai nilai efektif, satu blur saja akan menyimpan Rp 1.000.000 sebagai
+  // gaji dasar permanen dan bonus bulan itu jadi terkunci selamanya.
+  const dasar = bonus.gajiPokokDasar
+  const [draft, setDraft] = useState(dasar ? String(dasar) : '')
   useEffect(() => {
-    setDraft(slip.gajiPokok ? String(slip.gajiPokok) : '')
-  }, [slip.gajiPokok])
+    setDraft(dasar ? String(dasar) : '')
+  }, [dasar])
 
   function commit() {
     const v = parseInt(draft, 10) || 0
-    if (v !== slip.gajiPokok) onGajiPokok(v)
+    if (v !== dasar) onGajiPokok(v)
   }
 
   // Nomor rekening / e-wallet pakai draft lokal juga (commit saat blur / Enter).
@@ -547,6 +624,11 @@ function SlipCard({
           <Chip label="General cleaning" val={`${slip.hariBersih}×`} />
         )}
       </div>
+
+      {/* Bonus sosial media — kenaikan gaji pokok, bukan baris tambahan.
+          Disembunyikan kalau gaji dasarnya belum diatur atau sudah di atas
+          patokan: panel yang tidak bisa mengubah apa pun cuma jadi kebisingan. */}
+      {dasar > 0 && dasar < GAJI_POKOK_LULUS && <BonusSosmed bonus={bonus} />}
 
       {/* Rincian gaji */}
       <div className="gaji-rincian">

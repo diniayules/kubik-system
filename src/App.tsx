@@ -302,7 +302,12 @@ function Inner() {
             )}
 
             {screen.name === 'jadwal' && (
-              <Jadwal data={data} setData={setData} bisaUbah={isAdmin} />
+              <Jadwal
+                data={data}
+                setData={setData}
+                bisaUbah={isAdmin}
+                currentUserId={currentUserId}
+              />
             )}
 
             {screen.name === 'leads' && (

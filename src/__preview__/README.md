@@ -1,6 +1,7 @@
-# Preview lokal — Dashboard Manajemen
+# Preview lokal — Dashboard Manajemen, Home, & Jadwal
 
-Merender `screens/Manajemen.tsx` & `screens/Home.tsx` dengan **data contoh**,
+Merender `screens/Manajemen.tsx`, `screens/Home.tsx`, & `screens/Jadwal.tsx`
+dengan **data contoh**,
 tanpa Supabase dan tanpa login. Gunanya melihat perubahan tata letak dengan
 mata sendiri; `tsc` & `vite build` tidak menangkap badge yang meluber, kartu
 yang kehilangan gaya, atau kalimat yang tertulis dua kali.
@@ -10,6 +11,7 @@ npm run dev
 # lalu buka:
 #   http://localhost:5173/preview.html        → Dashboard Manajemen
 #   http://localhost:5173/home-preview.html   → layar Home (strip lapor kendala)
+#   http://localhost:5173/jadwal-preview.html → layar Jadwal (baris giliran Live)
 ```
 
 Tombol di pojok kiri atas menukar sudut pandang **Owner ↔ Manajer** — dipakai

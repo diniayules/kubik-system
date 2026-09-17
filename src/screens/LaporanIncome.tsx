@@ -28,6 +28,7 @@ import {
   totalUpgradePerTipe,
 } from '../income'
 import { hariSeharusnyaKaryawan, hitungSlipGaji } from '../gaji'
+import { gajiPokokBerlaku } from '../bonusSosmed'
 import { hitungRekonsiliasiKas } from '../kas'
 import { Icons } from '../components/Icons'
 import { IncomeEntryModal } from './IncomeEntryModal'
@@ -210,7 +211,8 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
           s +
           hitungSlipGaji(
             emp,
-            data.gajiPokok[emp.id] ?? 0,
+            // Ikut kenaikan bonus sosmed, sama seperti slip & kas.
+            gajiPokokBerlaku(emp, data, rekapAktif, hariIni),
             recordsBulan,
             laporanBulan,
             hariSeharusnyaKaryawan(emp, rekapAktif, hariIni),
@@ -223,15 +225,8 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
       .reduce((s, p) => s + (p.jumlah || 0), 0)
 
     return { tunai, qris, pemasukan, gaji, lain, bersih: pemasukan - gaji - lain }
-  }, [
-    rekapAktif,
-    hariIni,
-    data.records,
-    data.laporanIncome,
-    data.employees,
-    data.gajiPokok,
-    data.pengeluaran,
-  ])
+    // `data` utuh: gaji pokok efektif ikut membaca sosmedHarian & promoPrograms.
+  }, [rekapAktif, hariIni, data])
 
   function labelBulan(key: string): string {
     const [y, m] = key.split('-').map(Number)

@@ -13,6 +13,7 @@
 // =============================================================
 import type { AppData } from './types'
 import { hariSeharusnyaKaryawan, hitungSlipGaji } from './gaji'
+import { gajiPokokBerlaku } from './bonusSosmed'
 import { isPengelola } from './lib/roles'
 
 export type RekonsiliasiKas = {
@@ -75,7 +76,10 @@ export function hitungRekonsiliasiKas(
     if (!emp) continue
     const slip = hitungSlipGaji(
       emp,
-      data.gajiPokok[emp.id] ?? 0,
+      // Gaji pokok yang BERLAKU di bulan itu — sudah termasuk kenaikan bonus
+      // sosmed kalau targetnya tercapai. Kalau di sini dipakai angka dasar,
+      // uang yang keluar dari kas tidak sama dengan slip yang dibayarkan.
+      gajiPokokBerlaku(emp, data, bulan, hariIni),
       data.records.filter((r) => r.tanggal.startsWith(bulan)),
       data.laporanIncome.filter((l) => l.tanggal.startsWith(bulan)),
       hariSeharusnyaKaryawan(emp, bulan, hariIni),

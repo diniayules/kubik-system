@@ -591,6 +591,15 @@ export type JadwalShift = {
   employeeId: string
   shift: DayType
   catatan?: string
+  /**
+   * Orang ini dijadwalkan SIARAN LANGSUNG pada shift itu. RENCANA — bukti
+   * bahwa live-nya benar-benar terjadi ada di `SosmedHarian.live`, persis
+   * seperti roster (rencana) vs absen (realisasi). Lihat migration 0059.
+   *
+   * Sengaja menempel pada baris shift: tidak ada live tanpa orang yang
+   * bertugas di studio, dan menghapus shift ikut membatalkan rencana live-nya.
+   */
+  live?: boolean
 }
 
 /**
@@ -769,10 +778,21 @@ export type SosmedHarian = {
   /** Format `YYYY-MM-DD`. Sekaligus kunci primer. */
   tanggal: string
   posting: boolean
+  /**
+   * Story DI LUAR story rutin. Story "open"/"close" dan story yang cuma
+   * membagikan ulang unggahan TIDAK dicentang di sini — yang rutin sudah
+   * terwakili `repost`, dan kalau keduanya dicampur, target "story 1x sehari"
+   * terpenuhi hanya dengan membuka & menutup studio. Lihat `bonusSosmed.ts`.
+   */
   story: boolean
   repost: boolean
   /** Membalas komentar / berinteraksi dengan akun lain. */
   engagement: boolean
+  /**
+   * Siaran langsung (Instagram/TikTok) hari itu. Targetnya mingguan, bukan
+   * harian — perhitungannya di `bonusSosmed.ts`. Lihat migration 0058.
+   */
+  live: boolean
   catatan?: string
   /** Tautan ke unggahannya (opsional, untuk verifikasi). */
   tautan?: string
@@ -789,6 +809,56 @@ export type SosmedHarian = {
    * membuat orang berhenti mencatat. Lihat migration 0049.
    */
   olehList?: string[]
+}
+
+/**
+ * Jenis tugas sosial media yang DILAPORKAN operator lalu diperiksa pengelola.
+ * Konten tidak ada di sini — satuannya kartu Papan Promosi, bukan tanggal;
+ * klaimnya berupa centang tahap 'tayang' di kartunya (migration 0061).
+ */
+export type KlaimJenis = 'story' | 'live'
+
+/**
+ * Status satu laporan tugas sosial media. Pola yang sama dengan [AbsenStatus]
+ * dan [PromoStatus].
+ *  - 'menunggu'  : operator sudah melapor, pengelola belum memeriksa.
+ *                  TIDAK dihitung apa pun, termasuk bonus gaji pokok.
+ *  - 'disetujui' : sudah diperiksa pengelola. Inilah yang dihitung.
+ */
+export type KlaimStatus = 'menunggu' | 'disetujui'
+
+/**
+ * Satu laporan "aku sudah mengerjakannya", per (tanggal, orang, jenis).
+ * Disimpan di tabel `klaim_sosmed` (migration 0060).
+ *
+ * Grain-nya sengaja per ORANG, bukan per tanggal seperti [SosmedHarian]: story
+ * dua operator di hari yang sama harus bisa dibedakan, karena yang dinilai
+ * (dan dibayar) adalah orangnya.
+ *
+ * Tabelnya berdiri sendiri, TIDAK menempel ke [JadwalShift], supaya laporan
+ * tidak bergantung pada roster sudah disusun — penyebut bonus diambil dari
+ * presensi, jadi hari yang rosternya bolong tetap menghitung dan operator
+ * harus tetap bisa melapor di hari itu.
+ */
+export type KlaimSosmed = {
+  /** `YYYY-MM-DD`. */
+  tanggal: string
+  /** `profiles.id` — dipaksa ke `auth.uid()` untuk non-pengelola (trigger). */
+  employeeId: string
+  jenis: KlaimJenis
+  /**
+   * DIPAKSA `'menunggu'` oleh trigger `protect_klaim_sosmed` untuk siapa pun
+   * yang bukan pengelola. Satu-satunya cara menjadi `'disetujui'` adalah
+   * tulisan dari `is_admin()` — jaminannya di database, bukan di layar.
+   */
+  status: KlaimStatus
+  /** Tautan bukti (opsional — tidak diwajibkan supaya orang tetap melapor). */
+  tautan?: string
+  catatan?: string
+  /** Siapa yang meng-ACC. Distempel server, read-only bagi client. */
+  disetujuiOleh?: string
+  /** Kapan di-ACC (ISO). Distempel server, read-only bagi client. */
+  disetujuiPada?: string
 }
 
 /**
@@ -1091,6 +1161,12 @@ export type AppData = {
    * Kosong = jadwal belum disusun (KPI cakupan shift ikut nonaktif).
    */
   jadwalShift: JadwalShift[]
+  /**
+   * Laporan tugas sosial media operator (story & live) beserta status
+   * persetujuannya. Lihat [KlaimSosmed] & migration 0060. Hanya yang
+   * `'disetujui'` yang dihitung di `bonusSosmed.ts`.
+   */
+  klaimSosmed: KlaimSosmed[]
   /**
    * Penilaian owner per periode `YYYY-MM` (kelompok KPI Kepemimpinan).
    * Disimpan di `app_config.penilaian_owner`. Key tidak ada = belum dinilai,

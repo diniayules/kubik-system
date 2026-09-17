@@ -918,8 +918,9 @@ export type KesiapanJadwal = {
   berikutnya?: MingguJadwal
 }
 
-/** `YYYY-MM-DD` + n hari. */
-function geserHari(tanggal: string, n: number): string {
+/** `YYYY-MM-DD` + n hari. Selalu dalam waktu LOKAL — jangan diganti
+ * `toISOString()`, yang menggeser tanggal satu hari di zona GMT+7. */
+export function geserHari(tanggal: string, n: number): string {
   const d = new Date(`${tanggal}T00:00:00`)
   d.setDate(d.getDate() + n)
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -993,14 +994,43 @@ export function kesiapanJadwal(
 // 6. Sosial media & eksekusi konten
 // ---------------------------------------------------------------
 
-export const AKSI_SOSMED = ['posting', 'story', 'repost', 'engagement'] as const
+/**
+ * Aksi yang dicentang MANUAL pengelola di sini — log akun studio.
+ *
+ * `story` & `live` sengaja TIDAK ada di daftar ini sejak migrasi 0060: keduanya
+ * kini dilaporkan operator dan disetujui pengelola di layar Jadwal
+ * (`klaim_sosmed`). Kalau keduanya juga bisa dicentang di sini, akan ada dua
+ * sumber untuk fakta yang sama — dan cepat atau lambat angkanya berbeda.
+ * Kolomnya di [SosmedHarian] dipertahankan hanya untuk baris lama.
+ */
+export const AKSI_SOSMED = ['posting', 'repost', 'engagement'] as const
 export type AksiSosmed = (typeof AKSI_SOSMED)[number]
 
 export const AKSI_SOSMED_LABEL: Record<AksiSosmed, string> = {
   posting: 'Posting',
-  story: 'Story',
   repost: 'Repost',
   engagement: 'Engagement',
+}
+
+/** Penjelasan tiap aksi — dipakai sebagai `title` chip di layar Manajemen. */
+export const AKSI_SOSMED_HINT: Record<AksiSosmed, string> = {
+  posting: 'Unggahan feed / reels baru.',
+  repost: 'Story open/close & membagikan ulang unggahan lama atau unggahan tamu.',
+  engagement: 'Membalas komentar / DM, berinteraksi dengan akun lain.',
+}
+
+/**
+ * Tanggal yang punya minimal satu laporan tugas (story/live) yang SUDAH
+ * disetujui. Dipakai supaya "hari sosmed aktif" tetap benar setelah story &
+ * live pindah ke `klaim_sosmed`: hari yang story-nya beres tapi tidak ada
+ * posting/repost/engagement tetap hari yang aktif.
+ */
+export function tanggalKlaimDisetujui(data: AppData): Set<string> {
+  const set = new Set<string>()
+  for (const k of data.klaimSosmed ?? []) {
+    if (k.status === 'disetujui') set.add(k.tanggal)
+  }
+  return set
 }
 
 /**
@@ -1055,6 +1085,7 @@ export function aktivitasSosmed(
 ): AktivitasSosmed {
   const log = new Map<string, SosmedHarian>()
   for (const r of data.sosmedHarian ?? []) log.set(r.tanggal, r)
+  const berklaim = tanggalKlaimDisetujui(data)
 
   const total = hariDalamBulan(monthKey)
   const hariBerjalan = hariSeharusnyaBulan(monthKey, hariIni)
@@ -1066,7 +1097,10 @@ export function aktivitasSosmed(
     perHari.push({
       tanggal,
       berjalan: d <= hariBerjalan,
-      aktif: jumlahAksi > 0,
+      // Story/live yang sudah disetujui juga membuat hari itu aktif — kalau
+      // tidak, hari yang story-nya beres terbaca bolong hanya karena tidak ada
+      // posting. Lihat `tanggalKlaimDisetujui`.
+      aktif: jumlahAksi > 0 || berklaim.has(tanggal),
       jumlahAksi,
       engagement: !!r?.engagement,
       olehList: r ? pengerjaSosmed(r) : [],
@@ -1336,6 +1370,7 @@ export function dampakSosmed(
   }
   const log = new Map<string, SosmedHarian>()
   for (const r of data.sosmedHarian ?? []) log.set(r.tanggal, r)
+  const berklaim = tanggalKlaimDisetujui(data)
 
   const totalHari = hariDalamBulan(monthKey)
   const hariBerjalan = hariSeharusnyaBulan(monthKey, hariIni)
@@ -1343,7 +1378,9 @@ export function dampakSosmed(
   for (let d = 1; d <= totalHari; d += 1) {
     const tanggal = tanggalKe(monthKey, d)
     const r = log.get(tanggal)
-    const aksi = r ? AKSI_SOSMED.filter((a) => r[a]).length : 0
+    const aksi =
+      (r ? AKSI_SOSMED.filter((a) => r[a]).length : 0) +
+      (berklaim.has(tanggal) ? 1 : 0)
     perHari.push({
       tanggal,
       hari: d,
@@ -1614,15 +1651,21 @@ export function kontribusiKonten(
     }
   }
 
-  for (const r of data.sosmedHarian ?? []) {
-    if (!r.tanggal.startsWith(monthKey)) continue
-    if (!AKSI_SOSMED.some((a) => r[a])) continue
-    // Hari yang dikerjakan berdua dihitung untuk KEDUANYA — ini catatan
-    // kontribusi, bukan pembagian jatah hari.
-    for (const orang of pengerjaSosmed(r)) {
-      const k = byId.get(orang)
-      if (k) k.hariSosmed += 1
-    }
+  // Hari sosmed per orang diambil dari LAPORAN YANG SUDAH DISETUJUI, bukan lagi
+  // dari `sosmed_harian`. Lebih tepat: dulu satu baris per tanggal dengan
+  // `olehList` membuat kontribusi dua orang tidak terpisah, dan baris yang
+  // `oleh_list`-nya tidak terbaca memberi kredit ke satu orang saja.
+  const hariPerOrang = new Map<string, Set<string>>()
+  for (const kl of data.klaimSosmed ?? []) {
+    if (kl.status !== 'disetujui') continue
+    if (!kl.tanggal.startsWith(monthKey)) continue
+    const set = hariPerOrang.get(kl.employeeId) ?? new Set<string>()
+    set.add(kl.tanggal)
+    hariPerOrang.set(kl.employeeId, set)
+  }
+  for (const [orang, hari] of hariPerOrang) {
+    const k = byId.get(orang)
+    if (k) k.hariSosmed = hari.size
   }
 
   return [...byId.values()]

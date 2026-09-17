@@ -1,5 +1,13 @@
 import { useMemo, useRef, useState, type ReactNode } from 'react'
-import type { AppData, DesainLampiran, PromoJenis, PromoProgram, PromoTahap } from '../types'
+import type {
+  AppData,
+  DesainLampiran,
+  PromoJenis,
+  PromoProgram,
+  PromoTahap,
+  TahapKonten,
+} from '../types'
+import { TAHAP_KONTEN, TAHAP_KONTEN_LABEL } from '../manajemen'
 import { uid, todayKey } from '../storage'
 import { formatTanggalPanjang } from '../attendance'
 import { Icons } from '../components/Icons'
@@ -232,6 +240,26 @@ export function Promosi({ data, setData, isAdmin, currentUserId }: Props) {
    * menolak, dan siapa pun melampirkan desain baru. Kolom lain tidak disentuh —
    * dan untuk operator, database memang menolak perubahan kolom lain (0057).
    */
+  /**
+   * Centang/urungkan satu tahap produksi kartu konten.
+   *
+   * Ini KLAIM, bukan penyelesaian: kartu baru dihitung untuk target konten
+   * setelah pengelola memindahkannya ke tahap 'selesai' (`selesai_pada`
+   * distempel trigger 0046). `selesaiPada` tiap tahap juga distempel server
+   * (trigger 0051), jadi yang dikirim dari sini cuma kunci + pengerjanya.
+   */
+  function ubahTahapan(p: PromoProgram, kunci: TahapKonten) {
+    const asli = promos.find((x) => x.id === p.id) ?? p
+    const list = asli.tahapan ?? []
+    const baru: PromoProgram = {
+      ...asli,
+      tahapan: list.some((t) => t.kunci === kunci)
+        ? list.filter((t) => t.kunci !== kunci)
+        : [...list, { kunci, oleh: currentUserId }],
+    }
+    setData({ ...data, promoPrograms: promos.map((x) => (x.id === p.id ? baru : x)) })
+  }
+
   function simpanLampiran(
     p: PromoProgram,
     gambar: DesainLampiran[],
@@ -286,6 +314,7 @@ export function Promosi({ data, setData, isAdmin, currentUserId }: Props) {
           onSetujui={setujui}
           onUnggah={setUnggahUntuk}
           onSetLampiran={simpanLampiran}
+          onTahapan={ubahTahapan}
         />
       ) : (
         <KaryawanView
@@ -348,6 +377,7 @@ function AdminView({
   onSetujui,
   onUnggah,
   onSetLampiran,
+  onTahapan,
 }: {
   promos: PromoProgram[]
   namaById: Map<string, string>
@@ -359,6 +389,7 @@ function AdminView({
   onSetujui: (p: PromoProgram) => void
   onUnggah: (p: PromoProgram) => void
   onSetLampiran: (p: PromoProgram, gambar: DesainLampiran[], tautan: DesainLampiran[]) => void
+  onTahapan: (p: PromoProgram, kunci: TahapKonten) => void
 }) {
   const { t } = useLang()
   const pending = promos.filter((p) => p.status === 'menunggu')
@@ -392,6 +423,7 @@ function AdminView({
                 currentUserId={currentUserId}
                 onUnggah={onUnggah}
                 onSetLampiran={onSetLampiran}
+                onTahapan={onTahapan}
                 actions={
                   <>
                     <button type="button" className="btn btn--pink btn-mini" onClick={() => onSetujui(p)}>
@@ -443,6 +475,7 @@ function AdminView({
                     currentUserId={currentUserId}
                     onUnggah={onUnggah}
                     onSetLampiran={onSetLampiran}
+                    onTahapan={onTahapan}
                     actions={
                       <>
                         <label className="promo-move">
@@ -606,6 +639,7 @@ function PromoRow({
   currentUserId,
   onUnggah,
   onSetLampiran,
+  onTahapan,
 }: {
   p: PromoProgram
   namaById?: Map<string, string>
@@ -617,6 +651,8 @@ function PromoRow({
   onUnggah?: (p: PromoProgram) => void
   /** Simpan hasil ACC/tolak lampiran. Hanya diisi untuk pengelola. */
   onSetLampiran?: (p: PromoProgram, gambar: DesainLampiran[], tautan: DesainLampiran[]) => void
+  /** Centang tahap produksi. Absen = kartu ini tidak bisa dicentang di sini. */
+  onTahapan?: (p: PromoProgram, kunci: TahapKonten) => void
 }) {
   const { t } = useLang()
   const [open, setOpen] = useState(false)
@@ -726,6 +762,37 @@ function PromoRow({
 
       {open && (
         <div className="promo-item-body">
+          {/* Centang tahap produksi — hanya untuk kartu KONTEN, dan hanya oleh
+              PIC-nya atau pengelola. Ini KLAIM "aku sudah mengerjakannya";
+              kartunya baru dihitung untuk target konten setelah pengelola
+              memindahkannya ke tahap Selesai. RLS + trigger 0061 menegakkan
+              batas yang sama di server. */}
+          {p.jenis === 'konten' &&
+            p.tahap !== 'selesai' &&
+            onTahapan &&
+            (isAdmin || p.pic === currentUserId) && (
+              <div className="promo-tahapan">
+                <span className="promo-tahapan-lbl">Tahap produksi</span>
+                <div className="promo-tahapan-list">
+                  {TAHAP_KONTEN.map((k) => {
+                    const sudah = p.tahapan?.some((t) => t.kunci === k)
+                    return (
+                      <button
+                        key={k}
+                        type="button"
+                        className={'promo-tahapan-chip' + (sudah ? ' is-on' : '')}
+                        onClick={() => onTahapan(p, k)}
+                      >
+                        {sudah ? '✓' : '○'} {TAHAP_KONTEN_LABEL[k]}
+                      </button>
+                    )
+                  })}
+                </div>
+                <span className="promo-tahapan-nota">
+                  Dihitung untuk targetmu setelah kartunya ditutup pengelola.
+                </span>
+              </div>
+            )}
           {p.deskripsi ? (
             <div className="promo-card-desc">{p.deskripsi}</div>
           ) : (

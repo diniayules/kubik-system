@@ -3362,6 +3362,27 @@
   background: var(--surface); border: 1.5px solid var(--line);
   border-radius: var(--radius-lg); overflow: hidden;
 }
+.jdw-panel + .jdw-panel { margin-top: 18px; }
+/* Kepala panel kedua (Tugas Sosial Media) — panel pertama memakai .jdw-head
+   di luar kotaknya, yang kedua butuh judulnya sendiri di dalam kotak. */
+.jdw-panel-head {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 14px; flex-wrap: wrap;
+  padding: 14px 16px; border-bottom: 1.5px solid var(--line);
+}
+.jdw-panel-head h3 {
+  margin: 0 0 3px; font-size: 16px; font-weight: 800; color: var(--ink);
+}
+.jdw-panel-head p {
+  margin: 0; font-size: 12.5px; font-weight: 600; color: var(--ink-soft);
+  line-height: 1.45; max-width: 62ch;
+}
+.jdw-panel-head p b { color: var(--mint-deep); }
+.jdw-antrean {
+  flex: none; padding: 5px 12px; border-radius: var(--radius-pill);
+  border: 1.5px solid var(--yellow); background: var(--yellow-bg);
+  color: var(--yellow-deep); font-size: 11.5px; font-weight: 800;
+}
 .jdw-empty { padding: 32px 20px; text-align: center; color: var(--ink-soft); font-weight: 600; }
 .jdw-scroll { overflow: auto; max-height: 68vh; }
 .jdw-tabel { border-collapse: separate; border-spacing: 0; }
@@ -3382,7 +3403,9 @@
 .jdw-sticky {
   position: sticky; left: 0; z-index: 3;
   background: var(--surface); text-align: left !important;
-  padding: 6px 12px !important; min-width: 170px;
+  /* Dipatok, bukan sekadar min-width: dua tabel terpisah hanya terbaca
+     sejajar kalau kolom kirinya sama persis lebarnya. */
+  padding: 6px 12px !important; min-width: 170px; width: 170px;
   border-right: 1.5px solid var(--line);
 }
 .jdw-tabel thead .jdw-sticky { z-index: 4; }
@@ -3442,11 +3465,11 @@
 /* --- Baris tugas sosial media (di bawah roster) --------------------------
    Dipisahkan dari baris karyawan dengan garis tegas: ini bukan orang lain,
    melainkan tugas yang ditempelkan ke salah satu orang di atasnya. */
-.jdw-tugas-row.is-awal > th, .jdw-tugas-row.is-awal > td {
+/* Pemisah antar-ORANG di dalam tabel tugas (tiap orang punya 2 baris). Baris
+   pertama tabel tidak perlu garis — kepala tabelnya sudah jadi batas. */
+.jdw-tugas-row.is-awal:not(:first-child) > th,
+.jdw-tugas-row.is-awal:not(:first-child) > td {
   border-top: 2px solid var(--line);
-}
-.jdw-tugas-row > th, .jdw-tugas-row > td {
-  background: color-mix(in srgb, var(--primary) 4%, transparent);
 }
 .jdw-orang-tugas > span { display: flex; flex-direction: column; gap: 1px; }
 .jdw-orang-tugas b { font-size: 12.5px; font-weight: 800; color: var(--ink); }
@@ -3461,7 +3484,14 @@
   display: inline-flex; align-items: center; justify-content: center;
 }
 
-.jdw-sel.jdw-tugas { font-size: 12px; font-weight: 800; color: var(--muted); }
+/* Sel kosong di tabel tugas jauh lebih banyak daripada di roster (tiap hari ×
+   tiap orang × tiap tugas), jadi garis dasarnya diredupkan. Yang berstatus
+   menimpanya dengan garis tegas di bawah — perhatian jatuh ke sana, bukan ke
+   ratusan kotak kosong. */
+.jdw-sel.jdw-tugas {
+  font-size: 12px; font-weight: 800; color: var(--muted);
+  border-color: color-mix(in srgb, var(--line) 40%, transparent);
+}
 /* Dijadwalkan (live) — rencana yang belum dilaporkan. */
 .jdw-sel.jdw-tugas.is-rencana {
   border-style: solid; border-color: var(--primary); color: var(--primary);
@@ -3483,6 +3513,10 @@
 }
 /* Baris konten: hasil dari Papan Promosi, tidak bisa diklik di sini. */
 .jdw-sel.jdw-tugas.is-baca { cursor: default; }
+/* Baris tugas lebih banyak dari baris roster — dirapatkan sedikit supaya dua
+   orang + konten masih muat satu layar tanpa menggulir. */
+.jdw-tabel--tugas td { padding: 1px 2px; }
+.jdw-tabel--tugas .jdw-sticky { padding-top: 4px !important; padding-bottom: 4px !important; }
 
 /* --- Rekap live per minggu --- */
 .jdw-minggu {

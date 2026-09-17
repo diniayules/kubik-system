@@ -360,6 +360,42 @@ export function Jadwal({ data, setData, bisaUbah, currentUserId }: Props) {
    */
   const mingguSet = useMemo(() => new Set(mingguDinilai(monthKey)), [monthKey])
 
+  /**
+   * Kepala tabel tanggal — dipakai KEDUA tabel supaya kolomnya sejajar dan
+   * tabel tugas tetap terbaca tanpa harus menengok ke tabel di atasnya.
+   *
+   * Penanda "slot shift belum terisi penuh" hanya relevan di roster, jadi ia
+   * dimatikan lewat `tandaiBolong` di tabel tugas — kalau ikut menyala di sana
+   * ia akan terbaca seolah tugasnya yang bolong.
+   */
+  function kepalaTanggal(labelKolom: string, tandaiBolong: boolean) {
+    return (
+      <thead>
+        <tr>
+          <th className="jdw-sticky">{labelKolom}</th>
+          {tanggalList.map((t) => {
+            const bolong =
+              tandaiBolong && perHari.get(t.tanggal)?.tercover === false
+            return (
+              <th
+                key={t.tanggal}
+                className={
+                  (t.akhirPekan ? 'is-pekan' : '') +
+                  (t.isHariIni ? ' is-kini' : '') +
+                  (bolong ? ' is-bolong' : '')
+                }
+                title={bolong ? 'Slot shift belum terisi penuh' : undefined}
+              >
+                <em>{t.namaHari}</em>
+                {t.hari}
+              </th>
+            )
+          })}
+        </tr>
+      </thead>
+    )
+  }
+
   /** Hapus seluruh baris jadwal di bulan yang sedang dilihat. */
   function kosongkanBulan() {
     if (!confirm(`Kosongkan seluruh jadwal ${labelBulan(monthKey)}?`)) return
@@ -431,38 +467,18 @@ export function Jadwal({ data, setData, bisaUbah, currentUserId }: Props) {
         </section>
       )}
 
-      <section className="jdw-panel">
-        {staf.length === 0 ? (
+      {staf.length === 0 ? (
+        <section className="jdw-panel">
           <p className="jdw-empty">Belum ada karyawan aktif untuk dijadwalkan.</p>
-        ) : (
-          <div className="jdw-scroll">
-            <table className="jdw-tabel">
-              <thead>
-                <tr>
-                  <th className="jdw-sticky">Karyawan</th>
-                  {tanggalList.map((t) => (
-                    <th
-                      key={t.tanggal}
-                      className={
-                        (t.akhirPekan ? 'is-pekan' : '') +
-                        (t.isHariIni ? ' is-kini' : '') +
-                        (perHari.get(t.tanggal)?.tercover === false
-                          ? ' is-bolong'
-                          : '')
-                      }
-                      title={
-                        perHari.get(t.tanggal)?.tercover === false
-                          ? 'Slot shift belum terisi penuh'
-                          : undefined
-                      }
-                    >
-                      <em>{t.namaHari}</em>
-                      {t.hari}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
+        </section>
+      ) : (
+        <>
+          {/* ---------- Panel 1 · Roster shift ---------- */}
+          <section className="jdw-panel">
+            <div className="jdw-scroll">
+              <table className="jdw-tabel">
+                {kepalaTanggal('Karyawan', true)}
+                <tbody>
                 {staf.map((e) => (
                   <tr key={e.id}>
                     <th className="jdw-sticky">
@@ -507,7 +523,59 @@ export function Jadwal({ data, setData, bisaUbah, currentUserId }: Props) {
                     })}
                   </tr>
                 ))}
+                </tbody>
+              </table>
+            </div>
 
+            <div className="jdw-kaki">
+              <div className="jdw-legend">
+                {(['pagi', 'sore', 'full', 'cuti', 'libur'] as DayType[]).map((s) => (
+                  <span key={s}>
+                    <i className={`jdw-sel is-${s}`}>{SHIFT_IKON[s]}</i>
+                    {SHIFT_LABEL[s]}
+                  </span>
+                ))}
+                <span>
+                  <i className="jdw-sel is-cuti is-acc">{SHIFT_IKON.cuti}</i>
+                  Cuti disetujui (otomatis)
+                </span>
+              </div>
+              {bisaUbah && (
+                <button type="button" className="jdw-hapus" onClick={kosongkanBulan}>
+                  Kosongkan bulan ini
+                </button>
+              )}
+            </div>
+          </section>
+
+          {/* ---------- Panel 2 · Tugas sosial media ----------
+              Tabel TERPISAH dari roster, bukan baris tambahan di bawahnya.
+              Keduanya memang grid tanggal × orang, tapi isinya dua bahasa yang
+              berbeda — roster menjawab "siapa masuk", papan ini menjawab "sudah
+              dikerjakan & sudah diperiksa belum" — dan orang yang sama muncul
+              di dua-duanya. Digabung, kolom kirinya jadi berisi nama yang sama
+              dua kali dan tidak ada yang tahu batas antara keduanya di mana. */}
+          <section className="jdw-panel">
+            <div className="jdw-panel-head">
+              <div>
+                <h3>Tugas Sosial Media</h3>
+                <p>
+                  Operator mencentang kalau sudah mengerjakan; pengelola yang
+                  memeriksa. Hanya yang <b>disetujui</b> yang dihitung untuk
+                  bonus gaji pokok.
+                </p>
+              </div>
+              {antreanKlaim > 0 && (
+                <span className="jdw-antrean">
+                  {antreanKlaim} menunggu diperiksa
+                </span>
+              )}
+            </div>
+
+            <div className="jdw-scroll">
+              <table className="jdw-tabel jdw-tabel--tugas">
+                {kepalaTanggal('Tugas', false)}
+                <tbody>
                 {/* --- Tugas sosial media -------------------------------
                     Satu baris per (orang × tugas), bukan satu baris tim:
                     yang dinilai — dan dibayar — adalah orangnya, jadi story
@@ -660,10 +728,9 @@ export function Jadwal({ data, setData, bisaUbah, currentUserId }: Props) {
                     )
                   })}
                 </tr>
-              </tbody>
-            </table>
-          </div>
-        )}
+                </tbody>
+              </table>
+            </div>
 
         {/* Rekap live per minggu, per orang — inti panelnya: lubang minggu ini
             harus terlihat hari SENIN, bukan ketahuan saat bulan sudah tutup. */}
@@ -709,42 +776,29 @@ export function Jadwal({ data, setData, bisaUbah, currentUserId }: Props) {
           ),
         )}
 
-        <div className="jdw-kaki">
-          <div className="jdw-legend">
-            {(['pagi', 'sore', 'full', 'cuti', 'libur'] as DayType[]).map((s) => (
-              <span key={s}>
-                <i className={`jdw-sel is-${s}`}>{SHIFT_IKON[s]}</i>
-                {SHIFT_LABEL[s]}
-              </span>
-            ))}
-            <span>
-              <i className="jdw-sel is-cuti is-acc">{SHIFT_IKON.cuti}</i>
-              Cuti disetujui (otomatis)
-            </span>
-            <span>
-              <i className="jdw-sel jdw-tugas is-rencana">○</i>
-              Live dijadwalkan
-            </span>
-            <span>
-              <i className="jdw-sel jdw-tugas is-tunggu">•</i>
-              Dilaporkan, belum diperiksa
-            </span>
-            <span>
-              <i className="jdw-sel jdw-tugas is-acc">✓</i>
-              Disetujui — baru ini yang dihitung
-            </span>
-            <span>
-              <i className="jdw-sel jdw-tugas is-luput">✕</i>
-              Terlewat
-            </span>
-          </div>
-          {bisaUbah && (
-            <button type="button" className="jdw-hapus" onClick={kosongkanBulan}>
-              Kosongkan bulan ini
-            </button>
-          )}
-        </div>
-      </section>
+            <div className="jdw-kaki">
+              <div className="jdw-legend">
+                <span>
+                  <i className="jdw-sel jdw-tugas is-rencana">○</i>
+                  Live dijadwalkan
+                </span>
+                <span>
+                  <i className="jdw-sel jdw-tugas is-tunggu">•</i>
+                  Dilaporkan, belum diperiksa
+                </span>
+                <span>
+                  <i className="jdw-sel jdw-tugas is-acc">✓</i>
+                  Disetujui — baru ini yang dihitung
+                </span>
+                <span>
+                  <i className="jdw-sel jdw-tugas is-luput">✕</i>
+                  Terlewat
+                </span>
+              </div>
+            </div>
+          </section>
+        </>
+      )}
     </>
   )
 }

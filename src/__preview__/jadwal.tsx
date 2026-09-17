@@ -4,7 +4,7 @@
 // tidak ikut berubah gara-gara layar ini.
 import { StrictMode, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import type { AbsenHari, AppData, JadwalShift, SosmedHarian } from '../types'
+import type { AbsenHari, AppData, JadwalShift, KlaimSosmed } from '../types'
 import { Jadwal } from '../screens/Jadwal'
 import { PREVIEW_BULAN, PREVIEW_DATA, PREVIEW_IDS } from './data'
 import { PreviewShell, useSudutPandang } from './shell'
@@ -34,13 +34,10 @@ for (const j of roster) {
   if (rencanaLive[j.tanggal] === j.employeeId) j.live = true
 }
 
-// Realisasi: minggu 1 jadi, minggu 2 luput (lewat tanpa live).
-const sosmed: SosmedHarian[] = [
-  {
-    tanggal: tgl(3),
-    posting: false, story: true, repost: false, engagement: false,
-    live: true, olehList: [RIZKY],
-  },
+// Realisasi: laporan yang sudah di-ACC pengelola (minggu 1 jadi, minggu 2 luput).
+const klaim: KlaimSosmed[] = [
+  { tanggal: tgl(3), employeeId: RIZKY, jenis: 'live', status: 'disetujui' },
+  { tanggal: tgl(3), employeeId: RIZKY, jenis: 'story', status: 'disetujui' },
 ]
 
 // Presensi: dua operator masuk bergantian sampai hari ini. Tanpa ini baris
@@ -63,7 +60,7 @@ const DATA: AppData = {
   ...PREVIEW_DATA,
   jadwalShift: roster,
   records: presensi,
-  sosmedHarian: [...(PREVIEW_DATA.sosmedHarian ?? []), ...sosmed],
+  klaimSosmed: [...(PREVIEW_DATA.klaimSosmed ?? []), ...klaim],
 }
 
 function Preview() {

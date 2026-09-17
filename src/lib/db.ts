@@ -44,13 +44,11 @@ import type {
   DayType,
   SalahCetak,
   SewaTipe,
-  SosmedHarian,
   LaporanHarian,
   TargetBulanan,
   Tinta,
   UpgradeDef,
   WarnaTinta,
-  RitmeKonten,
   TahapanKartu,
 } from '../types'
 import {
@@ -237,17 +235,6 @@ type KemitraanRow = {
   pengeluaran_id: string | null
   created_by: string | null
 }
-type SosmedRow = Omit<
-  SosmedHarian,
-  'catatan' | 'tautan' | 'oleh' | 'olehList' | 'live'
-> & {
-  /** Belum ada sebelum migrasi 0058 — dibaca dengan fallback `false`. */
-  live?: boolean | null
-  catatan: string | null
-  tautan: string | null
-  oleh: string | null
-  oleh_list: string[] | null
-}
 type LaporanHarianRow = Omit<LaporanHarian, 'catatan' | 'oleh' | 'diperbarui'> & {
   catatan: string | null
   oleh: string | null
@@ -332,7 +319,6 @@ type ConfigRow = {
   target_bulanan: Record<string, TargetBulanan> | null
   penilaian_owner: Record<string, PenilaianOwner> | null
   jobdesk_manajer: Record<string, JobdeskItem[]> | null
-  ritme_konten: RitmeKonten | null
   brand_kicker: string | null
   brand_name: string | null
   dash_judul: string | null
@@ -371,7 +357,6 @@ export async function fetchAppData(): Promise<AppData> {
     promoRes,
     jadwalRes,
     klaimRes,
-    sosmedRes,
     laporanHarianRes,
     leadsRes,
     followupRes,
@@ -447,17 +432,6 @@ export async function fetchAppData(): Promise<AppData> {
         'tanggal, employee_id, jenis, status, tautan, catatan, disetujui_oleh, disetujui_pada',
       )
       .order('tanggal', { ascending: true }),
-    // Log sosmed harian: semua user login boleh membaca (operator perlu tahu
-    // hari mana yang masih kosong). Lihat migration 0046.
-    supabase
-      .from('sosmed_harian')
-      // `oleh_list` & `live` WAJIB ikut di sini. Tanpa `oleh_list`, hari yang
-      // dikerjakan berdua cuma memulangkan satu nama dan orang kedua kehilangan
-      // haknya atas bonus sosmed; tanpa `live`, target live tidak pernah terbaca.
-      .select(
-        'tanggal, posting, story, repost, engagement, live, catatan, tautan, oleh, oleh_list',
-      )
-      .order('tanggal', { ascending: true }),
     // Laporan closing harian: RLS mengunci baca & tulis ke pengelola saja —
     // isinya menyebut nama operator. Lihat migration 0052.
     supabase
@@ -511,6 +485,10 @@ export async function fetchAppData(): Promise<AppData> {
   const pembayaranVia = (
     pembayaranViaRes.error ? [] : (pembayaranViaRes.data ?? [])
   ) as GajiPembayaranViaRow[]
+  // Toleran kalau tabel `klaim_sosmed` belum ada (migrasi 0060 belum
+  // dijalankan) — fallback [] agar app tetap jalan; papan tugas di layar Jadwal
+  // jadi kosong, bukan rusak.
+  const klaim = (klaimRes.error ? [] : (klaimRes.data ?? [])) as KlaimSosmedRow[]
   const kertas = orErr(kertasRes) as KertasRow[]
   const frame = orErr(frameRes) as FrameRow[]
   const tinta = orErr(tintaRes) as TintaRow[]
@@ -526,13 +504,6 @@ export async function fetchAppData(): Promise<AppData> {
   // dijalankan) — fallback [] agar app tetap jalan; fitur aktif begitu migrasi
   // diterapkan.
   const jadwal = (jadwalRes.error ? [] : (jadwalRes.data ?? [])) as JadwalShiftRow[]
-  // Toleran kalau tabel `sosmed_harian` belum ada (migrasi 0046 belum
-  // dijalankan) — fallback [] agar app tetap jalan.
-  // Toleran kalau tabel `klaim_sosmed` belum ada (migrasi 0060 belum
-  // dijalankan) — fallback [] agar app tetap jalan; papan klaim di layar
-  // Jadwal jadi kosong, bukan rusak.
-  const klaim = (klaimRes.error ? [] : (klaimRes.data ?? [])) as KlaimSosmedRow[]
-  const sosmed = (sosmedRes.error ? [] : (sosmedRes.data ?? [])) as SosmedRow[]
   // Toleran kalau tabel `laporan_harian` belum ada (migrasi 0052 belum
   // dijalankan) — fallback [] agar app tetap jalan. Untuk operator, RLS
   // memulangkan [] juga: mereka memang tidak boleh membacanya.
@@ -781,13 +752,6 @@ export async function fetchAppData(): Promise<AppData> {
     // Toleran kalau kolom `jobdesk_manajer` belum ada (migrasi 0054 belum
     // dijalankan): panel Jobdesk Manajer tampil kosong, bukan error.
     jobdeskManajer: config?.jobdesk_manajer ?? {},
-    // `ritme_konten` default '{}' di database. Objek tanpa `jumlah` berarti
-    // ritme BELUM diatur — dijadikan undefined supaya papan & KPI-nya nonaktif,
-    // bukan dinilai nol.
-    ritmeKonten:
-      typeof config?.ritme_konten?.jumlah === 'number'
-        ? config.ritme_konten
-        : undefined,
     leads: leadRows.map(
       (r): Lead => ({
         id: r.id,
@@ -850,26 +814,6 @@ export async function fetchAppData(): Promise<AppData> {
       catatan: r.catatan ?? undefined,
       disetujuiOleh: r.disetujui_oleh ?? undefined,
       disetujuiPada: r.disetujui_pada ?? undefined,
-    })),
-    sosmedHarian: sosmed.map((r) => ({
-      tanggal: r.tanggal,
-      posting: r.posting,
-      story: r.story,
-      repost: r.repost,
-      engagement: r.engagement,
-      // `?? false` hanya menjaga dari nilai null, BUKAN dari kolom yang hilang:
-      // kolomnya sudah ikut di `.select()` di atas, jadi migrasi 0058 wajib.
-      live: r.live ?? false,
-      catatan: r.catatan ?? undefined,
-      tautan: r.tautan ?? undefined,
-      oleh: r.oleh ?? undefined,
-      // Toleran kalau kolom `oleh_list` belum ada (migrasi 0049 belum
-      // dijalankan): jatuh kembali ke satu pengerja dari kolom lama.
-      olehList: Array.isArray(r.oleh_list)
-        ? r.oleh_list
-        : r.oleh
-          ? [r.oleh]
-          : [],
     })),
     // Semua bentuk kegagalan baca diperlakukan sama: kalau tabelnya tidak bisa
     // dibaca, layar tidak boleh menawarkan tombol menulis ke sana.
@@ -1326,30 +1270,6 @@ export async function persistChanges(
     userId,
   )
 
-  // ---- sosmed_harian (satu baris per tanggal; kunci primer `tanggal`) ----
-  syncRows(
-    jobs,
-    'sosmed_harian',
-    prev.sosmedHarian ?? [],
-    next.sosmedHarian ?? [],
-    (r) => r.tanggal,
-    (r) => ({
-      tanggal: r.tanggal,
-      posting: r.posting,
-      story: r.story,
-      repost: r.repost,
-      engagement: r.engagement,
-      live: r.live ?? false,
-      catatan: r.catatan ?? '',
-      tautan: r.tautan ?? '',
-      // Kolom lama tetap diisi entri PROFIL pertama (ia ber-foreign-key, jadi
-      // nama bebas tidak boleh masuk); daftar lengkapnya di `oleh_list`.
-      oleh: (r.olehList ?? (r.oleh ? [r.oleh] : [])).find(isUuid) ?? null,
-      oleh_list: r.olehList ?? (r.oleh ? [r.oleh] : []),
-    }),
-    undefined,
-    'tanggal',
-  )
 
   // ---- laporan_harian (satu baris per tanggal; kunci primer `tanggal`) ----
   syncRows(
@@ -1414,7 +1334,6 @@ export async function persistChanges(
     'targetBulanan',
     'penilaianOwner',
     'jobdeskManajer',
-    'ritmeKonten',
     'brandKicker',
     'brandName',
     'dashJudul',
@@ -1447,7 +1366,6 @@ export async function persistChanges(
             target_bulanan: next.targetBulanan ?? {},
             penilaian_owner: next.penilaianOwner ?? {},
             jobdesk_manajer: next.jobdeskManajer ?? {},
-            ritme_konten: next.ritmeKonten ?? {},
             brand_kicker: next.brandKicker ?? null,
             brand_name: next.brandName ?? null,
             dash_judul: next.dashJudul ?? null,
@@ -1465,10 +1383,6 @@ export async function persistChanges(
   await Promise.all(jobs)
 }
 
-/** Entri `olehList` yang berupa id profil (bukan nama bebas). */
-function isUuid(v: string): boolean {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v)
-}
 
 function throwIfError(res: { error: { message: string } | null }) {
   if (res.error) throw new Error(res.error.message)

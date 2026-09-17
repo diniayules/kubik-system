@@ -430,7 +430,8 @@ export type PromoJenis = 'campaign' | 'konten' | 'promo'
 /**
  * Tahap produksi satu konten. DIPATOK — sama untuk semua kartu, karena yang
  * dinilai adalah irama produksinya, bukan variasi alurnya. Yang boleh diatur
- * owner hanyalah HARI target tiap tahap, lewat [RitmeKonten].
+ * Dicentang PIC-nya sendiri di Papan Promosi sebagai klaim "sudah kukerjakan"
+ * (migration 0061); yang menutup kartunya tetap pengelola.
  */
 export type TahapKonten = 'take' | 'edit' | 'tayang'
 
@@ -446,49 +447,8 @@ export type TahapanKartu = {
   kunci: TahapKonten
   /** `YYYY-MM-DD`. Diisi server. */
   selesaiPada?: string
-  /** Yang mengerjakan — `profiles.id` ATAU nama bebas, seperti [SosmedHarian]. */
+  /** Yang mengerjakan — `profiles.id` ATAU nama bebas (freelancer tanpa akun). */
   oleh?: string
-}
-
-/**
- * Kontrak ritme konten mingguan antara owner & manajer. Satu objek untuk
- * seluruh aplikasi (bukan per bulan), disimpan di `app_config.ritme_konten`
- * (migration 0051).
- *
- * Diisi SEKALI, bukan tiap minggu: begitu ritme berdiri, owner tidak perlu
- * lagi bilang "minggu ini bikin konten" — diam berarti tetap jalan.
- *
- * Seperti [TargetBulanan], selama `disetujui` belum true angka yang lahir dari
- * ritme ini hanya simulasi dan tidak boleh dipakai menilai orang.
- */
-export type RitmeKonten = {
-  /**
-   * Konten MINIMUM yang harus tayang tiap minggu. Ini yang melahirkan slot:
-   * kekurangannya digambar sebagai slot kosong dan disebar rata sepanjang
-   * minggu. Lebih dari angka ini boleh — kartu ekstra tetap masuk papan dan
-   * tetap dinilai.
-   */
-  jumlah: number
-  /**
-   * Berapa hari sebelum tayang produksi dimulai (take). Editing jatuh di H-1.
-   *
-   * Hanya JARAK, bukan nama hari: hari tayang tiap kartu dipilih sendiri di
-   * papan lewat `deadline`, dan take/edit bergeser mengikutinya. Satu angka
-   * inilah seluruh kontrak rantainya — lihat `jarakTahap()`.
-   */
-  siapkan?: number
-  /**
-   * LEGACY (migration 0051): hari target tiap tahap, 1 = Senin … 7 = Minggu.
-   *
-   * Dulu ritme memaksa satu rantai hari tetap untuk seluruh minggu, sehingga
-   * konten kedua & ketiga menumpuk di tanggal yang sama. Digantikan `siapkan`.
-   * Masih dibaca supaya baris yang tersimpan sebelum perubahan tetap punya
-   * jarak yang benar; tidak pernah ditulis lagi.
-   */
-  hari?: Record<TahapKonten, number>
-  disetujui?: boolean
-  /** ISO timestamp saat owner menyetujui. */
-  disetujuiPada?: string
 }
 
 /**
@@ -593,7 +553,8 @@ export type JadwalShift = {
   catatan?: string
   /**
    * Orang ini dijadwalkan SIARAN LANGSUNG pada shift itu. RENCANA — bukti
-   * bahwa live-nya benar-benar terjadi ada di `SosmedHarian.live`, persis
+   * bahwa live-nya benar-benar terjadi ada di [KlaimSosmed] yang sudah
+   * disetujui, persis
    * seperti roster (rencana) vs absen (realisasi). Lihat migration 0059.
    *
    * Sengaja menempel pada baris shift: tidak ada live tanpa orang yang
@@ -767,51 +728,6 @@ export type Kemitraan = {
 }
 
 /**
- * Catatan aktivitas sosial media SATU HARI.
- *
- * Satuannya sengaja hari, bukan unggahan: KPI-nya adalah "aktif setiap hari",
- * jadi yang perlu terjawab satu lookup adalah "tanggal ini sudah dikerjakan
- * belum?" — dan hari bolong otomatis terlihat sebagai tanggal yang hilang.
- * Disimpan di tabel `sosmed_harian` (migration 0046), kunci `tanggal`.
- */
-export type SosmedHarian = {
-  /** Format `YYYY-MM-DD`. Sekaligus kunci primer. */
-  tanggal: string
-  posting: boolean
-  /**
-   * Story DI LUAR story rutin. Story "open"/"close" dan story yang cuma
-   * membagikan ulang unggahan TIDAK dicentang di sini — yang rutin sudah
-   * terwakili `repost`, dan kalau keduanya dicampur, target "story 1x sehari"
-   * terpenuhi hanya dengan membuka & menutup studio. Lihat `bonusSosmed.ts`.
-   */
-  story: boolean
-  repost: boolean
-  /** Membalas komentar / berinteraksi dengan akun lain. */
-  engagement: boolean
-  /**
-   * Siaran langsung (Instagram/TikTok) hari itu. Targetnya mingguan, bukan
-   * harian — perhitungannya di `bonusSosmed.ts`. Lihat migration 0058.
-   */
-  live: boolean
-  catatan?: string
-  /** Tautan ke unggahannya (opsional, untuk verifikasi). */
-  tautan?: string
-  /**
-   * Entri profil PERTAMA dari `olehList` — cermin kolom lama `sosmed_harian.oleh`
-   * (uuid ber-foreign-key). Jangan dibaca langsung: pakai `pengerjaSosmed()`
-   * di manajemen.ts supaya data lama & baru terbaca sama.
-   */
-  oleh?: string
-  /**
-   * Semua yang mengerjakan hari itu. Tiap entri boleh berupa `profiles.id`
-   * ATAU nama bebas (freelancer/anak magang yang tidak punya akun) — sebuah
-   * hari sosmed sering dikerjakan berdua, dan memaksa semuanya punya akun akan
-   * membuat orang berhenti mencatat. Lihat migration 0049.
-   */
-  olehList?: string[]
-}
-
-/**
  * Jenis tugas sosial media yang DILAPORKAN operator lalu diperiksa pengelola.
  * Konten tidak ada di sini — satuannya kartu Papan Promosi, bukan tanggal;
  * klaimnya berupa centang tahap 'tayang' di kartunya (migration 0061).
@@ -831,7 +747,7 @@ export type KlaimStatus = 'menunggu' | 'disetujui'
  * Satu laporan "aku sudah mengerjakannya", per (tanggal, orang, jenis).
  * Disimpan di tabel `klaim_sosmed` (migration 0060).
  *
- * Grain-nya sengaja per ORANG, bukan per tanggal seperti [SosmedHarian]: story
+ * Grain-nya sengaja per ORANG, bukan per tanggal: story
  * dua operator di hari yang sama harus bisa dibedakan, karena yang dinilai
  * (dan dibayar) adalah orangnya.
  *
@@ -1180,17 +1096,6 @@ export type AppData = {
    * ikut dinilai di mana pun).
    */
   jobdeskManajer: Record<string, JobdeskItem[]>
-  /**
-   * Kontrak ritme konten mingguan. Lihat [RitmeKonten] & migration 0051.
-   * `undefined` = ritme belum diatur (papan Denyut Mingguan & KPI-nya ikut
-   * nonaktif, bukan dinilai nol).
-   */
-  ritmeKonten?: RitmeKonten
-  /**
-   * Log aktivitas sosial media harian. Lihat [SosmedHarian] & migration 0046.
-   * Kosong = belum pernah dicatat (KPI sosmed & engagement ikut nonaktif).
-   */
-  sosmedHarian: SosmedHarian[]
   /**
    * Laporan closing harian manajer. Lihat [LaporanHarian] & migration 0052.
    * Opsional supaya app tetap naik sebelum migrasinya dijalankan.

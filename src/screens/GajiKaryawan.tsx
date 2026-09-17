@@ -156,7 +156,7 @@ export function GajiKaryawan({ data, setData, isAdmin, currentUserId }: Props) {
             ),
           }
         }),
-    // `data` utuh: capaianBonus ikut membaca sosmedHarian & promoPrograms.
+    // `data` utuh: capaianBonus ikut membaca klaimSosmed & promoPrograms.
     [karyawan, data, recordsBulan, laporanBulan, hariIni, mulaiBulanMap, periodeAktif, bulanIni],
   )
 

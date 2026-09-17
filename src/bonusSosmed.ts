@@ -199,8 +199,7 @@ export function capaianBonus(
 
   // --- 2. Konten: kartu Papan Promosi berjenis 'konten' yang selesai ---
   // Sengaja hanya `selesaiPada` (stempel database) — berbeda dari
-  // `kontribusiKonten()` di manajemen.ts yang juga menerima deadline/createdAt
-  // sebagai perkiraan. Untuk uang, perkiraan tidak cukup.
+  // `deadline`/`createdAt` yang cuma perkiraan. Untuk uang, perkiraan tidak cukup.
   const selesaiBulanIni = (p: PromoProgram) =>
     p.jenis === 'konten' &&
     p.pic === emp.id &&

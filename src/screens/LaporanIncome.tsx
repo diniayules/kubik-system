@@ -225,7 +225,7 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
       .reduce((s, p) => s + (p.jumlah || 0), 0)
 
     return { tunai, qris, pemasukan, gaji, lain, bersih: pemasukan - gaji - lain }
-    // `data` utuh: gaji pokok efektif ikut membaca sosmedHarian & promoPrograms.
+    // `data` utuh: gaji pokok efektif ikut membaca klaimSosmed & promoPrograms.
   }, [rekapAktif, hariIni, data])
 
   function labelBulan(key: string): string {

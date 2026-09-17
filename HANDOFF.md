@@ -406,8 +406,8 @@ Keputusan yang jangan diubah tanpa memikirkan ulang alasannya:
   "`olehList` kosong = diakui untuk siapa pun" sudah dihapus bersama masalah
   yang melahirkannya.
 - **Konten hanya dihitung dari `selesai_pada`** (stempel trigger database),
-  berbeda dari `kontribusiKonten()` di `manajemen.ts` yang juga menerima
-  `deadline`/`createdAt` sebagai perkiraan. Untuk uang, perkiraan tidak cukup.
+  bukan `deadline`/`createdAt` yang cuma perkiraan. Untuk uang, perkiraan
+  tidak cukup.
 - **Anti-curang**: operator boleh MELAPOR, tidak boleh MENYETUJUI. Trigger
   `protect_klaim_sosmed` (0060) memaksa tiap tulisan non-pengelola jadi
   `'menunggu'` atas nama dirinya sendiri, dan `selesai_pada` konten distempel
@@ -464,7 +464,8 @@ lain, bulan baru mulai, gaji dasar di atas patokan).
 
 Dari tiga target bonus, hanya **live** yang belum punya jadwal — story sudah
 terjawab roster (yang shift hari itu, dialah yang story) dan konten sudah punya
-`deadline` di Papan Promosi + papan "Denyut Mingguan". Membuat baris story atau
+`deadline` di Papan Promosi (papan "Denyut Mingguan" sudah dihapus, lihat
+bagian bawah). Membuat baris story atau
 konten di sini akan jadi grid kedua yang mengulang papan yang sudah ada, dan
 tanggal konten yang bisa diatur dari dua layar pasti akan berbeda. **Jangan
 tambahkan keduanya.**
@@ -474,7 +475,8 @@ tambahkan keduanya.**
   adalah yang sedang di studio. Aturan itu jadi berlaku sendiri — `setSel()`
   menggugurkan `live` begitu selnya berubah jadi cuti/libur/kosong, dan
   mempertahankannya untuk pagi ↔ sore ↔ penuh (cuma geser jam).
-- **`sosmed_harian.live`** (0058) = REALISASI, tetap dicentang pengelola di
+- **`sosmed_harian.live`** (0058) = REALISASI — **sudah digantikan `klaim_sosmed`
+  di 0060 dan panelnya dihapus**; dulu dicentang pengelola di
   Dashboard Manajemen. Layar Jadwal hanya MEMBACANYA dan mengunci selnya —
   pola yang sama persis dengan cuti ACC yang menimpa rencana. Tidak ada jalur
   tulis baru, jadi tidak ada lubang anti-curang baru.
@@ -563,7 +565,8 @@ Alur ACC-nya sudah ada, tidak perlu status baru:
 
 `bonusSosmed.ts` tidak pernah membaca `tahapan`, jadi membukanya tidak membuka
 satu pun jalan ke uang. UI-nya di `screens/Promosi.tsx` (papan yang memang
-dilihat operator), bukan di Denyut Mingguan yang pengelola-only.
+dilihat operator). Papan Denyut Mingguan yang dulu memegang centang ini
+sudah dihapus.
 
 ### Layar Jadwal jadi papan lapor
 
@@ -588,20 +591,50 @@ live pada hari yang memang dijadwalkan untuknya. **Kuning sengaja bukan hijau**
 — yang belum di-ACC tidak menambah apa pun dan warnanya tidak boleh menjanjikan
 sebaliknya.
 
-### Story & Live dipensiunkan dari Dashboard Manajemen
+### Dashboard Manajemen: panel sosmed & Denyut Mingguan DIHAPUS
 
-`AKSI_SOSMED` sekarang **hanya** `posting · repost · engagement` (log akun
-studio). Satu tempat centang per satu hal — kalau story bisa dicentang di dua
-layar, cepat atau lambat angkanya berbeda dan kamu harus memilih mana yang
-benar. Yang ikut menyesuaikan:
+Empat panel dibuang seluruhnya — "Sosial Media", "Sosmed Hari Ini", "Denyut
+Mingguan", dan "Konten Minggu Ini" — beserta `sosmed_harian` di lapisan data.
+Alasannya **keterbacaan**, bukan statistik pemakaian: sistemnya memang belum
+dijalankan, jadi kolom kosong di sana bukan bukti apa pun.
 
-- `aktivitasSosmed()` & `dampakSosmed()` — hari dengan klaim `'disetujui'` tetap
-  terhitung **aktif**, walau tidak ada posting/repost/engagement.
-- `kontribusiKonten().hariSosmed` — dihitung dari klaim disetujui per orang.
-  Ini justru lebih tepat dari sebelumnya: `olehList` tidak pernah memisahkan
-  kontribusi dua orang dengan benar (lihat bug `oleh_list` di atas).
-- Panel Social Media menulis di layar ke mana story & live pindah, supaya orang
-  tidak mencarinya di tempat yang salah lalu menyangka fiturnya hilang.
+Yang hilang dan TIDAK punya rumah lagi: `posting`, `repost`, `engagement`.
+Kalau `engagement` suatu saat perlu dilacak, tempatnya jadi **jenis ketiga di
+`klaim_sosmed`** (operator lapor, pengelola ACC) — bukan menghidupkan lagi
+panel centang manajer.
+
+Kenapa Denyut Mingguan ikut dibuang meski ia satu-satunya papan rantai
+produksi: **targetnya bertabrakan dengan bonus.** Ritme memakai N konten per
+MINGGU (tersimpan `{"jumlah": 3}`), bonus memakai 4 konten per BULAN. Dua angka
+untuk hal yang sama, beda lebih dari tiga kali lipat. Yang dipertahankan hanya
+kosakata tahapnya (`TAHAP_KONTEN`, `TAHAP_KONTEN_LABEL`), karena PIC masih
+mencentang take → edit → tayang di kartunya sendiri (0061).
+
+Yang ikut berubah:
+
+- **`aktivitasSosmed()` & `dampakSosmed()` sekarang MURNI dari klaim disetujui.**
+  Tidak ada lagi centang manual yang bisa menaikkan angka tanpa pemeriksaan —
+  alasan yang sama dipakai saat tombol "Selesai oleh" dibuang dari panel Butuh
+  Tindakan. `HariSosmed` menyusut jadi `{tanggal, berjalan, aktif}`;
+  `hariEngagement`, `jumlahAksi`, dan `olehList` hilang.
+- **Baris KPI "Konten mingguan tepat ritme" dihapus** dari scorecard, beserta
+  `TARGET_DENYUT`. Baris "Hari sosmed aktif" tetap ada, sumbernya kini klaim.
+- **Dihapus dari `manajemen.ts`**: `denyutKonten()` + seluruh mesin ritme/slot,
+  `AKSI_SOSMED*`, `pengerjaSosmed()`, `RITME_DEFAULT`, `jarakTahap()`,
+  `hariBawaanSlot()`, dan `kontribusiKonten()` — yang terakhir sudah **dead code
+  sejak panelnya dihapus** (tidak ada satu pun pemanggil).
+- **Dihapus dari `types.ts`/`db.ts`**: `SosmedHarian`, `RitmeKonten`,
+  `AppData.sosmedHarian`, `AppData.ritmeKonten`, `app_config.ritme_konten`, dan
+  helper `isUuid()`.
+- Tab Social Media menyisakan panel "Dampak Sosmed ke Penjualan" + satu
+  paragraf penunjuk arah ("Story & Live dilaporkan di Jadwal Karyawan, Konten
+  dicentang di Papan Promosi"), supaya tidak ada yang mencarinya di sini lalu
+  menyangka fiturnya hilang.
+
+⚠️ **Tabel `sosmed_harian` & kolom `app_config.ritme_konten` SENGAJA TIDAK
+di-drop.** Datanya utuh di database dan aplikasi cuma berhenti membacanya — 12
+baris lama sudah dipindahkan ke `klaim_sosmed` oleh backfill 0060. Tidak ada
+migrasi baru untuk perubahan ini.
 
 ### Yang masih perlu diputuskan
 

@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import type {
   AppData,
@@ -6,10 +6,6 @@ import type {
   JobdeskItem,
   MasalahTeknis,
   StatusLaporanHarian,
-  PromoProgram,
-  RitmeKonten,
-  SosmedHarian,
-  TahapKonten,
   TargetBulanan,
 } from '../types'
 import { todayKey, uid } from '../storage'
@@ -24,21 +20,12 @@ import {
   kepatuhanChecklist,
   kinerjaKaryawan,
   operasional,
-  AKSI_SOSMED,
-  AKSI_SOSMED_HINT,
-  AKSI_SOSMED_LABEL,
-  aktivitasSosmed,
   cakupanShift,
   dampakSosmed,
   MIN_SAMPEL_DAMPAK,
-  denyutKonten,
-  jarakTahap,
-  SIAPKAN_MAKS,
   eksekusiKonten,
   kesiapanJadwal,
   NAMA_HARI,
-  TAHAP_KONTEN,
-  TAHAP_KONTEN_LABEL,
   kualitasCampaign,
   AMBANG_JADWAL_H,
   HARI_SISA_MERAH,
@@ -58,7 +45,6 @@ import {
   LEAD_KATEGORI_LABEL,
   LEAD_TAHAP_LABEL,
   LEAD_TAHAP_ORDER,
-  pengerjaSosmed,
   pipelineLeads,
   ringkasKemitraan,
   ringkasanBulan,
@@ -67,7 +53,6 @@ import {
   targetBerlaku,
 } from '../manajemen'
 import type {
-  AksiSosmed,
   BarisKPI,
   Operasional,
   TugasManajer,
@@ -76,7 +61,6 @@ import type {
   HariDampak,
   SkorKelompok,
 } from '../manajemen'
-import { isPengelola } from '../lib/roles'
 import { Avatar, colorIndexForName } from '../components/Avatar'
 import { Icons } from '../components/Icons'
 
@@ -132,42 +116,6 @@ function labelHariTanggal(tanggal: string): string {
   return `${NAMA_HARI[hari]}, ${labelTanggalPendek(tanggal)}`
 }
 
-/** Tujuh tanggal satu minggu, mulai Senin. */
-function tanggalMinggu(mulai: string): string[] {
-  return Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(`${mulai}T00:00:00`)
-    d.setDate(d.getDate() + i)
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-  })
-}
-
-/**
- * "min. 2 konten/minggu · Take video H-2 · Editing H-1".
- *
- * Disebut sebagai JARAK, bukan nama hari, karena itulah yang sebenarnya
- * mengikat sejak tiap kartu punya hari tayangnya sendiri (lihat `jarakTahap`).
- */
-function teksRitme(r: RitmeKonten): string {
-  const jarak = jarakTahap(r)
-  const tahap = TAHAP_KONTEN.filter((k) => k !== 'tayang').map(
-    (k) => `${TAHAP_KONTEN_LABEL[k]} ${jarak[k] === 0 ? 'hari-H' : `H-${jarak[k]}`}`,
-  )
-  return [`min. ${r.jumlah} konten/minggu`, ...tahap].join(' · ')
-}
-
-/**
- * Contoh konkret dari satu angka `siapkan`: "kartu yang tayang Sabtu di-take
- * Kamis, diedit Jumat". Angka H-2 benar tapi abstrak; nama hari membuat owner
- * langsung tahu apa yang ia setujui. Sabtu dipakai sebagai contoh karena cukup
- * jauh dari awal minggu untuk menampung rantai terpanjang yang masuk akal.
- */
-function contohRantai(siapkan: number): string {
-  const CONTOH = 5 // indeks Sabtu pada NAMA_HARI (0 = Senin)
-  const take = NAMA_HARI[Math.max(0, CONTOH - siapkan)]
-  const edit = NAMA_HARI[Math.max(0, CONTOH - Math.min(1, siapkan))]
-  return `contohnya tayang ${NAMA_HARI[CONTOH]} berarti take ${take}, editing ${edit}`
-}
-
 function rupiahRingkas(n: number): string {
   const abs = Math.abs(n)
   if (abs >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(1).replace('.', ',')} M`
@@ -212,7 +160,7 @@ type TabMgr = TugasManajer
 const TAB_MGR: { id: TabMgr; label: string; sub: string }[] = [
   { id: 'operasional', label: 'Operasional', sub: 'SOP · stok · kendala teknis' },
   { id: 'sales', label: 'Leads & Sales', sub: 'MoU · event' },
-  { id: 'sosmed', label: 'Social Media', sub: 'ide · jadwal · keaktifan' },
+  { id: 'sosmed', label: 'Social Media', sub: 'konten · keaktifan · dampak' },
   { id: 'keuangan', label: 'Keuangan', sub: 'omzet · target 2×' },
 ]
 
@@ -292,20 +240,12 @@ export function Manajemen({
     () => cakupanShift(data, monthKey, hariIni),
     [data, monthKey, hariIni],
   )
-  const sosmed = useMemo(
-    () => aktivitasSosmed(data, monthKey, hariIni),
-    [data, monthKey, hariIni],
-  )
   const laporan = useMemo(
     () => laporanClosing(data, monthKey, hariIni),
     [data, monthKey, hariIni],
   )
   const eksekusi = useMemo(
     () => eksekusiKonten(data, monthKey, hariIni),
-    [data, monthKey, hariIni],
-  )
-  const denyut = useMemo(
-    () => denyutKonten(data, monthKey, hariIni),
     [data, monthKey, hariIni],
   )
   const dampak = useMemo(
@@ -327,23 +267,9 @@ export function Manajemen({
   )
   const nilaiOwner = data.penilaianOwner?.[monthKey]
 
-  const [tglPilih, setTglPilih] = useState(hariIni)
-  // Tanggal yang dicatat harus ikut periode yang sedang dilihat; kalau pemilih
-  // bulan digeser, jatuh ke hari ini (bulan berjalan) atau tanggal 1.
-  const tglSosmed = tglPilih.startsWith(monthKey)
-    ? tglPilih
-    : monthKey === hariIni.slice(0, 7)
-      ? hariIni
-      : `${monthKey}-01`
-  const logHariIni = (data.sosmedHarian ?? []).find((r) => r.tanggal === tglSosmed)
 
   /** Bulan yang sedang dilihat memuat hari ini — syarat centang cepat. */
   const periodeBerjalan = hariIni.startsWith(monthKey)
-  /**
-   * Log tanggal HARI INI, terlepas dari tanggal mana yang sedang dipilih di
-   * panel Sosial Media. Dipakai centang cepat di panel "Sosmed Hari Ini".
-   */
-  const logToday = (data.sosmedHarian ?? []).find((r) => r.tanggal === hariIni)
 
   // ---- Laporan closing harian ----
   const [tglLaporanPilih, setTglLaporanPilih] = useState(hariIni)
@@ -416,208 +342,12 @@ export function Manajemen({
     })
   }
 
-  /**
-   * Catat/ubah satu hari sosmed. Baris yang semua aksinya mati DIHAPUS, bukan
-   * disimpan sebagai baris kosong — supaya "hari bolong = tanggal yang hilang"
-   * tetap benar dan tabelnya tidak menumpuk baris tak bermakna.
-   */
-  function ubahSosmed(tanggal: string, patch: Partial<SosmedHarian>) {
-    const list = data.sosmedHarian ?? []
-    const baru: SosmedHarian = {
-      tanggal,
-      posting: false,
-      story: false,
-      repost: false,
-      engagement: false,
-      live: false,
-      ...list.find((r) => r.tanggal === tanggal),
-      ...patch,
-    }
-    const sisa = list.filter((r) => r.tanggal !== tanggal)
-    const kosong =
-      AKSI_SOSMED.every((a) => !baru[a]) &&
-      !baru.catatan &&
-      !baru.tautan &&
-      pengerjaSosmed(baru).length === 0
-    setData({ ...data, sosmedHarian: kosong ? sisa : [...sisa, baru] })
-  }
-
-  // --- siapa yang mengerjakan sosmed hari terpilih (boleh lebih dari satu) ---
-  const pengerjaHariIni = logHariIni ? pengerjaSosmed(logHariIni) : []
-  /**
-   * Nama bebas yang pernah dipakai — freelancer/anak magang yang tidak punya
-   * akun. Dikumpulkan dari log itu sendiri supaya sekali diketik, seterusnya
-   * tinggal diklik; tidak perlu tabel master orang.
-   */
-  const namaLuar = useMemo(() => {
-    const idKaryawan = new Set(data.employees.map((e) => e.id))
-    const set = new Set<string>()
-    for (const r of data.sosmedHarian ?? []) {
-      for (const o of pengerjaSosmed(r)) if (!idKaryawan.has(o)) set.add(o)
-    }
-    return [...set].sort((a, b) => a.localeCompare(b))
-  }, [data.sosmedHarian, data.employees])
-
-  /**
-   * Pengelola (owner/manajer) tidak muncul sebagai chip: yang dinilai di KPI
-   * sosmed adalah eksekusi karyawan, dan owner yang sesekali ikut posting
-   * cukup diketik sebagai nama tambahan. Chip yang terlanjur tercentang tetap
-   * ditampilkan supaya pilihan lama masih bisa dilepas.
-   */
-  const opsiPengerja = [
-    ...data.employees
-      .filter((e) => !isPengelola(e.role) || pengerjaHariIni.includes(e.id))
-      .map((e) => ({ key: e.id, label: e.nama, luar: false })),
-    ...namaLuar.map((n) => ({ key: n, label: n, luar: true })),
-  ]
-
-  /**
-   * `oleh` (satu orang, kolom lama) sengaja dikosongkan setiap kali daftar
-   * diubah: `pengerjaSosmed()` mendahulukan `olehList`, dan menyisakan nilai
-   * lama di sana hanya akan muncul kembali saat daftarnya dikosongkan.
-   * Kolom uuid di database tetap terisi — db.ts menurunkannya dari daftar ini.
-   */
-  function setPengerja(daftar: string[]) {
-    ubahSosmed(tglSosmed, { olehList: daftar, oleh: undefined })
-  }
-
-  function togglePengerja(key: string) {
-    setPengerja(
-      pengerjaHariIni.includes(key)
-        ? pengerjaHariIni.filter((x) => x !== key)
-        : [...pengerjaHariIni, key],
-    )
-  }
-
-  const [namaBaru, setNamaBaru] = useState('')
-
-  function tambahPengerja() {
-    const nama = namaBaru.trim()
-    if (!nama) return
-    // Kalau namanya ternyata karyawan yang sudah ada, pakai akunnya — supaya
-    // kontribusinya masuk ke orang yang sama, bukan jadi dua entri berbeda.
-    const cocok = data.employees.find(
-      (e) => e.nama.trim().toLowerCase() === nama.toLowerCase(),
-    )
-    const key = cocok?.id ?? nama
-    if (!pengerjaHariIni.includes(key)) setPengerja([...pengerjaHariIni, key])
-    setNamaBaru('')
-  }
   const [editTarget, setEditTarget] = useState(false)
-
-  // ---- Denyut Mingguan -------------------------------------------------
-  const [mingguPilih, setMingguPilih] = useState<string | null>(null)
-  const [editRitme, setEditRitme] = useState(false)
-  /**
-   * Slot yang sedang memilih hari tayang, `"<senin>#<nomor>"`. Selama terisi,
-   * tujuh sel hari pada baris itu berubah jadi tombol pilih — pemilih tanggal
-   * yang memakai kalender yang sudah ada di layar, bukan dialog baru.
-   */
-  const [pilihHari, setPilihHari] = useState<string | null>(null)
-  // Minggu yang ditampilkan papan: pilihan manual, kalau tidak ada jatuh ke
-  // minggu berjalan, lalu ke minggu terakhir di bulan itu (untuk bulan lampau).
-  const mingguAktif =
-    denyut.perMinggu.find((m) => m.mulai === mingguPilih) ??
-    denyut.mingguIni ??
-    denyut.perMinggu[denyut.perMinggu.length - 1]
 
   const namaById = useMemo(
     () => new Map(data.employees.map((e) => [e.id, e.nama])),
     [data.employees],
   )
-
-  /**
-   * Centang / urungkan satu tahap produksi. Yang dikirim hanya `kunci` & `oleh`
-   * — tanggalnya distempel trigger promo_stamp_tahapan (0051), sama seperti
-   * `selesaiPada` pada kartu.
-   */
-  function toggleTahap(kartuId: string, kunci: TahapKonten) {
-    setData({
-      ...data,
-      promoPrograms: data.promoPrograms.map((p) => {
-        if (p.id !== kartuId) return p
-        const list = p.tahapan ?? []
-        return {
-          ...p,
-          tahapan: list.some((t) => t.kunci === kunci)
-            ? list.filter((t) => t.kunci !== kunci)
-            : [...list, { kunci, oleh: meId }],
-        }
-      }),
-    })
-  }
-
-  /**
-   * Wujudkan satu slot jadi kartu sungguhan di Papan Promosi, dengan deadline =
-   * hari tayang YANG DIPILIH di baris itu. Harinya ditanyakan (bukan dipatok ke
-   * hari ritme) supaya konten kedua, ketiga, dan seterusnya dalam satu minggu
-   * tidak menumpuk di tanggal yang sama. Judul & detailnya disunting di Papan
-   * Promosi — papan ini sengaja tidak menduplikasi formulir kartu.
-   */
-  function buatKartuKonten(tayang: string) {
-    const kartu: PromoProgram = {
-      id: uid(),
-      judul: `Konten · ${labelHariTanggal(tayang)}`,
-      deskripsi: '',
-      tahap: 'rencana',
-      status: 'disetujui',
-      jenis: 'konten',
-      deadline: tayang,
-      dibuatOleh: meId,
-      createdAt: new Date().toISOString(),
-      tahapan: [],
-    }
-    setData({ ...data, promoPrograms: [...data.promoPrograms, kartu] })
-  }
-
-  /**
-   * Hapus satu kartu konten langsung dari papan — kartunya hilang juga dari
-   * Papan Promosi, karena itu kartu yang sama.
-   *
-   * Yang TIDAK ikut terhapus adalah kewajibannya: kalau minggu itu jadi kurang
-   * dari minimum, barisnya kembali muncul sebagai slot kosong. Menghapus kartu
-   * tidak pernah bisa dipakai untuk mengosongkan papan.
-   */
-  function hapusKartuKonten(kartuId: string) {
-    setData({
-      ...data,
-      promoPrograms: data.promoPrograms.filter((p) => p.id !== kartuId),
-    })
-  }
-
-  /**
-   * Pindahkan hari tayang sebuah kartu konten — jadwal ulang yang jujur:
-   * target take & edit ikut bergeser mengikuti hari tayang yang baru.
-   *
-   * Yang TIDAK ikut bergeser adalah tanggal centangnya: `selesaiPada`
-   * distempel database (0051), jadi menggeser jadwal hanya memindahkan target,
-   * bukan mengarang ulang kapan pekerjaannya benar-benar terjadi. Sama persis
-   * dengan mengubah deadline kartu di Papan Promosi.
-   */
-  function geserTayang(kartuId: string, tayang: string) {
-    setData({
-      ...data,
-      promoPrograms: data.promoPrograms.map((p) =>
-        p.id === kartuId ? { ...p, deadline: tayang } : p,
-      ),
-    })
-  }
-
-  /**
-   * Simpan ritme — dari owner maupun manajer. Selama `disetujui` belum true,
-   * KPI "konten mingguan tepat ritme" tetap dihitung tapi ditandai simulasi,
-   * pola yang sama dengan persetujuan target bulanan.
-   *
-   * Siapa yang boleh menyetujui ditentukan di RitmeEditor, bukan di sini; RLS
-   * `app_config` sendiri memang membuka tulis untuk pengelola (owner &
-   * manajer, lihat 0042), jadi pembatasannya bersifat alur kerja — cukup untuk
-   * satu owner + satu manajer, dan terlihat di layar owner kalau ritmenya
-   * berubah jadi belum disetujui.
-   */
-  function simpanRitme(r: RitmeKonten) {
-    setData({ ...data, ritmeKonten: r })
-    setEditRitme(false)
-  }
 
   function simpanTarget(t: TargetBulanan) {
     setData({
@@ -839,17 +569,6 @@ export function Manajemen({
       nada: 'primary' as const,
     },
 
-    {
-      // Peringatan paling awal yang dipunyai dashboard ini: tahap yang lewat
-      // tenggat hari ini sudah menyalakan lampu untuk hari tayang nanti.
-      tugas: 'sosmed' as TabMgr,
-      bobot: 0,
-      jumlah: denyut.macet.length,
-      label: 'Tahap konten mingguan lewat tenggat',
-      aksi: 'Buka papan promosi',
-      onClick: onLihatPromosi,
-      nada: 'pink' as const,
-    },
     {
       tugas: 'sosmed' as TabMgr,
       bobot: 1,
@@ -1531,468 +1250,16 @@ export function Manajemen({
       {tab === 'sosmed' && (
         <div className="mgr-cols">
           <div className="mgr-col">
-            <Panel
-              judul="Sosial Media"
-              sub={
-                sosmed.belumDicatat
-                  ? 'Belum ada catatan — centang aktivitas hari ini untuk mulai menilai KPI sosmed.'
-                  : `${sosmed.hariAktif} dari ${sosmed.hariBerjalan} hari aktif · rentetan berjalan ${sosmed.runSekarang} hari (terpanjang ${sosmed.runTerpanjang})`
-              }
-              badge={
-                sosmed.belumDicatat ? undefined : persen(sosmed.konsistensi)
-              }
-            >
-              <div className="mgr-heat">
-                {sosmed.perHari.map((h) => (
-                  <button
-                    key={h.tanggal}
-                    type="button"
-                    className={
-                      `mgr-heat-sel lv-${h.jumlahAksi}` +
-                      (h.berjalan ? '' : ' is-nanti') +
-                      (h.tanggal === tglSosmed ? ' is-pilih' : '') +
-                      (h.berjalan && !h.aktif ? ' is-bolong' : '')
-                    }
-                    onClick={() => setTglPilih(h.tanggal)}
-                    title={`${h.tanggal} — ${h.jumlahAksi} dari 4 aktivitas`}
-                  >
-                    {Number(h.tanggal.slice(8))}
-                  </button>
-                ))}
-              </div>
-
-              <div className="mgr-sos-form">
-                <div className="mgr-sos-tgl">
-                  <label>
-                    <span>Catat tanggal</span>
-                    <input
-                      type="date"
-                      value={tglSosmed}
-                      onChange={(e) => e.target.value && setTglPilih(e.target.value)}
-                    />
-                  </label>
-                </div>
-
-                {/*
-                  Satu hari sering dikerjakan berdua — yang posting belum tentu
-                  yang membalas komentar — dan sebagian pengerjanya tidak punya
-                  akun. Jadi: pilih berapa pun orangnya, dan nama baru boleh
-                  diketik langsung.
-                */}
-                <div className="mgr-sos-orang">
-                  <span className="mgr-sos-orang-lbl">
-                    Dikerjakan oleh
-                    {pengerjaHariIni.length > 0 && (
-                      <em>{pengerjaHariIni.length} orang</em>
-                    )}
-                  </span>
-                  <div className="mgr-sos-orang-list">
-                    {opsiPengerja.map((o) => {
-                      const on = pengerjaHariIni.includes(o.key)
-                      return (
-                        <button
-                          key={o.key}
-                          type="button"
-                          className={
-                            'mgr-sos-chip' + (on ? ' is-on' : '') + (o.luar ? ' is-luar' : '')
-                          }
-                          onClick={() => togglePengerja(o.key)}
-                          title={o.luar ? 'Nama tambahan (tanpa akun)' : undefined}
-                        >
-                          {on ? '✓' : '○'} {o.label}
-                        </button>
-                      )
-                    })}
-                    {opsiPengerja.length === 0 && (
-                      <span className="mgr-sos-orang-kosong">
-                        Belum ada nama — tambahkan di bawah.
-                      </span>
-                    )}
-                  </div>
-                  <div className="mgr-sos-orang-tambah">
-                    <input
-                      value={namaBaru}
-                      placeholder="Tambah nama (freelancer, magang, owner…)"
-                      onChange={(e) => setNamaBaru(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault()
-                          tambahPengerja()
-                        }
-                      }}
-                    />
-                    <button
-                      type="button"
-                      className="mgr-aksi-btn"
-                      onClick={tambahPengerja}
-                      disabled={!namaBaru.trim()}
-                    >
-                      Tambah
-                    </button>
-                  </div>
-                </div>
-                <div className="mgr-sos-aksi">
-                  {AKSI_SOSMED.map((a) => (
-                    <button
-                      key={a}
-                      type="button"
-                      className={`mgr-sos-chip${logHariIni?.[a] ? ' is-on' : ''}`}
-                      title={AKSI_SOSMED_HINT[a as AksiSosmed]}
-                      onClick={() =>
-                        ubahSosmed(tglSosmed, { [a]: !logHariIni?.[a] } as Partial<SosmedHarian>)
-                      }
-                    >
-                      {logHariIni?.[a] ? '✓' : '○'} {AKSI_SOSMED_LABEL[a as AksiSosmed]}
-                    </button>
-                  ))}
-                </div>
-                {/* Story & Live sudah TIDAK dicentang di sini sejak migrasi
-                    0060 — keduanya dilaporkan operator & disetujui pengelola di
-                    layar Jadwal. Ditulis di layar supaya orang tidak mencarinya
-                    di tempat yang salah lalu menyangka fiturnya hilang. */}
-                <p className="mgr-hint">
-                  <strong>Story</strong> &amp; <strong>Live</strong> tidak lagi
-                  dicentang di sini: operator melaporkannya sendiri di{' '}
-                  <strong>Jadwal Karyawan</strong>, dan kamu yang menyetujuinya
-                  di sana. Yang tersisa di panel ini adalah log akun studio.
-                </p>
-                <input
-                  className="mgr-sos-tautan"
-                  type="url"
-                  placeholder="Tautan unggahan (opsional)"
-                  value={logHariIni?.tautan ?? ''}
-                  onChange={(e) =>
-                    ubahSosmed(tglSosmed, { tautan: e.target.value || undefined })
-                  }
-                />
-              </div>
-
-              {sosmed.bolong.length > 0 && (
-                <p className="mgr-hint">
-                  {sosmed.bolong.length} hari masih kosong bulan ini — kotak
-                  bergaris pada kalender di atas.
-                </p>
-              )}
-            </Panel>
-
-            <Panel
-              judul="Denyut Mingguan"
-              sub={
-                !denyut.disetujui
-                  ? `${teksRitme(denyut.ritme)} — belum dinilai sampai ritmenya disetujui.`
-                  : denyut.dinilai === 0
-                    ? `${teksRitme(denyut.ritme)} — belum ada minggu yang hari tayangnya lewat bulan ini.`
-                    : `${teksRitme(denyut.ritme)} · ${denyut.tepat} dari ${denyut.dinilai} slot tepat ritme bulan ini`
-              }
-              badge={denyut.dinilai > 0 ? persen(denyut.rasio) : undefined}
-              aksi={
-                // Terbuka untuk manajer juga — layar ini memang cuma dicapai
-                // pengelola (owner & manajer), dan manajer-lah yang paling tahu
-                // ritme produksi yang sanggup ia jalankan. Yang tetap owner-only
-                // adalah MENYETUJUINYA; lihat RitmeEditor.
-                <button
-                  type="button"
-                  className={'mgr-aksi-btn' + (denyut.disetujui ? '' : ' is-utama')}
-                  onClick={() => setEditRitme((v) => !v)}
-                >
-                  {editRitme ? 'Tutup' : 'Atur ritme'}
-                </button>
-              }
-            >
-              {editRitme && (
-                <RitmeEditor
-                  ritme={denyut.ritme}
-                  disetujui={denyut.disetujui}
-                  bolehSetujui={isOwner}
-                  onSimpan={simpanRitme}
-                  onBatal={() => setEditRitme(false)}
-                />
-              )}
-
-              {!editRitme && !denyut.disetujui && (
-                <p className="mgr-hint">
-                  {denyut.belumDiatur
-                    ? 'Papan memakai ritme bawaan — belum pernah diatur.'
-                    : 'Ritme ini belum disetujui owner.'}{' '}
-                  Slot &amp; tenggatnya tetap digambar, tapi skornya masih
-                  simulasi{isOwner ? '' : ' sampai owner menyetujuinya'}.
-                </p>
-              )}
-
-              <div className="mgr-mgg-nav">
-                {denyut.perMinggu.map((m) => (
-                  <button
-                    key={m.mulai}
-                    type="button"
-                    className={
-                      'mgr-mgg-tab' +
-                      (m.mulai === mingguAktif?.mulai ? ' is-pilih' : '') +
-                      (m.berjalan ? ' is-kini' : '') +
-                      (m.dinilai && m.beres < m.slot.length ? ' is-macet' : '')
-                    }
-                    onClick={() => setMingguPilih(m.mulai)}
-                  >
-                    {labelTanggalPendek(m.mulai)}–{labelTanggalPendek(m.selesai)}
-                    <em>
-                      {m.beres}/{m.slot.length}
-                    </em>
-                  </button>
-                ))}
-              </div>
-
-              {mingguAktif && (
-                <div className="mgr-mgg-wrap">
-                  <div className="mgr-mgg">
-                    <div className="mgr-mgg-sudut" />
-                    {tanggalMinggu(mingguAktif.mulai).map((t, i) => (
-                      <div
-                        key={t}
-                        className={'mgr-mgg-hari' + (t === hariIni ? ' is-kini' : '')}
-                      >
-                        <span>{NAMA_HARI[i]}</span>
-                        <em>{Number(t.slice(8))}</em>
-                      </div>
-                    ))}
-
-                    {mingguAktif.slot.map((slot) => {
-                      const kunciSlot = `${mingguAktif.mulai}#${slot.nomor}`
-                      const memilih = pilihHari === kunciSlot
-                      return (
-                        <Fragment key={kunciSlot}>
-                          <div className={`mgr-mgg-baris is-${slot.status}`}>
-                            <span className="jdl">
-                              <span className="teks">{slot.judul}</span>
-                              {slot.ekstra && <em className="ekstra">ekstra</em>}
-                              {slot.id && (
-                                <button
-                                  type="button"
-                                  className="mgr-mgg-hapus"
-                                  title="Hapus kartu konten ini"
-                                  aria-label={`Hapus kartu ${slot.judul}`}
-                                  onClick={() => {
-                                    const jejak = slot.tahapan.filter((t) => t.selesaiPada)
-                                    if (
-                                      confirm(
-                                        `Hapus kartu "${slot.judul}"? Kartunya hilang juga dari Papan Promosi` +
-                                          (jejak.length > 0
-                                            ? `, berikut ${jejak.length} tahap yang sudah dicentang`
-                                            : '') +
-                                          '. Kalau minggu ini jadi kurang dari minimal, slotnya kembali kosong.',
-                                      )
-                                    ) {
-                                      if (pilihHari === kunciSlot) setPilihHari(null)
-                                      hapusKartuKonten(slot.id!)
-                                    }
-                                  }}
-                                >
-                                  ×
-                                </button>
-                              )}
-                            </span>
-                            {slot.virtual ? (
-                              <button
-                                type="button"
-                                className="mgr-mgg-buat"
-                                onClick={() => setPilihHari(memilih ? null : kunciSlot)}
-                              >
-                                {memilih ? 'Batal' : '+ Buat kartu'}
-                              </button>
-                            ) : (
-                              <span className="pic">
-                                {slot.pic
-                                  ? (namaById.get(slot.pic) ?? 'PIC tidak dikenal')
-                                  : 'Tanpa PIC'}
-                                {' · '}
-                                <button
-                                  type="button"
-                                  className="mgr-mgg-geser"
-                                  onClick={() => setPilihHari(memilih ? null : kunciSlot)}
-                                >
-                                  {memilih ? 'batal' : 'ganti hari tayang'}
-                                </button>
-                              </span>
-                            )}
-                          </div>
-                          {tanggalMinggu(mingguAktif.mulai).map((t) =>
-                            memilih ? (
-                              // Sel harinya sendiri yang jadi pemilih tanggal:
-                              // hari tayang dipilih di kalender tempat ia akan
-                              // muncul, bukan di kotak tanggal terpisah.
-                              <div key={t} className="mgr-mgg-sel">
-                                <button
-                                  type="button"
-                                  className={
-                                    'mgr-mgg-pilih' + (t === slot.tayang ? ' is-kini' : '')
-                                  }
-                                  title={`Tayang ${labelHariTanggal(t)}`}
-                                  onClick={() => {
-                                    if (slot.virtual) buatKartuKonten(t)
-                                    else if (slot.id) geserTayang(slot.id, t)
-                                    setPilihHari(null)
-                                  }}
-                                >
-                                  Tayang
-                                </button>
-                              </div>
-                            ) : (
-                              <div key={t} className="mgr-mgg-sel">
-                                {slot.tahapan
-                                  .filter((th) => th.target === t)
-                                  .map((th) => (
-                                    <button
-                                      key={th.kunci}
-                                      type="button"
-                                      className={`mgr-mgg-chip is-${th.status}`}
-                                      disabled={slot.virtual}
-                                      title={
-                                        slot.virtual
-                                          ? 'Buat kartunya dulu untuk bisa mencentang tahap ini'
-                                          : th.selesaiPada
-                                            ? `Selesai ${labelTanggalPendek(th.selesaiPada)}` +
-                                              (th.status === 'telat'
-                                                ? ` · telat ${th.telatHari} hari`
-                                                : ' · tepat waktu')
-                                            : th.status === 'telat'
-                                              ? `Lewat tenggat ${th.telatHari} hari`
-                                              : `Target ${labelTanggalPendek(th.target)}`
-                                      }
-                                      onClick={() => slot.id && toggleTahap(slot.id, th.kunci)}
-                                    >
-                                      <b>
-                                        {th.status === 'beres'
-                                          ? '✓'
-                                          : th.status === 'telat'
-                                            ? '!'
-                                            : '○'}
-                                      </b>{' '}
-                                      {th.label}
-                                    </button>
-                                  ))}
-                              </div>
-                            ),
-                          )}
-                        </Fragment>
-                      )
-                    })}
-                  </div>
-                </div>
-              )}
-
-              <p className="mgr-hint">
-                Hari tayang dipilih per kartu: klik <b>+ Buat kartu</b> (atau{' '}
-                <b>ganti hari tayang</b>), lalu pilih harinya di baris itu —
-                take &amp; editing bergeser sendiri mengikuti. Baris yang masih
-                bertombol <b>+ Buat kartu</b> adalah kekurangan dari minimal{' '}
-                {denyut.ritme.jumlah} konten/minggu; konten lebih dari itu boleh
-                dan ikut dinilai.
-              </p>
-
-              {denyut.macet.length > 0 && (
-                <p className="mgr-hint">
-                  Menunggak:{' '}
-                  {denyut.macet
-                    .slice(0, 3)
-                    .map((m) => `${m.judul} — ${m.tahap} (${m.telatHari} hari)`)
-                    .join(' · ')}
-                  {denyut.macet.length > 3 && ` · +${denyut.macet.length - 3} lainnya`}
-                </p>
-              )}
-            </Panel>
-          </div>
-
-          <div className="mgr-col mgr-col--side">
-            <Panel
-              judul="Sosmed Hari Ini"
-              sub={
-                sosmed.belumDicatat
-                  ? 'Belum ada catatan bulan ini — centang begitu satu aktivitas selesai.'
-                  : `Rentetan ${sosmed.runSekarang} hari · konsistensi ${persen(sosmed.konsistensi)} bulan ini`
-              }
-            >
-              {/*
-                Centang cepat, tanpa memilih tanggal dan tanpa memilih orang —
-                inilah satu-satunya bentuk pencatatan yang benar-benar dilakukan
-                tiap hari. Formulir lengkapnya (tanggal lain, nama pengerja,
-                tautan) ada di panel Sosial Media di bawah.
-              */}
-              {!periodeBerjalan ? (
-                <p className="mgr-empty">
-                  Periode yang sedang dilihat bukan bulan berjalan. Centang harian
-                  hanya berlaku untuk hari ini.
-                </p>
-              ) : (
-                <>
-                  <div className="mgr-sos-aksi">
-                    {AKSI_SOSMED.map((a) => (
-                      <button
-                        key={a}
-                        type="button"
-                        className={`mgr-sos-chip${logToday?.[a] ? ' is-on' : ''}`}
-                        onClick={() =>
-                          ubahSosmed(hariIni, {
-                            [a]: !logToday?.[a],
-                          } as Partial<SosmedHarian>)
-                        }
-                      >
-                        {logToday?.[a] ? '✓' : '○'} {AKSI_SOSMED_LABEL[a as AksiSosmed]}
-                      </button>
-                    ))}
-                  </div>
-                  {sosmed.bolong.length > 0 && (
-                    <p className="mgr-hint">
-                      {sosmed.bolong.length} hari bulan ini masih kosong — bisa
-                      disusulkan dari panel Sosial Media di bawah.
-                    </p>
-                  )}
-                </>
-              )}
-            </Panel>
-
-            <Panel
-              judul="Konten Minggu Ini"
-              sub={teksRitme(denyut.ritme)}
-              badge={
-                denyut.mingguIni
-                  ? `${denyut.mingguIni.beres}/${denyut.mingguIni.slot.length} slot`
-                  : undefined
-              }
-            >
-              {!denyut.mingguIni ? (
-                <p className="mgr-empty">
-                  Minggu berjalan tidak ada di periode yang sedang dilihat.
-                </p>
-              ) : (
-                <ul className="mgr-slot-ringkas">
-                  {denyut.mingguIni.slot.map((s) => (
-                    <li key={s.nomor} className={`is-${s.status}`}>
-                      <span className="ikon">
-                        {s.status === 'beres' ? '✓' : s.status === 'macet' ? '!' : '○'}
-                      </span>
-                      <span className="lbl">{s.judul}</span>
-                      <em>
-                        {s.virtual
-                          ? 'kartu belum dibuat'
-                          : `${labelHariTanggal(s.tayang)} · ${
-                              s.pic
-                                ? (namaById.get(s.pic) ?? 'PIC tidak dikenal')
-                                : 'tanpa PIC'
-                            }`}
-                      </em>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {denyut.macet.length > 0 && (
-                <p className="mgr-hint">
-                  Menunggak:{' '}
-                  {denyut.macet
-                    .slice(0, 3)
-                    .map((m) => `${m.judul} — ${m.tahap} (${m.telatHari} hari)`)
-                    .join(' · ')}
-                  {denyut.macet.length > 3 && ` · +${denyut.macet.length - 3} lainnya`}
-                </p>
-              )}
-            </Panel>
+            {/* Pencatatan story, live, & konten TIDAK ada di layar ini lagi —
+                dipindahkan ke tempat orang yang mengerjakannya berada. Petunjuk
+                ini sengaja ditinggalkan supaya tidak ada yang mencarinya di sini
+                lalu menyangka fiturnya hilang. */}
+            <p className="mgr-hint">
+              <b>Story &amp; Live</b> dilaporkan operator di <b>Jadwal Karyawan</b>,
+              dan kamu yang menyetujuinya di sana. <b>Konten</b> dicentang PIC-nya
+              di <b>Papan Promosi</b>, lalu kamu yang menutup kartunya. Angka di
+              bawah dihitung dari laporan yang sudah disetujui saja.
+            </p>
 
             <Panel
               judul="Dampak Sosmed ke Penjualan"
@@ -3304,142 +2571,6 @@ const FIELD_TARGET: {
  * papan), sementara yang disepakati di sini cuma seberapa sering dan seberapa
  * awal disiapkan.
  */
-function RitmeEditor({
-  ritme,
-  disetujui,
-  bolehSetujui,
-  onSimpan,
-  onBatal,
-}: {
-  ritme: RitmeKonten
-  disetujui: boolean
-  /**
-   * Owner. Manajer boleh MENGUSULKAN ritme tapi tidak menyetujuinya: ritme
-   * adalah patokan yang dipakai menilai manajer sendiri, jadi kalau ia boleh
-   * mengesahkan angkanya, scorecard-nya berhenti berarti.
-   */
-  bolehSetujui: boolean
-  onSimpan: (r: RitmeKonten) => void
-  onBatal: () => void
-}) {
-  // Ritme lama (berbasis nama hari) langsung dinormalkan ke bentuk baru begitu
-  // editor dibuka, jadi menyimpan sekali saja sudah membuang sisa `hari`.
-  const [draf, setDraf] = useState<RitmeKonten>(() => ({
-    jumlah: ritme.jumlah,
-    siapkan: jarakTahap(ritme).take,
-    disetujui: ritme.disetujui,
-    disetujuiPada: ritme.disetujuiPada,
-  }))
-  const siapkan = draf.siapkan ?? 0
-  // Tidak ada lagi keadaan yang tidak sah untuk ditahan (dua-duanya angka yang
-  // sudah di-clamp), jadi yang tersisa cuma: perlu tidaknya disetujui ulang.
-  // Ritme lama yang masih berbentuk nama hari selalu dianggap berubah, supaya
-  // persetujuannya ikut memindahkannya ke bentuk baru.
-  const berubah =
-    ritme.siapkan == null ||
-    draf.jumlah !== ritme.jumlah ||
-    siapkan !== jarakTahap(ritme).take
-
-  return (
-    <div className="mgr-target-editor">
-      <div className="mgr-ritme-grid">
-        <label className="mgr-target-field">
-          <span>
-            Minimal per minggu<em>konten</em>
-          </span>
-          <input
-            type="number"
-            inputMode="numeric"
-            min={1}
-            max={7}
-            value={draf.jumlah}
-            onChange={(e) =>
-              setDraf((d) => ({
-                ...d,
-                jumlah: Math.min(7, Math.max(1, Number(e.target.value) || 1)),
-              }))
-            }
-          />
-        </label>
-        <label className="mgr-target-field">
-          <span>
-            Siapkan sejak<em>H-…</em>
-          </span>
-          <input
-            type="number"
-            inputMode="numeric"
-            min={0}
-            max={SIAPKAN_MAKS}
-            value={siapkan}
-            onChange={(e) =>
-              setDraf((d) => ({
-                ...d,
-                siapkan: Math.min(
-                  SIAPKAN_MAKS,
-                  Math.max(0, Math.round(Number(e.target.value) || 0)),
-                ),
-              }))
-            }
-          />
-        </label>
-      </div>
-      <p className="mgr-hint">
-        {teksRitme(draf)} — {contohRantai(siapkan)}. Hari tayangnya sendiri
-        dipilih per kartu di papan, jadi konten boleh terbit hari apa saja dan
-        boleh lebih dari {draf.jumlah}× seminggu; angka itu batas bawah, bukan
-        kuota.
-      </p>
-      {!bolehSetujui && (
-        <p className="mgr-hint">
-          Angkanya boleh Anda ubah, tapi yang mengesahkan tetap owner — inilah
-          patokan yang dipakai menilai Anda. Selama belum disetujui, papan tetap
-          jalan dan skornya dihitung sebagai simulasi.
-          {berubah && disetujui
-            ? ' Menyimpan perubahan ini mencabut persetujuan yang sekarang.'
-            : ''}
-        </p>
-      )}
-      <div className="mgr-target-aksi">
-        <span className="spacer" />
-        <button type="button" className="mgr-aksi-btn" onClick={onBatal}>
-          Batal
-        </button>
-        <button
-          type="button"
-          className={'mgr-aksi-btn' + (bolehSetujui ? '' : ' is-utama')}
-          onClick={() =>
-            onSimpan(
-              // Usulan manajer yang mengubah angkanya mencabut persetujuan
-              // lama: patokannya berubah, jadi harus disahkan ulang. Simpan
-              // milik owner sendiri tidak perlu itu — ia memang pengesahnya.
-              bolehSetujui || !berubah
-                ? draf
-                : { ...draf, disetujui: false, disetujuiPada: undefined },
-            )
-          }
-        >
-          {bolehSetujui ? 'Simpan' : 'Simpan usulan'}
-        </button>
-        {bolehSetujui && (
-          <button
-            type="button"
-            className="mgr-aksi-btn is-utama"
-            disabled={disetujui && !berubah}
-            onClick={() =>
-              onSimpan({
-                ...draf,
-                disetujui: true,
-                disetujuiPada: new Date().toISOString(),
-              })
-            }
-          >
-            {disetujui ? 'Simpan & setujui ulang' : 'Setujui ritme'}
-          </button>
-        )}
-      </div>
-    </div>
-  )
-}
 
 function TargetEditor({
   awal,

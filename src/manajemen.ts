@@ -22,10 +22,7 @@ import type {
   LaporanHarian,
   MasalahTeknis,
   LeadTahap,
-  PromoProgram,
-  RitmeKonten,
   Shift,
-  SosmedHarian,
   StatusLaporanHarian,
   TahapKonten,
   TargetBulanan,
@@ -995,35 +992,10 @@ export function kesiapanJadwal(
 // ---------------------------------------------------------------
 
 /**
- * Aksi yang dicentang MANUAL pengelola di sini — log akun studio.
- *
- * `story` & `live` sengaja TIDAK ada di daftar ini sejak migrasi 0060: keduanya
- * kini dilaporkan operator dan disetujui pengelola di layar Jadwal
- * (`klaim_sosmed`). Kalau keduanya juga bisa dicentang di sini, akan ada dua
- * sumber untuk fakta yang sama — dan cepat atau lambat angkanya berbeda.
- * Kolomnya di [SosmedHarian] dipertahankan hanya untuk baris lama.
- */
-export const AKSI_SOSMED = ['posting', 'repost', 'engagement'] as const
-export type AksiSosmed = (typeof AKSI_SOSMED)[number]
-
-export const AKSI_SOSMED_LABEL: Record<AksiSosmed, string> = {
-  posting: 'Posting',
-  repost: 'Repost',
-  engagement: 'Engagement',
-}
-
-/** Penjelasan tiap aksi — dipakai sebagai `title` chip di layar Manajemen. */
-export const AKSI_SOSMED_HINT: Record<AksiSosmed, string> = {
-  posting: 'Unggahan feed / reels baru.',
-  repost: 'Story open/close & membagikan ulang unggahan lama atau unggahan tamu.',
-  engagement: 'Membalas komentar / DM, berinteraksi dengan akun lain.',
-}
-
-/**
  * Tanggal yang punya minimal satu laporan tugas (story/live) yang SUDAH
- * disetujui. Dipakai supaya "hari sosmed aktif" tetap benar setelah story &
- * live pindah ke `klaim_sosmed`: hari yang story-nya beres tapi tidak ada
- * posting/repost/engagement tetap hari yang aktif.
+ * disetujui. Inilah satu-satunya sumber "hari sosmed aktif" sejak panel centang
+ * harian di dashboard dipensiunkan (migrasi 0060) — angkanya tidak bisa
+ * dinaikkan oleh orang yang sedang dinilai tanpa lewat pemeriksaan.
  */
 export function tanggalKlaimDisetujui(data: AppData): Set<string> {
   const set = new Set<string>()
@@ -1033,38 +1005,19 @@ export function tanggalKlaimDisetujui(data: AppData): Set<string> {
   return set
 }
 
-/**
- * Siapa saja yang mengerjakan sosmed pada satu hari.
- *
- * Satu hari bisa dikerjakan lebih dari satu orang, dan sebagiannya orang yang
- * tidak punya akun (freelancer). `olehList` adalah sumber kebenarannya; kolom
- * lama `oleh` hanya cadangan untuk baris yang dicatat sebelum migration 0049.
- */
-export function pengerjaSosmed(r: SosmedHarian): string[] {
-  if (r.olehList && r.olehList.length > 0) return r.olehList
-  return r.oleh ? [r.oleh] : []
-}
-
 export type HariSosmed = {
   tanggal: string
   /** Sudah lewat/hari ini — hari yang belum tiba tidak dinilai. */
   berjalan: boolean
-  /** Minimal satu aksi tercatat. */
+  /** Ada minimal satu laporan tugas sosmed yang sudah DISETUJUI hari itu. */
   aktif: boolean
-  /** Berapa dari 4 aksi yang dikerjakan. */
-  jumlahAksi: number
-  engagement: boolean
-  /** Id profil ATAU nama bebas — bisa lebih dari satu orang. */
-  olehList: string[]
 }
 
 export type AktivitasSosmed = {
   perHari: HariSosmed[]
   hariBerjalan: number
-  /** Hari dengan minimal satu aksi. */
+  /** Hari dengan minimal satu laporan disetujui. */
   hariAktif: number
-  /** Hari yang aksi engagement-nya dicentang. */
-  hariEngagement: number
   /** hariAktif ÷ hariBerjalan, 0–1. */
   konsistensi: number
   /** Rentetan hari aktif terpanjang di bulan ini. */
@@ -1073,18 +1026,22 @@ export type AktivitasSosmed = {
   runSekarang: number
   /** Tanggal yang sudah lewat tapi kosong — daftar yang perlu dikejar. */
   bolong: string[]
-  /** true kalau belum pernah dicatat sama sekali (fitur belum dipakai). */
+  /** true kalau belum ada laporan sama sekali (sistemnya belum dipakai). */
   belumDicatat: boolean
 }
 
-/** Rangkum log sosmed satu bulan. */
+/** Rangkum keaktifan sosmed satu bulan, dari laporan yang sudah disetujui. */
 export function aktivitasSosmed(
   data: AppData,
   monthKey: string,
   hariIni: string,
 ): AktivitasSosmed {
-  const log = new Map<string, SosmedHarian>()
-  for (const r of data.sosmedHarian ?? []) log.set(r.tanggal, r)
+  // Sumbernya HANYA laporan yang sudah disetujui pengelola. Panel centang
+  // harian di dashboard sudah dipensiunkan (lihat migrasi 0060): story & live
+  // dilaporkan operator di layar Jadwal, dan `sosmed_harian` tidak ditulis
+  // lagi. Konsekuensinya angka ini tidak bisa dinaikkan oleh orang yang sedang
+  // dinilai dengan satu tap tanpa bukti — alasan yang sama dipakai saat tombol
+  // "Selesai oleh" dibuang dari panel Butuh Tindakan.
   const berklaim = tanggalKlaimDisetujui(data)
 
   const total = hariDalamBulan(monthKey)
@@ -1092,18 +1049,10 @@ export function aktivitasSosmed(
   const perHari: HariSosmed[] = []
   for (let d = 1; d <= total; d += 1) {
     const tanggal = tanggalKe(monthKey, d)
-    const r = log.get(tanggal)
-    const jumlahAksi = r ? AKSI_SOSMED.filter((a) => r[a]).length : 0
     perHari.push({
       tanggal,
       berjalan: d <= hariBerjalan,
-      // Story/live yang sudah disetujui juga membuat hari itu aktif — kalau
-      // tidak, hari yang story-nya beres terbaca bolong hanya karena tidak ada
-      // posting. Lihat `tanggalKlaimDisetujui`.
-      aktif: jumlahAksi > 0 || berklaim.has(tanggal),
-      jumlahAksi,
-      engagement: !!r?.engagement,
-      olehList: r ? pengerjaSosmed(r) : [],
+      aktif: berklaim.has(tanggal),
     })
   }
 
@@ -1122,12 +1071,11 @@ export function aktivitasSosmed(
     perHari,
     hariBerjalan,
     hariAktif,
-    hariEngagement: dinilai.filter((h) => h.engagement).length,
     konsistensi: hariBerjalan > 0 ? hariAktif / hariBerjalan : 0,
     runTerpanjang,
     runSekarang,
     bolong: dinilai.filter((h) => !h.aktif).map((h) => h.tanggal),
-    belumDicatat: (data.sosmedHarian ?? []).length === 0,
+    belumDicatat: (data.klaimSosmed ?? []).length === 0,
   }
 }
 
@@ -1368,19 +1316,20 @@ export function dampakSosmed(
   for (const [tanggal, nilai] of omzetSemua) {
     if (tanggal.startsWith(monthKey)) omzetPerHari.set(tanggal, nilai)
   }
-  const log = new Map<string, SosmedHarian>()
-  for (const r of data.sosmedHarian ?? []) log.set(r.tanggal, r)
-  const berklaim = tanggalKlaimDisetujui(data)
+  // Jumlah laporan tugas yang disetujui per tanggal — pengganti hitungan aksi
+  // manual yang dulu datang dari `sosmed_harian` (lihat migrasi 0060).
+  const aksiPerTanggal = new Map<string, number>()
+  for (const k of data.klaimSosmed ?? []) {
+    if (k.status !== 'disetujui') continue
+    aksiPerTanggal.set(k.tanggal, (aksiPerTanggal.get(k.tanggal) ?? 0) + 1)
+  }
 
   const totalHari = hariDalamBulan(monthKey)
   const hariBerjalan = hariSeharusnyaBulan(monthKey, hariIni)
   const perHari: HariDampak[] = []
   for (let d = 1; d <= totalHari; d += 1) {
     const tanggal = tanggalKe(monthKey, d)
-    const r = log.get(tanggal)
-    const aksi =
-      (r ? AKSI_SOSMED.filter((a) => r[a]).length : 0) +
-      (berklaim.has(tanggal) ? 1 : 0)
+    const aksi = aksiPerTanggal.get(tanggal) ?? 0
     perHari.push({
       tanggal,
       hari: d,
@@ -1591,97 +1540,18 @@ export function kualitasCampaign(
   }
 }
 
-export type KontribusiKonten = {
-  id: string
-  nama: string
-  jabatan: string
-  foto?: string
-  /** Kartu yang di-PIC-i orang ini dan sudah selesai bulan ini. */
-  selesai: number
-  /** Dari `selesai`, berapa yang lewat deadline. */
-  telat: number
-  /** Kartu aktif yang masih dipegang (belum selesai). */
-  berjalan: number
-  /** Hari sosmed yang dikerjakan orang ini. */
-  hariSosmed: number
-  /** Jumlah kontribusi terhitung — dasar urutan & bonus marketing. */
-  total: number
-}
-
-/**
- * Siapa mengerjakan apa bulan ini — dasar bonus marketing.
- *
- * Sengaja hanya menghitung JUMLAH, bukan rupiah: besaran bonusnya keputusan
- * owner di layar Gaji, sedangkan di sini yang dibutuhkan manajer adalah bukti
- * siapa yang benar-benar mengerjakan.
- */
-export function kontribusiKonten(
-  data: AppData,
-  monthKey: string,
-): KontribusiKonten[] {
-  const byId = new Map<string, KontribusiKonten>()
-  for (const e of data.employees.filter((x) => !isPengelola(x.role))) {
-    byId.set(e.id, {
-      id: e.id,
-      nama: e.nama,
-      jabatan: e.jabatan,
-      foto: e.foto,
-      selesai: 0,
-      telat: 0,
-      berjalan: 0,
-      hariSosmed: 0,
-      total: 0,
-    })
-  }
-
-  const dalamBulan = (p: PromoProgram) =>
-    (p.selesaiPada ?? p.deadline ?? p.tanggalMulai ?? p.createdAt ?? '').startsWith(
-      monthKey,
-    )
-
-  for (const p of data.promoPrograms) {
-    if (!p.pic || !dalamBulan(p)) continue
-    const k = byId.get(p.pic)
-    if (!k) continue
-    if (p.tahap === 'selesai') {
-      k.selesai += 1
-      if (p.deadline && p.selesaiPada && p.selesaiPada > p.deadline) k.telat += 1
-    } else {
-      k.berjalan += 1
-    }
-  }
-
-  // Hari sosmed per orang diambil dari LAPORAN YANG SUDAH DISETUJUI, bukan lagi
-  // dari `sosmed_harian`. Lebih tepat: dulu satu baris per tanggal dengan
-  // `olehList` membuat kontribusi dua orang tidak terpisah, dan baris yang
-  // `oleh_list`-nya tidak terbaca memberi kredit ke satu orang saja.
-  const hariPerOrang = new Map<string, Set<string>>()
-  for (const kl of data.klaimSosmed ?? []) {
-    if (kl.status !== 'disetujui') continue
-    if (!kl.tanggal.startsWith(monthKey)) continue
-    const set = hariPerOrang.get(kl.employeeId) ?? new Set<string>()
-    set.add(kl.tanggal)
-    hariPerOrang.set(kl.employeeId, set)
-  }
-  for (const [orang, hari] of hariPerOrang) {
-    const k = byId.get(orang)
-    if (k) k.hariSosmed = hari.size
-  }
-
-  return [...byId.values()]
-    .map((k) => ({ ...k, total: k.selesai + k.hariSosmed }))
-    .filter((k) => k.total > 0 || k.berjalan > 0)
-    .sort((a, b) => b.total - a.total)
-}
-
 // ---------------------------------------------------------------
-// 6b. Denyut mingguan konten (papan produksi take → edit → tayang)
+// 6b. Tahap produksi konten
 // ---------------------------------------------------------------
+// Sisa dari papan "Denyut Mingguan" yang dipensiunkan bersama panel log sosmed
+// (lihat migrasi 0060 & catatan di HANDOFF). Yang dipertahankan hanya kosakata
+// tahapnya, karena PIC masih mencentang take → edit → tayang di kartunya
+// sendiri di Papan Promosi (migrasi 0061) — itulah klaim "sudah kukerjakan".
+// Papan mingguan, ritme, dan slot-slotnya dibuang: targetnya (N konten/minggu)
+// bertabrakan dengan target bonus (4 konten/bulan), dan dua angka untuk hal
+// yang sama pasti berakhir berbeda.
 
-/**
- * Tahap produksi yang DIPATOK untuk semua kartu konten. Owner hanya mengatur
- * seberapa awal produksinya dimulai, lewat `data.ritmeKonten.siapkan`.
- */
+/** Tahap produksi yang DIPATOK untuk semua kartu konten. */
 export const TAHAP_KONTEN: TahapKonten[] = ['take', 'edit', 'tayang']
 
 export const TAHAP_KONTEN_LABEL: Record<TahapKonten, string> = {
@@ -1692,394 +1562,6 @@ export const TAHAP_KONTEN_LABEL: Record<TahapKonten, string> = {
 
 /** Nama hari, indeks 0 = Senin (bukan Minggu — minggu kerja mulai Senin). */
 export const NAMA_HARI = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min']
-
-/**
- * Ritme bawaan sebelum owner mengaturnya: MINIMAL 2 konten/minggu, produksi
- * dimulai 2 hari sebelum tayang. Dua angka, dan tidak ada nama hari sama
- * sekali — harinya urusan tiap kartu.
- */
-export const RITME_DEFAULT: RitmeKonten = {
-  jumlah: 2,
-  siapkan: 2,
-}
-
-/** Batas atas `siapkan`: rantai tidak boleh lebih panjang dari satu minggu. */
-export const SIAPKAN_MAKS = 6
-
-/**
- * Jarak hari tiap tahap SEBELUM hari tayang.
- *
- * Inilah seluruh kontrak rantai produksi, dan sengaja cuma berisi ANGKA:
- * `siapkan` hari untuk take, lalu editing di H-1. Sebuah kartu yang tayang
- * Sabtu jadi punya take Kamis & edit Jumat; yang tayang Rabu punya take Senin
- * & edit Selasa. Tidak ada hari yang dipatok, jadi konten kedua dan ketiga
- * dalam satu minggu tidak bisa menumpuk di tanggal yang sama.
- *
- * `jumlah` pun dibaca sebagai MINIMUM — konten boleh lebih dari itu, dan kartu
- * yang melebihi kuota tetap digambar & tetap dinilai (lihat `denyutKonten`).
- */
-export function jarakTahap(ritme: RitmeKonten): Record<TahapKonten, number> {
-  const take =
-    ritme.siapkan != null
-      ? Math.min(SIAPKAN_MAKS, Math.max(0, Math.round(ritme.siapkan)))
-      : // LEGACY (0051): ritme lama menyimpan nama hari. Jaraknya dipetik dari
-        // selisih hari take ke hari tayang; jarak negatif (urutan tersimpan
-        // mundur) di-nol-kan, bukan dibalik.
-        Math.min(
-          SIAPKAN_MAKS,
-          Math.max(0, (ritme.hari?.tayang ?? 3) - (ritme.hari?.take ?? 1)),
-        )
-  return {
-    take,
-    // Editing selalu menempel di hari sebelum tayang — itu tahap terakhir yang
-    // masih bisa menyelamatkan jadwal. Kalau take sendiri jatuh di hari-H,
-    // editing ikut ke hari-H; tidak ada gunanya menyediakan dial ketiga.
-    edit: Math.min(1, take),
-    tayang: 0,
-  }
-}
-
-/**
- * Hari tayang bawaan slot ke-`indeks` (0-based) dari `jumlah` slot seminggu,
- * sebagai offset 0..6 dari Senin.
- *
- * Disebar rata: 2 konten/minggu jatuh ke Selasa & Sabtu, 3 ke Selasa/Kamis/
- * Sabtu. Ini cuma tebakan untuk slot yang BELUM punya kartu — begitu kartunya
- * dibuat, hari tayangnya diambil alih `deadline` kartu itu. Disebar (bukan
- * ditumpuk di satu hari bawaan) supaya papan minggu kosong sudah menggambarkan
- * bentuk yang diharapkan, dan supaya tekanannya datang bertahap sepanjang
- * minggu alih-alih sekaligus.
- */
-export function hariBawaanSlot(indeks: number, jumlah: number): number {
-  const n = Math.max(1, jumlah)
-  // `floor`, bukan `round`: pembulatan ke bawah memberi jarak yang lebih merata
-  // untuk jumlah yang tidak habis membagi tujuh (4/minggu → Sen/Rab/Jum/Min,
-  // bukan Sel/Kam/Jum/Min yang dua harinya berdempet).
-  return Math.min(6, Math.max(0, Math.floor(((indeks + 0.5) * 7) / n)))
-}
-
-export type StatusTahap = 'beres' | 'telat' | 'jalan' | 'nanti'
-
-export type TahapSlot = {
-  kunci: TahapKonten
-  label: string
-  /** Tanggal target tahap ini di minggu bersangkutan, `YYYY-MM-DD`. */
-  target: string
-  /** Distempel database saat dicentang; undefined = belum dikerjakan. */
-  selesaiPada?: string
-  oleh?: string
-  status: StatusTahap
-  /** Berapa hari lewat dari target (0 kalau tepat / belum jatuh tempo). */
-  telatHari: number
-}
-
-export type StatusSlot = 'beres' | 'macet' | 'jalan' | 'belum'
-
-export type SlotKonten = {
-  /** Nomor urut slot dalam minggunya, diurut menurut hari tayang. */
-  nomor: number
-  /** Kartu nyata di Papan Promosi; kosong kalau slot ini masih virtual. */
-  id?: string
-  judul: string
-  pic?: string
-  /**
-   * Hari tayang slot ini, `YYYY-MM-DD`. Untuk kartu nyata = `deadline`-nya
-   * sendiri (dipilih saat kartu dibuat); untuk slot virtual = hari tayang
-   * bawaan ritme. Seluruh rantai take → edit dihitung mundur dari sini.
-   */
-  tayang: string
-  /**
-   * true = slot yang lahir dari ritme, BUKAN kartu yang ada. Sengaja tetap
-   * digambar & tetap dinilai: kalau tidak, manajer bisa lolos dengan cara
-   * tidak membuat kartu sama sekali — nol kartu = nol telat.
-   */
-  virtual: boolean
-  /** true = kartu di luar kuota minimum minggu ini (konten ke-3, ke-4, …). */
-  ekstra: boolean
-  tahapan: TahapSlot[]
-  status: StatusSlot
-}
-
-export type MingguKonten = {
-  /** Senin, `YYYY-MM-DD`. */
-  mulai: string
-  selesai: string
-  slot: SlotKonten[]
-  /**
-   * Kamis minggu ini — JANGKAR BULAN, mengikuti aturan ISO-8601 (sebuah minggu
-   * milik bulan tempat hari Kamisnya jatuh). Dipakai supaya minggu yang
-   * menyeberang pergantian bulan selalu jatuh ke satu bulan saja, tanpa perlu
-   * satu pun tanggal dari ritme.
-   */
-  jangkar: string
-  /**
-   * Hari tayang PALING AKHIR di minggu ini. Minggu belum boleh dinilai sebelum
-   * tanggal ini lewat, kalau tidak konten yang memang dijadwalkan Sabtu akan
-   * terhitung "belum beres" sejak Kamis.
-   */
-  batas: string
-  /** Batas sudah lewat → minggu ini boleh dinilai. */
-  jatuhTempo: boolean
-  /** Jangkar bulannya jatuh di bulan yang sedang dilihat. */
-  dalamBulan: boolean
-  /**
-   * Minggu ini benar-benar ikut menghitung KPI: sudah jatuh tempo, jatuh di
-   * bulan yang dilihat, DAN berada di dalam masa berlaku ritme yang disetujui.
-   */
-  dinilai: boolean
-  /** Minggu yang memuat hari ini. */
-  berjalan: boolean
-  beres: number
-}
-
-export type TahapMacet = {
-  mulai: string
-  judul: string
-  tahap: string
-  telatHari: number
-}
-
-export type DenyutKonten = {
-  ritme: RitmeKonten
-  /** true = ritme masih bawaan, owner belum pernah mengaturnya. */
-  belumDiatur: boolean
-  disetujui: boolean
-  perMinggu: MingguKonten[]
-  mingguIni?: MingguKonten
-  /** Sejak Senin minggu keberapa ritme mulai menilai (`undefined` = belum). */
-  berlakuSejak?: string
-  /** Slot yang tepat ritme, dari minggu yang dinilai di bulan ini. */
-  tepat: number
-  dinilai: number
-  /** tepat ÷ dinilai, 0–1. */
-  rasio: number
-  /** Tahap yang tenggatnya lewat & belum dicentang, terbaru di depan. */
-  macet: TahapMacet[]
-}
-
-/**
- * Papan produksi konten mingguan: rantai take → edit → tayang, dinilai per
- * tahap, bukan per satu deadline.
- *
- * Inilah satu-satunya KPI marketing yang bersifat LEADING: `eksekusiKonten()`
- * baru bisa bilang "telat" setelah deadline tayang lewat, sedangkan di sini
- * take yang belum beres Senin sore sudah menyalakan lampu untuk Rabu.
- *
- * Sebuah kartu masuk minggu tertentu lewat `deadline`-nya (= hari tayang),
- * sama seperti cara `eksekusiKonten()` menentukan bulan sebuah kartu. Kartu
- * konten tanpa deadline tidak muncul di papan — tapi ketidakhadirannya tetap
- * terlihat, karena slot yang kurang digambar sebagai slot virtual.
- *
- * TIAP KARTU PUNYA HARI TAYANGNYA SENDIRI. `ritme.jumlah` adalah jumlah
- * MINIMUM per minggu dan `ritme.siapkan` cuma memberi jarak rantainya (lihat
- * `jarakTahap`), jadi konten kedua, ketiga, dan seterusnya tidak menumpuk di
- * hari yang sama seperti konten pertama — take & edit-nya ikut bergeser
- * mengikuti hari tayang masing-masing kartu.
- *
- * Yang tidak bisa dihindari manajer tetap dua hal: jumlah minimum per minggu
- * (kekurangannya digambar sebagai slot virtual) dan hari tayang yang harus
- * tetap berada di dalam minggu itu — kartu yang digeser ke minggu berikutnya
- * pindah minggu, bukan menghapus kewajiban minggu ini.
- *
- * Minggu dinilai berdasarkan bulan tempat hari KAMIS-nya jatuh (aturan
- * ISO-8601), supaya minggu yang menyeberang pergantian bulan tidak terhitung
- * dua kali — dan supaya bulan sebuah minggu tidak ikut berpindah tiap kali
- * kartunya dijadwal ulang.
- *
- * PENTING — penilaian baru berlaku sejak minggu owner MENYETUJUI ritme. Papan
- * tetap menggambar slot & tenggat sebelum itu (supaya bentuknya terlihat lebih
- * dulu), tapi tidak ada satu pun yang masuk KPI maupun antrean "Butuh
- * Tindakan". Tanpa batas ini, menyalakan fitur akan langsung memunculkan
- * puluhan tahap "menunggak" dari minggu-minggu yang belum pernah disepakati.
- */
-export function denyutKonten(
-  data: AppData,
-  monthKey: string,
-  hariIni: string,
-): DenyutKonten {
-  const ritme = data.ritmeKonten ?? RITME_DEFAULT
-  const minimum = Math.max(1, Math.round(ritme.jumlah))
-  const jarak = jarakTahap(ritme)
-
-  /**
-   * Target tiap tahap untuk SATU slot, dihitung mundur dari hari tayangnya.
-   * Di-clamp ke Senin minggu itu: rantai yang mundurnya melewati awal minggu
-   * lebih baik menumpuk di Senin daripada hilang dari papan.
-   */
-  const targetTahap = (mulai: string, tayang: string) =>
-    TAHAP_KONTEN.map((kunci) => {
-      const target = geserHari(tayang, -jarak[kunci])
-      return { kunci, target: target < mulai ? mulai : target }
-    })
-
-  // Kartu konten berdeadline, dikelompokkan ke minggu hari tayangnya.
-  const perMingguKartu = new Map<string, PromoProgram[]>()
-  for (const p of data.promoPrograms) {
-    if ((p.jenis ?? 'campaign') !== 'konten' || !p.deadline) continue
-    const senin = seninMinggu(p.deadline)
-    const list = perMingguKartu.get(senin) ?? []
-    list.push(p)
-    perMingguKartu.set(senin, list)
-  }
-
-  // Minggu yang ditampilkan: semua minggu yang menyentuh bulan terpilih.
-  const seninSet = new Set<string>()
-  const totalHari = hariDalamBulan(monthKey)
-  for (let d = 1; d <= totalHari; d += 1) {
-    seninSet.add(seninMinggu(tanggalKe(monthKey, d)))
-  }
-
-  const seninHariIni = seninMinggu(hariIni)
-  const disetujui = data.ritmeKonten?.disetujui === true
-  // Masa berlaku dimulai dari Senin minggu persetujuan — bukan tanggal
-  // persetujuannya sendiri, supaya minggu berjalan tidak dinilai setengah.
-  const berlakuSejak = disetujui
-    ? seninMinggu((data.ritmeKonten?.disetujuiPada ?? hariIni).slice(0, 10))
-    : undefined
-  const macet: TahapMacet[] = []
-
-  const perMinggu: MingguKonten[] = [...seninSet]
-    .sort((a, b) => a.localeCompare(b))
-    .map((mulai) => {
-      // Diurut menurut hari tayang supaya baris papan terbaca sebagai urutan
-      // waktu, bukan urutan pembuatan kartu.
-      const kartu = (perMingguKartu.get(mulai) ?? []).slice().sort(
-        (a, b) =>
-          (a.deadline ?? '').localeCompare(b.deadline ?? '') ||
-          (a.createdAt ?? '').localeCompare(b.createdAt ?? ''),
-      )
-
-      // Dibangun dulu tanpa nomor: nomornya baru bisa diberikan setelah slot
-      // kartu & slot kosong diurut bersama menurut hari tayang masing-masing.
-      const mentah = Array.from(
-        { length: Math.max(minimum, kartu.length) },
-        (_, i) => {
-          const p = kartu[i]
-          return {
-            p,
-            // Kartu memakai hari tayangnya sendiri; slot yang belum punya
-            // kartu memakai hari bawaan yang disebar rata sepanjang minggu.
-            tayang: p?.deadline ?? geserHari(mulai, hariBawaanSlot(i, minimum)),
-            ekstra: i >= minimum,
-          }
-        },
-      ).sort((a, b) => a.tayang.localeCompare(b.tayang))
-
-      const slot: SlotKonten[] = []
-      for (let i = 0; i < mentah.length; i += 1) {
-        const { p, tayang, ekstra } = mentah[i]
-        const tahapan: TahapSlot[] = targetTahap(mulai, tayang).map(({ kunci, target }) => {
-          const jejak = p?.tahapan?.find((t) => t.kunci === kunci)
-          // ADA entri = tahap ini sudah dicentang. Tanggalnya jatuh ke hari ini
-          // selama stempel server belum kembali, supaya centang yang baru saja
-          // ditekan langsung terlihat beres alih-alih berkedip jadi "telat".
-          const selesaiPada = jejak ? (jejak.selesaiPada ?? hariIni) : undefined
-          let status: StatusTahap
-          let telatHari = 0
-          if (selesaiPada) {
-            status = selesaiPada <= target ? 'beres' : 'telat'
-            telatHari = Math.max(0, selisihHari(selesaiPada, target))
-          } else if (target < hariIni) {
-            status = 'telat'
-            telatHari = selisihHari(hariIni, target)
-          } else {
-            // Hari target itu sendiri belum boleh disebut telat.
-            status = target === hariIni ? 'jalan' : 'nanti'
-          }
-          return {
-            kunci,
-            label: TAHAP_KONTEN_LABEL[kunci],
-            target,
-            selesaiPada,
-            oleh: jejak?.oleh,
-            status,
-            telatHari,
-          }
-        })
-
-        const judul = p?.judul?.trim() || `Konten #${i + 1}`
-        const adaTelat = tahapan.some((t) => t.status === 'telat')
-        slot.push({
-          nomor: i + 1,
-          id: p?.id,
-          judul,
-          pic: p?.pic,
-          tayang,
-          virtual: !p,
-          ekstra,
-          tahapan,
-          status: tahapan.every((t) => t.status === 'beres')
-            ? 'beres'
-            : adaTelat
-              ? 'macet'
-              : tahapan.some((t) => t.status === 'beres')
-                ? 'jalan'
-                : 'belum',
-        })
-
-        for (const t of tahapan) {
-          // Hanya tahap yang BELUM dikerjakan yang masuk antrean tindakan —
-          // tahap yang sudah beres (walau telat) tidak menunggu siapa pun.
-          // Tidak disaring `jatuhTempo`: take yang telat Senin justru harus
-          // muncul sekarang, bukan menunggu hari tayang lewat.
-          if (
-            berlakuSejak !== undefined &&
-            mulai >= berlakuSejak &&
-            t.status === 'telat' &&
-            !t.selesaiPada
-          ) {
-            macet.push({
-              mulai,
-              judul,
-              tahap: t.label,
-              telatHari: t.telatHari,
-            })
-          }
-        }
-      }
-
-      // Batas penilaian ikut slot yang dijadwalkan paling belakang — minggu
-      // tidak boleh "ditutup" selagi masih ada konten yang memang belum
-      // waktunya tayang.
-      const batas = slot.reduce((akhir, s) => (s.tayang > akhir ? s.tayang : akhir), mulai)
-      const jangkar = geserHari(mulai, 3)
-      const jatuhTempo = batas < hariIni
-      const dalamBulan = jangkar.startsWith(monthKey)
-      return {
-        mulai,
-        selesai: geserHari(mulai, 6),
-        slot,
-        jangkar,
-        batas,
-        jatuhTempo,
-        dalamBulan,
-        dinilai:
-          jatuhTempo &&
-          dalamBulan &&
-          berlakuSejak !== undefined &&
-          mulai >= berlakuSejak,
-        berjalan: mulai === seninHariIni,
-        beres: slot.filter((s) => s.status === 'beres').length,
-      }
-    })
-
-  const dinilaiMinggu = perMinggu.filter((m) => m.dinilai)
-  const dinilai = dinilaiMinggu.reduce((s, m) => s + m.slot.length, 0)
-  const tepat = dinilaiMinggu.reduce((s, m) => s + m.beres, 0)
-
-  return {
-    ritme,
-    belumDiatur: !data.ritmeKonten,
-    disetujui,
-    berlakuSejak,
-    perMinggu,
-    mingguIni: perMinggu.find((m) => m.berjalan),
-    tepat,
-    dinilai,
-    rasio: dinilai > 0 ? tepat / dinilai : 0,
-    macet: macet.sort((a, b) => b.telatHari - a.telatHari),
-  }
-}
 
 // ---------------------------------------------------------------
 // 7. Pipeline leads & sales
@@ -2899,9 +2381,6 @@ export const TARGET_TEPAT_JADWAL = 1
  * hal yang KPI ini ada untuk mencegahnya.
  */
 export const TARGET_MASALAH_BERES = 1
-/** Seluruh slot konten mingguan harus tepat ritme — tidak ada toleransi bawaan. */
-export const TARGET_DENYUT = 1
-
 export type StatusKPI =
   | 'tercapai'
   | 'ontrack'
@@ -3017,7 +2496,6 @@ export function skorKPI(
   const siapJadwal = kesiapanJadwal(data, monthKey, hariIni)
   const sosmed = aktivitasSosmed(data, monthKey, hariIni)
   const eksekusi = eksekusiKonten(data, monthKey, hariIni)
-  const denyut = denyutKonten(data, monthKey, hariIni)
   const siapCampaign = kualitasCampaign(data, monthKey, hariIni)
   const pipeline = pipelineLeads(data, monthKey, hariIni)
   /*
@@ -3283,32 +2761,12 @@ export function skorKPI(
           'Papan Promosi (deadline vs tanggal selesai)',
           false,
         ),
-    denyut.dinilai === 0
-      ? belum(
-          'denyut',
-          'sosmed',
-          'Konten mingguan tepat ritme',
-          'Ritme konten mingguan disetujui owner, lalu satu minggu yang hari tayangnya lewat',
-        )
-      : baris(
-          'denyut',
-          'sosmed',
-          'Konten mingguan tepat ritme',
-          denyut.rasio,
-          TARGET_DENYUT,
-          `${denyut.tepat} dari ${denyut.dinilai} slot selesai tiap tahap tepat waktu` +
-            (denyut.macet.length > 0
-              ? ` · ${denyut.macet.length} tahap menunggak`
-              : ''),
-          'Papan Denyut Mingguan (take → edit → tayang)',
-          false,
-        ),
     sosmed.belumDicatat
       ? belum(
           'sosmed',
           'sosmed',
           'Hari sosmed aktif',
-          'Log sosmed harian di Dashboard Manajemen',
+          'Laporan tugas sosmed operator yang sudah disetujui (layar Jadwal Karyawan)',
         )
       : baris(
           'sosmed',
@@ -3316,8 +2774,8 @@ export function skorKPI(
           'Hari sosmed aktif',
           sosmed.hariAktif,
           target.sosmedHari,
-          `${sosmed.hariAktif} dari ${target.sosmedHari} hari · ${sosmed.hariEngagement} hari berinteraksi · rentetan ${sosmed.runSekarang} hari`,
-          'Log sosmed harian (posting, story, repost, engagement)',
+          `${sosmed.hariAktif} dari ${target.sosmedHari} hari · rentetan ${sosmed.runSekarang} hari`,
+          'Laporan story & live yang sudah disetujui (layar Jadwal Karyawan)',
         ),
     baris(
       'ide',

@@ -68,7 +68,10 @@ const DATA: AppData = {
 
 function Preview() {
   const [data, setData] = useState<AppData>(DATA)
-  const { owner, tombol } = useSudutPandang()
+  // Di layar ini sudut pandang non-owner berarti OPERATOR, bukan manajer:
+  // `bisaUbah` mati DAN `currentUserId` jadi Rizky, jadi yang terlihat adalah
+  // hak melapor — bukan hak menyetujui.
+  const { owner, tombol } = useSudutPandang('👤 Operator (Rizky)')
   return (
     <PreviewShell bar={tombol}>
       <Jadwal

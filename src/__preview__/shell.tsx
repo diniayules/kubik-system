@@ -29,16 +29,24 @@ export function PreviewShell({
   )
 }
 
-/** Tombol penukar sudut pandang Owner ↔ Manajer. */
-export function useSudutPandang() {
-  const [owner, setOwner] = useState(true)
+/**
+ * Tombol penukar sudut pandang Owner ↔ Manajer.
+ *
+ * Keadaan awalnya bisa dipaksa lewat querystring (`?operator` / `?manajer`)
+ * supaya tampilan non-owner bisa dibuka langsung dari tautan — layar yang
+ * paling perlu diperiksa justru yang TIDAK dilihat owner.
+ */
+export function useSudutPandang(labelLain = '🛡️ Manajer') {
+  const [owner, setOwner] = useState(
+    () => !/[?&](operator|manajer|karyawan)\b/.test(window.location.search),
+  )
   const tombol = (
     <button
       type="button"
       className="mgr-aksi-btn is-utama"
       onClick={() => setOwner((v) => !v)}
     >
-      Lihat sebagai: {owner ? '👑 Owner' : '🛡️ Manajer'} (klik untuk tukar)
+      Lihat sebagai: {owner ? '👑 Owner' : labelLain} (klik untuk tukar)
     </button>
   )
   return { owner, tombol }

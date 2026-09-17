@@ -3535,34 +3535,37 @@
   border-style: solid; border-color: var(--pink);
   background: var(--pink-bg); color: var(--pink-deep);
 }
-/* Baris konten: hasil dari Papan Promosi, tidak bisa diklik di sini. */
-.jdw-sel.jdw-tugas.is-baca { cursor: default; }
 /* Baris tugas lebih banyak dari baris roster — dirapatkan sedikit supaya dua
-   orang + konten masih muat satu layar tanpa menggulir. */
+   orang × dua tugas masih muat satu layar tanpa menggulir. */
 .jdw-tabel--tugas td { padding: 1px 2px; }
 .jdw-tabel--tugas .jdw-sticky { padding-top: 4px !important; padding-bottom: 4px !important; }
 
-/* --- Rekap live per minggu --- */
-.jdw-minggu {
-  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
-  padding: 11px 16px; border-top: 1.5px solid var(--line);
+/* --- Progres bonus gaji pokok, per orang --- */
+.jdw-progres { padding: 11px 16px; border-top: 1.5px solid var(--line); }
+.jdw-progres-lbl {
+  display: block; margin-bottom: 8px;
+  font-size: 11.5px; font-weight: 700; color: var(--ink-soft);
 }
-.jdw-minggu-lbl { font-size: 11.5px; font-weight: 700; color: var(--ink-soft); }
-.jdw-minggu-lbl b { color: var(--ink); }
-.jdw-minggu-list { display: flex; flex-wrap: wrap; gap: 7px; }
-.jdw-minggu-chip {
+.jdw-progres-orang { display: flex; flex-direction: column; gap: 7px; }
+/* Satu baris per orang: tiga chip sejajar terbaca sebagai satu kalimat
+   ("story aman, konten kurang, live kurang") — yang persis pertanyaan yang
+   dijawab bonus "semua atau tidak sama sekali". */
+.jdw-progres-baris { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.jdw-progres-baris > b { font-size: 12.5px; font-weight: 800; color: var(--ink); margin-right: 3px; }
+.jdw-progres-chip {
   display: inline-flex; align-items: center; gap: 5px;
   padding: 4px 10px; border-radius: var(--radius-pill);
   border: 1.5px solid var(--line); background: var(--surface-2);
   font-size: 11px; font-weight: 700; color: var(--ink-soft); white-space: nowrap;
 }
-.jdw-minggu-chip i { font-style: normal; font-weight: 800; }
-.jdw-minggu-chip.is-cukup { border-color: var(--mint); background: var(--mint-bg); color: var(--mint-deep); }
-.jdw-minggu-chip.is-luput { border-color: var(--pink); background: var(--pink-bg); color: var(--pink-deep); }
-.jdw-minggu-chip.is-rencana { border-color: var(--primary); color: var(--primary); background: transparent; }
-/* Minggu yang sedang berjalan & belum dijadwalkan — satu-satunya yang masih
-   bisa diselamatkan hari ini, jadi ia yang paling menonjol. */
-.jdw-minggu-chip.is-mendesak { border-color: var(--yellow); background: var(--yellow-bg); color: var(--yellow-deep); }
+.jdw-progres-chip i { font-style: normal; font-weight: 800; }
+/* Sudah terpenuhi penuh — tidak ada lagi yang perlu dikerjakan bulan ini. */
+.jdw-progres-chip.is-cukup { border-color: var(--mint); background: var(--mint-bg); color: var(--mint-deep); }
+/* Belum penuh tapi belum tertinggal dari porsi bulan yang sudah jalan —
+   sengaja netral: tanggal 5 dengan 0/4 konten bukan kabar buruk. */
+.jdw-progres-chip.is-jalan { border-color: var(--line); }
+/* Tertinggal dari prorata hari ini — satu-satunya yang masih bisa dikejar. */
+.jdw-progres-chip.is-mendesak { border-color: var(--yellow); background: var(--yellow-bg); color: var(--yellow-deep); }
 
 .jdw-kaki {
   display: flex; align-items: center; justify-content: space-between;

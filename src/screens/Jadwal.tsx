@@ -12,12 +12,15 @@
 // Menyusun jadwal adalah wewenang pengelola (owner & manajer); karyawan hanya
 // membaca. Dikuatkan di server lewat RLS migration 0044.
 //
-// Di bawah roster ada papan TUGAS: story harian & giliran live (target 2x/bulan,
-// bagian dari bonus gaji pokok operator — lihat `bonusSosmed.ts`). Pola yang
-// sama berlaku di sana: sel bergaris = dijadwalkan, sel terisi = live-nya
-// benar-benar terjadi (dibaca dari `sosmed_harian.live`, dicentang pengelola di
-// Dashboard Manajemen). Live hanya bisa dijadwalkan pada orang yang memang
-// punya shift hari itu — yang siaran adalah yang sedang di studio.
+// Di bawah roster ada papan TUGAS: story harian & giliran live. Operator
+// MELAPOR di barisnya sendiri, pengelola MEMERIKSA; hanya yang 'disetujui' yang
+// dihitung. Live cuma bisa dijadwalkan pada orang yang punya shift hari itu —
+// yang siaran adalah yang sedang di studio.
+//
+// Di kakinya ada progres bonus gaji pokok per orang: story, konten, live.
+// Ketiganya dibaca dari `capaianBonus` di `bonusSosmed.ts`, sumber yang sama
+// dengan slip gaji. Konten tidak punya baris tanggal di sini — satuannya kartu
+// Papan Promosi dan yang menentukan bonus adalah jumlahnya per PIC.
 //
 // Selain rencana, grid ini juga menampilkan CUTI yang sudah di-ACC owner. Cuti
 // diajukan karyawan dari laman Presensi (entri manual → status 'menunggu') dan
@@ -39,7 +42,8 @@ import type {
 import { SHIFT_IKON, SHIFT_LABEL } from '../attendance'
 import { todayKey } from '../storage'
 import { cakupanShift, hariDalamBulan } from '../manajemen'
-import { TARGET_LIVE_SEBULAN } from '../bonusSosmed'
+import { capaianBonus } from '../bonusSosmed'
+import type { KunciSyarat } from '../bonusSosmed'
 import { isPengelola } from '../lib/roles'
 import { Avatar, colorIndexForName } from '../components/Avatar'
 
@@ -87,13 +91,27 @@ function tglPendek(tanggal: string): string {
   })
 }
 
-/** Inisial maksimal 2 huruf, untuk sel Live yang sempit. */
-function inisial(nama: string): string {
-  return nama
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((w) => w[0]?.toUpperCase() ?? '')
-    .join('')
+/**
+ * Nama pendek syarat untuk chip. Sengaja BUKAN `syarat.label` dari
+ * `bonusSosmed.ts`: label di sana menuliskan targetnya ("min. 4/bulan"), dan
+ * di chip angka itu sudah berdiri sendiri sebagai "1/4".
+ */
+const LABEL_SYARAT: Record<KunciSyarat, string> = {
+  story: 'Story',
+  konten: 'Konten',
+  live: 'Live',
+}
+
+/** Tooltip chip — label penuh, plus tanggal live yang sudah di-ACC. */
+function judulSyarat(
+  kunci: KunciSyarat,
+  label: string,
+  tanggalLive: string[],
+): string {
+  if (kunci !== 'live') return label
+  return tanggalLive.length === 0
+    ? `${label} — belum ada live yang disetujui bulan ini`
+    : `${label} — disetujui: ${tanggalLive.map(tglPendek).join(' · ')}`
 }
 
 function labelBulan(monthKey: string): string {
@@ -290,40 +308,32 @@ export function Jadwal({ data, setData, bisaUbah, currentUserId }: Props) {
   )
 
   /**
-   * Konten yang tayang per tanggal — BACA SAJA di layar ini.
+   * Progres ketiga syarat bonus gaji pokok, per orang, bulan ini.
    *
-   * Satuan konten adalah kartu Papan Promosi, bukan tanggal, jadi papan ini
-   * tidak boleh jadi jalur tulis kedua: centangnya ada di kartunya sendiri.
-   * Yang ditampilkan di sini cuma hasilnya, supaya satu layar bisa menjawab
-   * "bulan ini targetku sudah sampai mana".
-   *   kartu tahap 'selesai'            → sudah di-ACC pengelola (dihitung bonus)
-   *   centang tahap 'tayang' oleh PIC  → klaim, belum ditutup pengelola
+   * Sengaja memanggil `capaianBonus` — sumber yang sama persis dengan yang
+   * dipakai menghitung slip gaji — bukan menghitung ulang di sini. Angka yang
+   * dilihat operator di layar ini harus angka yang membayarnya; dua rumus
+   * untuk satu janji adalah cara paling mudah kehilangan kepercayaannya.
+   *
+   * Konten TIDAK lagi ditampilkan per tanggal. Satuannya kartu Papan Promosi
+   * dan yang menentukan bonus adalah JUMLAH kartu milik PIC-nya, bukan kapan
+   * tayangnya; baris tanggal yang dulu ada di sini bahkan menyembunyikan kartu
+   * kedua yang selesai di hari yang sama. Tanggalnya tetap hidup di kartunya
+   * sendiri di Papan Promosi — satu-satunya tempat ia bisa diubah.
    */
-  const kontenPerTanggal = useMemo(() => {
-    const m = new Map<string, { pic?: string; disetujui: boolean }>()
-    for (const p of data.promoPrograms) {
-      if (p.jenis !== 'konten') continue
-      if (p.tahap === 'selesai' && p.selesaiPada?.startsWith(monthKey)) {
-        m.set(p.selesaiPada, { pic: p.pic, disetujui: true })
-        continue
-      }
-      const tayang = p.tahapan?.find((t) => t.kunci === 'tayang')
-      if (tayang?.selesaiPada?.startsWith(monthKey) && !m.has(tayang.selesaiPada)) {
-        m.set(tayang.selesaiPada, { pic: p.pic, disetujui: false })
-      }
-    }
-    return m
-  }, [data.promoPrograms, monthKey])
-
-  /**
-   * Capaian live tiap orang bulan ini. Targetnya BULANAN (2×), bukan mingguan:
-   * owner menyebutnya "dua minggu sekali", tapi yang ditagih angka sebulan —
-   * jaraknya tidak dipaksa. Lihat `TARGET_LIVE_SEBULAN` di `bonusSosmed.ts`.
-   */
-  const livePerOrang = useMemo(
+  const progresBonus = useMemo(
     () =>
-      staf.map((e) => {
-        const tanggal = (data.klaimSosmed ?? [])
+      staf.map((e) => ({
+        emp: e,
+        syarat: capaianBonus(
+          e,
+          data.gajiPokok[e.id] ?? 0,
+          data,
+          monthKey,
+          hariIni,
+        ).syarat,
+        /** Tanggal live yang sudah di-ACC — untuk tooltip chip Live. */
+        tanggalLive: (data.klaimSosmed ?? [])
           .filter(
             (k) =>
               k.employeeId === e.id &&
@@ -332,10 +342,9 @@ export function Jadwal({ data, setData, bisaUbah, currentUserId }: Props) {
               k.tanggal.startsWith(monthKey),
           )
           .map((k) => k.tanggal)
-          .sort()
-        return { emp: e, tanggal, cukup: tanggal.length >= TARGET_LIVE_SEBULAN }
-      }),
-    [staf, data.klaimSosmed, monthKey],
+          .sort(),
+      })),
+    [staf, data, monthKey, hariIni],
   )
 
 
@@ -541,7 +550,7 @@ export function Jadwal({ data, setData, bisaUbah, currentUserId }: Props) {
                 <p>
                   Operator mencentang kalau sudah mengerjakan; pengelola yang
                   memeriksa. Hanya yang <b>disetujui</b> yang dihitung untuk
-                  bonus gaji pokok.
+                  bonus gaji pokok — progresnya ada di kaki panel ini.
                 </p>
               </div>
               {antreanKlaim > 0 && (
@@ -659,75 +668,47 @@ export function Jadwal({ data, setData, bisaUbah, currentUserId }: Props) {
                     </tr>
                   )),
                 )}
-
-                {/* Konten tayang — BACA SAJA. Centangnya ada di kartu Papan
-                    Promosi; menaruh jalur tulis kedua di sini akan melahirkan
-                    dua tanggal "konten selesai" yang bisa berbeda. */}
-                <tr className="jdw-tugas-row is-awal jdw-konten-row">
-                  <th className="jdw-sticky">
-                    <span className="jdw-orang jdw-orang-tugas">
-                      <i className="jdw-tugas-ikon" aria-hidden="true">
-                        🎬
-                      </i>
-                      <span>
-                        <b>Konten tayang</b>
-                        <em>dari Papan Promosi</em>
-                      </span>
-                    </span>
-                  </th>
-                  {tanggalList.map((t) => {
-                    const k = kontenPerTanggal.get(t.tanggal)
-                    const pic = k?.pic ? staf.find((e) => e.id === k.pic) : undefined
-                    return (
-                      <td key={t.tanggal} className={t.akhirPekan ? 'is-pekan' : ''}>
-                        <span
-                          className={
-                            'jdw-sel jdw-tugas is-baca' +
-                            (k ? (k.disetujui ? ' is-acc' : ' is-tunggu') : '')
-                          }
-                          title={
-                            !k
-                              ? 'Tidak ada konten tayang di tanggal ini'
-                              : k.disetujui
-                                ? `Kartu sudah ditutup pengelola${pic ? ` — ${pic.nama}` : ''} (dihitung untuk target konten)`
-                                : `Dicentang tayang oleh PIC${pic ? ` — ${pic.nama}` : ''}, kartunya belum ditutup pengelola`
-                          }
-                        >
-                          {k ? (pic ? inisial(pic.nama) : '•') : ''}
-                        </span>
-                      </td>
-                    )
-                  })}
-                </tr>
                 </tbody>
               </table>
             </div>
 
-        {/* Rekap live bulanan per orang — supaya kekurangannya terlihat
-            sebelum bulan habis, bukan ketahuan saat slip gaji terbit. */}
-        {livePerOrang.length > 0 && (
-          <div className="jdw-minggu">
-            <span className="jdw-minggu-lbl">
-              Live bulan ini · min. {TARGET_LIVE_SEBULAN}× per orang
-            </span>
-            <div className="jdw-minggu-list">
-              {livePerOrang.map(({ emp, tanggal, cukup }) => (
-                <span
-                  key={emp.id}
-                  className={`jdw-minggu-chip ${cukup ? 'is-cukup' : 'is-mendesak'}`}
-                  title={
-                    tanggal.length === 0
-                      ? 'Belum ada live yang disetujui bulan ini'
-                      : `Live disetujui: ${tanggal.map(tglPendek).join(' · ')}`
-                  }
-                >
-                  <i>{cukup ? '✓' : '!'}</i>
-                  {emp.nama} {tanggal.length}/{TARGET_LIVE_SEBULAN}
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
+            {/* Progres bonus gaji pokok — ketiga syaratnya di satu tempat,
+                supaya kekurangannya terlihat sebelum bulan habis, bukan ketahuan
+                saat slip gaji terbit. Dulu di sini cuma live; konten dibaca dari
+                baris tanggal di dalam tabel dan story tidak muncul sama sekali,
+                jadi tidak ada satu pun layar yang bisa menjawab "bulan ini aku
+                sudah aman atau belum". */}
+            {progresBonus.length > 0 && (
+              <div className="jdw-progres">
+                <span className="jdw-progres-lbl">Progres bonus bulan ini</span>
+                <div className="jdw-progres-orang">
+                  {progresBonus.map(({ emp, syarat, tanggalLive }) => (
+                    <div key={emp.id} className="jdw-progres-baris">
+                      <Avatar
+                        name={emp.nama}
+                        foto={emp.foto}
+                        colorIndex={colorIndexForName(emp.nama)}
+                        size="sm"
+                      />
+                      <b>{emp.nama}</b>
+                      {syarat.map((s) => (
+                        <span
+                          key={s.kunci}
+                          className={
+                            'jdw-progres-chip ' +
+                            (s.lulus ? 'is-cukup' : s.onTrack ? 'is-jalan' : 'is-mendesak')
+                          }
+                          title={judulSyarat(s.kunci, s.label, tanggalLive)}
+                        >
+                          <i>{s.lulus ? '✓' : s.onTrack ? '·' : '!'}</i>
+                          {LABEL_SYARAT[s.kunci]} {s.capai}/{s.target}
+                        </span>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="jdw-kaki">
               <div className="jdw-legend">

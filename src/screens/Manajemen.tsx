@@ -9,6 +9,8 @@ import type {
   TargetBulanan,
 } from '../types'
 import { todayKey, uid } from '../storage'
+import { capaianBonus } from '../bonusSosmed'
+import { isPengelola } from '../lib/roles'
 import { formatDurasi, formatJam } from '../attendance'
 import { formatRupiah } from '../income'
 import { hitungRekonsiliasiKas } from '../kas'
@@ -156,6 +158,13 @@ function formatPace(pace: number): string {
  * bersama panel owner-only lainnya.
  */
 type TabMgr = TugasManajer
+
+/** Label pendek tiap syarat, untuk pil sempit di panel ringkasan. */
+const TUGAS_PENDEK: Record<'story' | 'konten' | 'live', string> = {
+  story: 'Story',
+  konten: 'Konten',
+  live: 'Live',
+}
 
 const TAB_MGR: { id: TabMgr; label: string; sub: string }[] = [
   { id: 'operasional', label: 'Operasional', sub: 'SOP · stok · kendala teknis' },
@@ -343,6 +352,35 @@ export function Manajemen({
   }
 
   const [editTarget, setEditTarget] = useState(false)
+
+  /**
+   * Ringkasan tugas sosmed tiap operator bulan ini — supaya manajer & owner
+   * bisa memantau tanpa membuka layar Jadwal satu per satu.
+   *
+   * `capaianBonus` dipanggil dengan gaji pokok **0** dengan sengaja: yang
+   * dipakai di sini hanya `syarat` (angka capaian), dan manajer TIDAK boleh
+   * melihat gaji (lihat lib/roles.ts). Mengoper 0 membuat tidak ada nominal
+   * rupiah yang pernah ikut terhitung di layar ini.
+   */
+  const tugasSosmed = useMemo(
+    () =>
+      data.employees
+        .filter((e) => !isPengelola(e.role))
+        .map((e) => ({
+          emp: e,
+          syarat: capaianBonus(e, 0, data, monthKey, hariIni).syarat,
+        })),
+    [data, monthKey, hariIni],
+  )
+
+  /** Laporan yang masih menunggu diperiksa bulan ini — antrean pengelola. */
+  const klaimMenunggu = useMemo(
+    () =>
+      (data.klaimSosmed ?? []).filter(
+        (k) => k.status === 'menunggu' && k.tanggal.startsWith(monthKey),
+      ).length,
+    [data.klaimSosmed, monthKey],
+  )
 
   const namaById = useMemo(
     () => new Map(data.employees.map((e) => [e.id, e.nama])),
@@ -1248,18 +1286,69 @@ export function Manajemen({
       )}
 
       {tab === 'sosmed' && (
-        <div className="mgr-cols">
-          <div className="mgr-col">
-            {/* Pencatatan story, live, & konten TIDAK ada di layar ini lagi —
-                dipindahkan ke tempat orang yang mengerjakannya berada. Petunjuk
-                ini sengaja ditinggalkan supaya tidak ada yang mencarinya di sini
-                lalu menyangka fiturnya hilang. */}
-            <p className="mgr-hint">
-              <b>Story &amp; Live</b> dilaporkan operator di <b>Jadwal Karyawan</b>,
-              dan kamu yang menyetujuinya di sana. <b>Konten</b> dicentang PIC-nya
-              di <b>Papan Promosi</b>, lalu kamu yang menutup kartunya. Angka di
-              bawah dihitung dari laporan yang sudah disetujui saja.
-            </p>
+        <div className="mgr-col">
+            <Panel
+              judul="Tugas Sosial Media"
+              sub="Laporan operator yang SUDAH disetujui — dasar bonus gaji pokok mereka"
+              badge={klaimMenunggu > 0 ? `${klaimMenunggu} menunggu` : undefined}
+              aksi={
+                <button
+                  type="button"
+                  className={
+                    'mgr-aksi-btn' + (klaimMenunggu > 0 ? ' is-utama' : '')
+                  }
+                  onClick={onLihatJadwal}
+                >
+                  {klaimMenunggu > 0 ? 'Periksa laporan' : 'Buka papan tugas'}
+                </button>
+              }
+            >
+              {tugasSosmed.length === 0 ? (
+                <p className="mgr-empty">Belum ada operator aktif.</p>
+              ) : (
+                <div className="mgr-tugas-list">
+                  {tugasSosmed.map(({ emp, syarat }) => (
+                    <div key={emp.id} className="mgr-tugas-baris">
+                      <span className="mgr-tugas-nama">{emp.nama}</span>
+                      <div className="mgr-tugas-pils">
+                        {syarat.map((sy) => (
+                          <span
+                            key={sy.kunci}
+                            className={
+                              'mgr-tugas-pil' +
+                              // Target 0 = belum ada yang ditagih (mis. belum
+                              // ada hari kerja tercatat). Bukan prestasi, jadi
+                              // jangan digambar hijau.
+                              (sy.target > 0 && sy.onTrack ? ' is-ok' : '')
+                            }
+                            title={sy.label}
+                          >
+                            {TUGAS_PENDEK[sy.kunci]}{' '}
+                            {sy.target === 0 ? (
+                              '—'
+                            ) : (
+                              <>
+                                <b>{sy.capai}</b>/{sy.target}
+                              </>
+                            )}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {/* Panel ini BACA SAJA. Menyetujui dilakukan di layar Jadwal,
+                  tempat konteksnya lengkap: hari itu siapa yang shift, dan
+                  hari mana saja yang sudah bolong. */}
+              <p className="mgr-hint">
+                Angka di atas hanya menghitung yang sudah disetujui.{' '}
+                <b>Story</b> &amp; <b>Live</b> dilaporkan operator di{' '}
+                <b>Jadwal Karyawan</b> dan disetujui di sana; <b>Konten</b>{' '}
+                dicentang PIC-nya di <b>Papan Promosi</b>, lalu kartunya ditutup
+                pengelola.
+              </p>
+            </Panel>
 
             <Panel
               judul="Dampak Sosmed ke Penjualan"
@@ -1320,7 +1409,6 @@ export function Manajemen({
                 )}
               </p>
             </Panel>
-          </div>
         </div>
       )}
 

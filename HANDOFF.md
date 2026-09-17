@@ -371,7 +371,7 @@ syarat yang paling mudah saja.
 |---|---|---|
 | Story konten tiap hari kerja | `klaim_sosmed` jenis `story`, status `disetujui` (**0060**) | jumlah hari `emp` benar-benar masuk kerja di bulan itu |
 | Konten min. 4/bulan | `promo_programs` `jenis='konten'`, `pic=emp`, `tahap='selesai'`, `selesai_pada` di bulan itu | 4 |
-| Live min. 1×/minggu | `klaim_sosmed` jenis `live`, status `disetujui` (**0060**) | jumlah minggu penuh bulan itu |
+| Live min. 2×/bulan | `klaim_sosmed` jenis `live`, status `disetujui` (**0060**) | 2 per orang (`TARGET_LIVE_SEBULAN`) |
 
 > ⚠️ **Sumber story & live PINDAH di migrasi 0060.** Versi pertama membacanya
 > dari `sosmed_harian.story`/`.live` dengan atribusi lewat `oleh_list`. Itu
@@ -380,7 +380,7 @@ syarat yang paling mudah saja.
 > `klaim_sosmed` oleh backfill 0060.
 
 Semua logikanya murni di **`src/bonusSosmed.ts`** (`capaianBonus`,
-`gajiPokokBerlaku`, `mingguDinilai`) — `gaji.ts` **tidak berubah sama sekali**.
+`gajiPokokBerlaku`) — `gaji.ts` **tidak berubah sama sekali**.
 Bonus bekerja dengan menaikkan **tarif gaji pokok** yang dioper ke
 `hitungSlipGaji`, bukan dengan menambah baris bonus baru: yang dijanjikan
 memang "gaji pokoknya naik", dan gaji pokok di sini diakru per hari hadir.
@@ -397,10 +397,12 @@ Keputusan yang jangan diubah tanpa memikirkan ulang alasannya:
   memakai tarif dasar dan hanya menampilkan progres + proyeksi. Kalau kenaikan
   dipakai real-time, nominal gaji yang sudah dilihat operator bisa TURUN lagi
   besoknya begitu satu hari bolong — angka gaji tidak boleh bergerak mundur.
-- **Minggu yang dinilai = minggu yang ≥4 harinya jatuh di bulan itu**
-  (`MIN_HARI_MINGGU_DINILAI`). Efeknya: setiap minggu kalender dimiliki **tepat
-  satu** bulan, jadi setahun = 52 live, persis "1× seminggu". September 2026
-  dapat 4 minggu, Oktober 2026 dapat 5 — itu benar, bukan bug.
+- **Live ditagih PER BULAN (2×), bukan per minggu.** Owner menyebutnya "dua
+  minggu sekali", tapi yang dihitung angka sebulan — jarak antar-siaran sengaja
+  TIDAK dipaksa. Menghanguskan Rp 200.000 karena dua live kebetulan jatuh di
+  minggu yang sama jauh lebih keras daripada yang dijanjikan ke operator.
+  Dengan 2 operator, studio menghasilkan 4 live sebulan. Aturan minggu lama
+  (`mingguDinilai`, `MIN_HARI_MINGGU_DINILAI`) sudah dihapus.
 - **Atribusi** tidak lagi ditebak dari `olehList`: sejak 0060 tiap laporan
   memang milik satu orang (`klaim_sosmed.employee_id`). Aturan lama
   "`olehList` kosong = diakui untuk siapa pun" sudah dihapus bersama masalah
@@ -499,10 +501,8 @@ dengan jadwal yang masih akan datang, dan gunanya papan ini hilang.
 
 **Rekap per minggu di bawah tabel adalah inti panelnya**: lubang minggu ini
 harus terlihat hari SENIN, bukan ketahuan saat bulan sudah tutup. Definisi
-minggunya dipinjam dari `mingguDinilai()` di `bonusSosmed.ts` supaya papan ini
-dan hitungan gajinya tidak pernah memotong minggu di tempat berbeda —
-konsekuensinya tanggal di ujung bulan bisa masuk minggu milik bulan sebelah,
-dan selnya menyebut itu di `title`.
+rekapnya sekarang BULANAN (`min. 2× per orang`), sejalan dengan
+`TARGET_LIVE_SEBULAN`.
 
 **Rencana TIDAK ikut menghitung bonus.** `bonusSosmed.ts` hanya membaca
 realisasi. Menjadwalkan live bukan bukti live.
@@ -636,13 +636,28 @@ di-drop.** Datanya utuh di database dan aplikasi cuma berhenti membacanya — 12
 baris lama sudah dipindahkan ke `klaim_sosmed` oleh backfill 0060. Tidak ada
 migrasi baru untuk perubahan ini.
 
-### Yang masih perlu diputuskan
+### Ringkasan tugas di Dashboard Manajemen
 
-**Target live dihitung PER ORANG** (tiap operator butuh 1 live/minggu), sama
-seperti story. Dengan 2 operator berarti 2 live seminggu untuk studio. Kalau
-yang dimaksud owner adalah 1 live seminggu untuk STUDIO (siapa pun yang
-mengerjakan), `capaianBonus()` di `bonusSosmed.ts` yang perlu diubah — bukan
-papannya.
+Panel **"Tugas Sosial Media"** di tab Social Media: satu baris per operator
+dengan pil `Story n/m · Konten n/4 · Live n/2`, lencana jumlah laporan yang
+menunggu, dan tombol yang membuka layar Jadwal. **Baca saja** — menyetujui
+tetap dilakukan di Jadwal, tempat konteksnya lengkap (hari itu siapa yang
+shift, hari mana yang bolong).
+
+⚠️ Panel ini memanggil `capaianBonus()` dengan gaji pokok **0** dengan sengaja:
+yang dipakai hanya `syarat` (angka capaian), dan **manajer tidak boleh melihat
+gaji** (lihat `lib/roles.ts`). Mengoper 0 memastikan tidak ada nominal rupiah
+yang pernah ikut terhitung di layar ini. Jangan diganti jadi gaji sebenarnya.
+
+Pil dengan `target === 0` (mis. belum ada hari kerja tercatat) digambar `—` dan
+tidak pernah hijau: belum ada yang ditagih bukan prestasi.
+
+### Posting, repost, & engagement: di checklist operator
+
+Ketiganya BUKAN bagian papan tugas ini — mereka SOP harian operator, tempatnya
+`app_config.opening_checklist` / `closing_checklist` (diatur di Pengaturan), dan
+tugas manajer memastikannya dijalankan lewat KPI kepatuhan checklist yang sudah
+ada. Jangan menghidupkan lagi centang sosmed harian di dashboard untuk ini.
 
 **Belum diuji di browser dengan akun operator sungguhan.** Yang sudah: `tsc -b`
 & `vite build` bersih, dan papannya dilihat lewat `jadwal-preview.html` dalam

@@ -11,7 +11,8 @@
 //
 //   1. STORY  — minimal 1 story konten pada setiap hari ia masuk kerja.
 //   2. KONTEN — minimal 4 kartu konten selesai dalam sebulan.
-//   3. LIVE   — minimal 1 siaran langsung pada setiap minggu penuh bulan itu.
+//   3. LIVE   — minimal 2 siaran langsung sebulan (“sekali tiap dua minggu”).
+//              Studio dengan 2 operator berarti 4 live sebulan.
 //
 // KENAPA PENYEBUTNYA "HARI MASUK KERJA", BUKAN 30 HARI:
 //   Studio cuma punya satu akun; yang bertanggung jawab atas story hari ini
@@ -38,21 +39,20 @@
 //     sengaja tidak pernah dibaca di sini.
 // =============================================================
 import type { AbsenHari, AppData, Employee, KlaimJenis, PromoProgram } from './types'
-import { geserHari, seninMinggu } from './manajemen'
 
 /** Gaji pokok sebulan setelah ketiga target terpenuhi. */
 export const GAJI_POKOK_LULUS = 1_000_000
 /** Minimal kartu konten selesai dalam sebulan. */
 export const TARGET_KONTEN_SEBULAN = 4
-/** Minimal siaran langsung per minggu penuh. */
-export const TARGET_LIVE_SEMINGGU = 1
 /**
- * Berapa hari sebuah minggu harus jatuh di dalam bulan ini supaya minggunya
- * ikut dinilai. Minggu yang cuma menyerempet 1–3 hari di ujung bulan adalah
- * milik bulan sebelah — kalau ikut ditagih, bulan berisi 5 pecahan minggu
- * menuntut 5 live untuk janji yang berbunyi "1x seminggu".
+ * Minimal siaran langsung per orang, per BULAN.
+ *
+ * Owner menyebutnya "2 minggu sekali", tapi yang ditagih adalah angka bulanan —
+ * bukan jarak antar-siaran. Jaraknya sengaja TIDAK dipaksa: menghanguskan
+ * Rp 200.000 karena dua live kebetulan jatuh di minggu yang sama jauh lebih
+ * keras daripada yang dijanjikan ke operator.
  */
-export const MIN_HARI_MINGGU_DINILAI = 4
+export const TARGET_LIVE_SEBULAN = 2
 
 /** Shift yang bukan hari kerja berbayar — disamakan dengan `gaji.ts`. */
 const SHIFT_BUKAN_KERJA = new Set(['pantau', 'cuti', 'libur', 'bersih'])
@@ -159,18 +159,6 @@ function tanggalDisetujui(
   return hasil
 }
 
-/** Minggu (Senin `YYYY-MM-DD`) yang dinilai untuk target live bulan ini. */
-export function mingguDinilai(monthKey: string): string[] {
-  const jumlah = new Map<string, number>()
-  for (const tgl of tanggalBulan(monthKey)) {
-    const senin = seninMinggu(tgl)
-    jumlah.set(senin, (jumlah.get(senin) ?? 0) + 1)
-  }
-  return [...jumlah.entries()]
-    .filter(([, n]) => n >= MIN_HARI_MINGGU_DINILAI)
-    .map(([senin]) => senin)
-    .sort()
-}
 
 /**
  * Hitung capaian bonus satu operator untuk satu bulan.
@@ -208,15 +196,8 @@ export function capaianBonus(
     p.selesaiPada.startsWith(monthKey)
   const kontenCapai = data.promoPrograms.filter(selesaiBulanIni).length
 
-  // --- 3. Live: tiap minggu penuh harus punya minimal satu siaran ---
-  const minggu = mingguDinilai(monthKey)
-  const mingguLive = new Set(
-    [...tanggalDisetujui(data, emp.id, 'live', monthKey)].map(seninMinggu),
-  )
-  const liveCapai = minggu.filter((senin) => mingguLive.has(senin)).length
-  // Minggu dianggap "sudah lewat" begitu Minggu-nya terlampaui; minggu yang
-  // masih berjalan belum boleh dihitung tertinggal.
-  const mingguLewat = minggu.filter((senin) => geserHari(senin, 6) < hariIni).length
+  // --- 3. Live: minimal 2 siaran sebulan ---
+  const liveCapai = tanggalDisetujui(data, emp.id, 'live', monthKey).size
 
   // Porsi bulan yang sudah dijalani — dipakai memprorata target konten supaya
   // tanggal 5 tidak selalu terbaca "tertinggal".
@@ -224,10 +205,10 @@ export function capaianBonus(
   const hariLewat = bulanTutup
     ? semuaTanggal.length
     : semuaTanggal.filter((t) => t <= hariIni).length
-  const kontenTargetKini = Math.min(
-    TARGET_KONTEN_SEBULAN,
-    Math.floor((TARGET_KONTEN_SEBULAN * hariLewat) / semuaTanggal.length),
-  )
+  const prorata = (target: number) =>
+    Math.min(target, Math.floor((target * hariLewat) / semuaTanggal.length))
+  const kontenTargetKini = prorata(TARGET_KONTEN_SEBULAN)
+  const liveTargetKini = prorata(TARGET_LIVE_SEBULAN)
 
   const syarat: SyaratBonus[] = [
     {
@@ -252,13 +233,13 @@ export function capaianBonus(
     },
     {
       kunci: 'live',
-      label: `Live · min. ${TARGET_LIVE_SEMINGGU}x/minggu`,
+      label: `Live · min. ${TARGET_LIVE_SEBULAN}×/bulan`,
       capai: liveCapai,
-      target: minggu.length * TARGET_LIVE_SEMINGGU,
-      targetKini: mingguLewat * TARGET_LIVE_SEMINGGU,
-      lulus: liveCapai >= minggu.length * TARGET_LIVE_SEMINGGU,
-      onTrack: liveCapai >= mingguLewat * TARGET_LIVE_SEMINGGU,
-      satuan: 'minggu',
+      target: TARGET_LIVE_SEBULAN,
+      targetKini: liveTargetKini,
+      lulus: liveCapai >= TARGET_LIVE_SEBULAN,
+      onTrack: liveCapai >= liveTargetKini,
+      satuan: 'live',
     },
   ]
 

@@ -12,7 +12,7 @@
 // Menyusun jadwal adalah wewenang pengelola (owner & manajer); karyawan hanya
 // membaca. Dikuatkan di server lewat RLS migration 0044.
 //
-// Di bawah roster ada baris LIVE: giliran siaran langsung (target 1x seminggu,
+// Di bawah roster ada papan TUGAS: story harian & giliran live (target 2x/bulan,
 // bagian dari bonus gaji pokok operator — lihat `bonusSosmed.ts`). Pola yang
 // sama berlaku di sana: sel bergaris = dijadwalkan, sel terisi = live-nya
 // benar-benar terjadi (dibaca dari `sosmed_harian.live`, dicentang pengelola di
@@ -38,8 +38,8 @@ import type {
 } from '../types'
 import { SHIFT_IKON, SHIFT_LABEL } from '../attendance'
 import { todayKey } from '../storage'
-import { cakupanShift, geserHari, hariDalamBulan, seninMinggu } from '../manajemen'
-import { TARGET_LIVE_SEMINGGU, mingguDinilai } from '../bonusSosmed'
+import { cakupanShift, hariDalamBulan } from '../manajemen'
+import { TARGET_LIVE_SEBULAN } from '../bonusSosmed'
 import { isPengelola } from '../lib/roles'
 import { Avatar, colorIndexForName } from '../components/Avatar'
 
@@ -316,49 +316,28 @@ export function Jadwal({ data, setData, bisaUbah, currentUserId }: Props) {
   }, [data.promoPrograms, monthKey])
 
   /**
-   * Status live tiap minggu, PER ORANG. Inilah alasan panel ini ada: pada hari
-   * Senin, minggu yang masih kosong harus terlihat SEBELUM minggunya habis —
-   * bukan ketahuan saat bulan sudah tutup.
-   *
-   * Definisi minggunya dipinjam dari `bonusSosmed.ts` supaya papan ini dan
-   * hitungan gajinya tidak pernah memotong minggu di tempat berbeda.
+   * Capaian live tiap orang bulan ini. Targetnya BULANAN (2×), bukan mingguan:
+   * owner menyebutnya "dua minggu sekali", tapi yang ditagih angka sebulan —
+   * jaraknya tidak dipaksa. Lihat `TARGET_LIVE_SEBULAN` di `bonusSosmed.ts`.
    */
-  const mingguPerOrang = useMemo(() => {
-    const semua = mingguDinilai(monthKey)
-    return staf.map((e) => ({
-      emp: e,
-      minggu: semua.map((senin) => {
-        const akhir = geserHari(senin, 6)
-        const dalam = (t: string) => t >= senin && t <= akhir
-        const jadi = (data.klaimSosmed ?? []).filter(
-          (k) =>
-            k.employeeId === e.id &&
-            k.jenis === 'live' &&
-            k.status === 'disetujui' &&
-            dalam(k.tanggal),
-        ).length
-        const rencana = (data.jadwalShift ?? []).some(
-          (j) => j.live && j.employeeId === e.id && dalam(j.tanggal),
-        )
-        return {
-          senin,
-          akhir,
-          rencana,
-          cukup: jadi >= TARGET_LIVE_SEMINGGU,
-          lewat: akhir < hariIni,
-          berjalan: senin <= hariIni && hariIni <= akhir,
-        }
+  const livePerOrang = useMemo(
+    () =>
+      staf.map((e) => {
+        const tanggal = (data.klaimSosmed ?? [])
+          .filter(
+            (k) =>
+              k.employeeId === e.id &&
+              k.jenis === 'live' &&
+              k.status === 'disetujui' &&
+              k.tanggal.startsWith(monthKey),
+          )
+          .map((k) => k.tanggal)
+          .sort()
+        return { emp: e, tanggal, cukup: tanggal.length >= TARGET_LIVE_SEBULAN }
       }),
-    }))
-  }, [monthKey, staf, data.klaimSosmed, data.jadwalShift, hariIni])
+    [staf, data.klaimSosmed, monthKey],
+  )
 
-  /**
-   * Senin dari minggu-minggu yang dinilai bulan ini. Tanggal di ujung bulan
-   * bisa jatuh di minggu milik bulan sebelah (lihat `mingguDinilai`) — live di
-   * sana sah, cuma dihitungnya di periode lain, dan itu harus terbaca dari
-   * selnya supaya tidak terlihat seperti live yang "tidak dihitung".
-   */
-  const mingguSet = useMemo(() => new Set(mingguDinilai(monthKey)), [monthKey])
 
   /**
    * Kepala tabel tanggal — dipakai KEDUA tabel supaya kolomnya sejajar dan
@@ -626,9 +605,6 @@ export function Jadwal({ data, setData, bisaUbah, currentUserId }: Props) {
                         const bolehKlik =
                           bisaUbah ||
                           (e.id === currentUserId && status !== 'disetujui')
-                        const lainBulan =
-                          tg.jenis === 'live' &&
-                          !mingguSet.has(seninMinggu(t.tanggal))
                         const judul = status === 'disetujui'
                           ? `Sudah diperiksa & disetujui${bisaUbah ? ' — klik untuk mencabut' : ''}`
                           : status === 'menunggu'
@@ -665,12 +641,7 @@ export function Jadwal({ data, setData, bisaUbah, currentUserId }: Props) {
                               }
                               disabled={!bolehKlik}
                               onClick={() => putarKlaim(t.tanggal, e.id, tg.jenis)}
-                              title={
-                                judul +
-                                (lainBulan
-                                  ? ' · minggunya dihitung di bulan sebelah'
-                                  : '')
-                              }
+                              title={judul}
                             >
                               {status === 'disetujui'
                                 ? '✓'
@@ -732,48 +703,30 @@ export function Jadwal({ data, setData, bisaUbah, currentUserId }: Props) {
               </table>
             </div>
 
-        {/* Rekap live per minggu, per orang — inti panelnya: lubang minggu ini
-            harus terlihat hari SENIN, bukan ketahuan saat bulan sudah tutup. */}
-        {mingguPerOrang.map(({ emp, minggu }) =>
-          minggu.length === 0 ? null : (
-            <div key={emp.id} className="jdw-minggu">
-              <span className="jdw-minggu-lbl">
-                Live {emp.nama} · <b>{minggu.filter((m) => m.cukup).length}</b> dari{' '}
-                {minggu.length} minggu
-              </span>
-              <div className="jdw-minggu-list">
-                {minggu.map((m) => {
-                  const status = m.cukup
-                    ? 'is-cukup'
-                    : m.lewat
-                      ? 'is-luput'
-                      : m.rencana
-                        ? 'is-rencana'
-                        : m.berjalan
-                          ? 'is-mendesak'
-                          : 'is-kosong'
-                  return (
-                    <span
-                      key={m.senin}
-                      className={`jdw-minggu-chip ${status}`}
-                      title={
-                        m.cukup
-                          ? 'Sudah ada live yang disetujui minggu ini'
-                          : m.lewat
-                            ? 'Minggu ini lewat tanpa live yang disetujui'
-                            : m.rencana
-                              ? 'Sudah dijadwalkan, laporannya belum ada'
-                              : 'Belum dijadwalkan'
-                      }
-                    >
-                      <i>{m.cukup ? '✓' : m.lewat ? '✕' : m.rencana ? '○' : '!'}</i>
-                      {tglPendek(m.senin)}–{tglPendek(m.akhir)}
-                    </span>
-                  )
-                })}
-              </div>
+        {/* Rekap live bulanan per orang — supaya kekurangannya terlihat
+            sebelum bulan habis, bukan ketahuan saat slip gaji terbit. */}
+        {livePerOrang.length > 0 && (
+          <div className="jdw-minggu">
+            <span className="jdw-minggu-lbl">
+              Live bulan ini · min. {TARGET_LIVE_SEBULAN}× per orang
+            </span>
+            <div className="jdw-minggu-list">
+              {livePerOrang.map(({ emp, tanggal, cukup }) => (
+                <span
+                  key={emp.id}
+                  className={`jdw-minggu-chip ${cukup ? 'is-cukup' : 'is-mendesak'}`}
+                  title={
+                    tanggal.length === 0
+                      ? 'Belum ada live yang disetujui bulan ini'
+                      : `Live disetujui: ${tanggal.map(tglPendek).join(' · ')}`
+                  }
+                >
+                  <i>{cukup ? '✓' : '!'}</i>
+                  {emp.nama} {tanggal.length}/{TARGET_LIVE_SEBULAN}
+                </span>
+              ))}
             </div>
-          ),
+          </div>
         )}
 
             <div className="jdw-kaki">

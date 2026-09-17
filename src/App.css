@@ -3462,6 +3462,30 @@
 }
 .promo-tahapan-nota { font-size: 10.5px; font-weight: 600; color: var(--muted); }
 
+/* Ringkasan tugas sosmed per operator di Dashboard Manajemen (baca-saja) */
+.mgr-tugas-list { display: flex; flex-direction: column; gap: 9px; }
+.mgr-tugas-baris {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap;
+  padding: 9px 12px; border-radius: var(--radius-sm);
+  background: var(--surface-2); border: 1.5px solid var(--line);
+}
+.mgr-tugas-nama { font-size: 13px; font-weight: 800; color: var(--ink); }
+.mgr-tugas-pils { display: flex; flex-wrap: wrap; gap: 6px; }
+.mgr-tugas-pil {
+  padding: 4px 10px; border-radius: var(--radius-pill);
+  border: 1.5px solid var(--line); background: var(--surface);
+  font-size: 11px; font-weight: 700; color: var(--ink-soft); white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.mgr-tugas-pil b { color: var(--ink); }
+/* Hijau = masih on-track terhadap hari yang sudah berjalan, BUKAN "lulus".
+   Penilaian final baru terjadi saat bulan tutup (lihat bonusSosmed.ts). */
+.mgr-tugas-pil.is-ok {
+  border-color: var(--mint); background: var(--mint-bg); color: var(--mint-deep);
+}
+.mgr-tugas-pil.is-ok b { color: var(--mint-deep); }
+
 /* --- Baris tugas sosial media (di bawah roster) --------------------------
    Dipisahkan dari baris karyawan dengan garis tegas: ini bukan orang lain,
    melainkan tugas yang ditempelkan ke salah satu orang di atasnya. */

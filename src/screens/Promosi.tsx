@@ -686,8 +686,11 @@ function PromoRow({
               </span>
             )}
             {namaPic && (
+              /* Diberi label: satu kartu memuat DUA nama — yang mengerjakan di
+                 sini, yang mengusulkan di badan kartu. Tanpa label keduanya
+                 tampak sebagai "nama orang" yang sama artinya. */
               <span className="promo-item-flag">
-                <Icons.user /> {namaPic}
+                <Icons.user /> PIC · {namaPic}
               </span>
             )}
             {p.deadline && (
@@ -821,7 +824,7 @@ function PromoRow({
 
           {nama && (
             <div className="promo-card-oleh">
-              {t('prom.oleh')} {nama}
+              {t('prom.ideDari')} {nama}
             </div>
           )}
           {(onUnggah || actions) && (

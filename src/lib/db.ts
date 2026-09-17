@@ -26,6 +26,7 @@ import type {
   KemitraanImbalan,
   Lead,
   LeadFollowup,
+  DesainLampiran,
   JenisKertas,
   LaporanEvent,
   LaporanIncome,
@@ -150,12 +151,44 @@ type PromoRow = {
   created_by: string | null
   created_at: string | null
   desain: string | null
+  desain_list: unknown[] | null
+  desain_tautan: unknown[] | null
   jenis: PromoProgram['jenis'] | null
   pic: string | null
   deadline: string | null
   selesai_pada: string | null
   tahapan: TahapanKartu[] | null
 }
+/**
+ * Lampiran desain promo dari database. Dua bentuk diterima:
+ *  - objek `{nilai, oleh, status}` (bentuk sekarang, migration 0056);
+ *  - string telanjang (revisi pertama kolom itu) — dianggap sudah disetujui,
+ *    karena saat itu hanya admin yang bisa mengunggah.
+ * Entri yang tidak punya `nilai` dibuang, bukan dirender sebagai gambar rusak.
+ */
+function toLampiran(v: unknown): DesainLampiran[] {
+  if (!Array.isArray(v)) return []
+  return v.flatMap((e): DesainLampiran[] => {
+    if (typeof e === 'string') return e ? [{ nilai: e, status: 'disetujui' }] : []
+    if (!e || typeof e !== 'object') return []
+    const o = e as Record<string, unknown>
+    const nilai = typeof o.nilai === 'string' ? o.nilai : ''
+    if (!nilai) return []
+    return [
+      {
+        nilai,
+        oleh: typeof o.oleh === 'string' ? o.oleh : undefined,
+        status: o.status === 'menunggu' ? 'menunggu' : 'disetujui',
+      },
+    ]
+  })
+}
+
+/** Bentuk baris untuk satu lampiran desain. */
+function lampiranKeRow(l: DesainLampiran) {
+  return { nilai: l.nilai, oleh: l.oleh ?? null, status: l.status }
+}
+
 type LeadRow = {
   id: string
   nama: string | null
@@ -373,9 +406,12 @@ export async function fetchAppData(): Promise<AppData> {
       .order('created_at', { ascending: true }),
     // Papan Promosi: RLS memfilter baris yang boleh dilihat (admin semua;
     // karyawan hanya yang tayang + miliknya sendiri). Lihat migration 0035.
+    // Sengaja `*`, bukan daftar kolom: menyebut satu kolom yang belum dimigrasi
+    // menggagalkan SELURUH query, dan fallback di bawah akan mengosongkan papan
+    // — bukan sekadar menonaktifkan fitur barunya.
     supabase
       .from('promo_programs')
-      .select('id, judul, deskripsi, tahap, status, tanggal_mulai, tanggal_selesai, created_by, created_at, desain, jenis, pic, deadline, selesai_pada, tahapan')
+      .select('*')
       .order('created_at', { ascending: true }),
     // Roster shift: RLS mengizinkan semua user login membaca (karyawan perlu
     // melihat jadwalnya sendiri). Lihat migration 0044.
@@ -641,6 +677,15 @@ export async function fetchAppData(): Promise<AppData> {
     dibuatOleh: p.created_by ?? undefined,
     createdAt: p.created_at ?? undefined,
     desain: p.desain ?? undefined,
+    // Toleran kalau kolom `desain_list`/`desain_tautan` belum ada (migrasi 0056
+    // belum dijalankan): jatuh kembali ke satu desain dari kolom lama, yang
+    // dulu hanya bisa diunggah admin — jadi ia memang sudah disetujui.
+    desainList: Array.isArray(p.desain_list)
+      ? toLampiran(p.desain_list)
+      : p.desain
+        ? [{ nilai: p.desain, oleh: p.created_by ?? undefined, status: 'disetujui' as const }]
+        : [],
+    desainTautan: toLampiran(p.desain_tautan),
     jenis: p.jenis ?? 'campaign',
     pic: p.pic ?? undefined,
     deadline: p.deadline ?? undefined,
@@ -956,7 +1001,14 @@ export async function persistChanges(
       status: p.status,
       tanggal_mulai: p.tanggalMulai ?? null,
       tanggal_selesai: p.tanggalSelesai ?? null,
-      desain: p.desain ?? null,
+      // `desain` tetap ditulis dengan gambar pertama yang DISETUJUI: kolom lama
+      // itu masih dibaca app versi lama, dan ia tidak boleh membocorkan desain
+      // yang belum di-ACC. Lihat 0056.
+      desain: p.desainList?.find((l) => l.status === 'disetujui')?.nilai ?? null,
+      // `status` & `oleh` yang dikirim client TIDAK dipercaya: untuk non-admin
+      // keduanya ditimpa trigger protect_promo_status (0057).
+      desain_list: (p.desainList ?? []).map(lampiranKeRow),
+      desain_tautan: (p.desainTautan ?? []).map(lampiranKeRow),
       jenis: p.jenis ?? 'campaign',
       pic: p.pic ?? null,
       deadline: p.deadline ?? null,

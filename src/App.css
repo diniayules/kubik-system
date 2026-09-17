@@ -2981,6 +2981,32 @@
   border: 1px solid var(--line); background: var(--surface-2);
 }
 .promo-card-desain img { display: block; width: 100%; max-height: 380px; object-fit: contain; }
+/* Lebih dari satu desain: petak sejajar supaya semua varian terlihat sekaligus. */
+.promo-card-desain--grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 6px; border: 0; background: none; overflow: visible;
+}
+.promo-card-desain--grid img {
+  max-height: 200px; border-radius: 10px;
+  border: 1px solid var(--line); background: var(--surface-2);
+}
+
+/* Tautan desain eksternal (Drive, Canva, dll) */
+.promo-card-tautan { display: flex; flex-wrap: wrap; gap: 6px; }
+.promo-tautan-chip {
+  display: inline-flex; align-items: center; gap: 6px; max-width: 100%;
+  padding: 5px 10px; border-radius: 999px; font-size: 12px;
+  border: 1px solid var(--line); background: var(--surface-2);
+  color: var(--ink); text-decoration: none;
+}
+.promo-tautan-chip svg { width: 14px; height: 14px; flex: 0 0 auto; color: var(--ink-soft); }
+.promo-tautan-chip > a, .promo-card-tautan > .promo-tautan-chip {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.promo-card-tautan > .promo-tautan-chip:hover { border-color: var(--pink); color: var(--pink-deep); }
+.promo-tautan-chip > a { color: inherit; text-decoration: none; }
+.promo-tautan-chip--edit { padding-right: 4px; }
+.promo-tautan-chip--edit .emp-x { width: 22px; height: 22px; flex: 0 0 auto; }
 
 /* Preview & aksi desain di modal */
 .promo-desain-edit { display: flex; flex-direction: column; gap: 10px; }
@@ -2989,6 +3015,60 @@
   border-radius: 10px; border: 1px solid var(--line); background: var(--surface-2);
 }
 .promo-desain-edit-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* Daftar desain terpilih di modal — tiap petak punya tombol hapusnya sendiri */
+.promo-desain-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 8px; margin-bottom: 10px;
+}
+.promo-desain-slot { position: relative; }
+.promo-desain-slot img {
+  display: block; width: 100%; height: 110px; object-fit: cover;
+  border-radius: 10px; border: 1px solid var(--line); background: var(--surface-2);
+}
+.promo-desain-x {
+  position: absolute; top: 4px; right: 4px;
+  width: 26px; height: 26px; background: var(--surface); border: 1px solid var(--line);
+}
+.promo-desain-tag {
+  position: absolute; left: 4px; bottom: 4px;
+  padding: 2px 7px; border-radius: 999px; font-size: 10.5px; font-weight: 700;
+  background: var(--pink-soft, var(--surface)); color: var(--pink-deep);
+  border: 1px solid var(--pink);
+}
+.promo-tautan-edit { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.promo-tautan-chip--antre { border-color: var(--pink); color: var(--pink-deep); }
+
+/* Antrean ACC lampiran di badan kartu */
+.promo-acc {
+  border: 1px dashed var(--pink); border-radius: 12px; padding: 10px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.promo-acc-head {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 12px; font-weight: 800; color: var(--pink-deep);
+}
+.promo-acc-head svg { width: 15px; height: 15px; }
+.promo-acc-item { display: flex; gap: 10px; align-items: flex-start; flex-wrap: wrap; }
+.promo-acc-item > img {
+  width: 96px; height: 96px; object-fit: cover; flex: 0 0 auto;
+  border-radius: 10px; border: 1px solid var(--line); background: var(--surface-2);
+}
+.promo-acc-meta { display: flex; flex-direction: column; gap: 6px; min-width: 0; flex: 1 1 140px; }
+.promo-acc-oleh { font-size: 11.5px; color: var(--ink-soft); font-style: italic; }
+.promo-acc-status { font-size: 11.5px; font-weight: 700; color: var(--pink-deep); }
+.promo-acc-aksi { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* Modal lampirkan desain */
+.promo-lampir-judul { font-size: 14px; font-weight: 800; margin-bottom: 6px; }
+.promo-lampir-nota {
+  font-size: 12px; color: var(--ink-soft); line-height: 1.5;
+  padding: 8px 10px; border-radius: 10px; background: var(--surface-2);
+  border: 1px solid var(--line); margin-bottom: 14px;
+}
+.promo-tautan-input { display: flex; gap: 8px; align-items: center; }
+.promo-tautan-input input { flex: 1 1 auto; min-width: 0; }
+.promo-tautan-input .btn { flex: 0 0 auto; }
 .promo-desain-hint { font-size: 12px; color: var(--ink-soft); margin-top: 6px; display: block; }
 
 .promo-card-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }

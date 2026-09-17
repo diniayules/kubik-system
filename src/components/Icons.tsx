@@ -110,6 +110,12 @@ export const Icons = {
       <path d="M12 4v12M6 11l6 6 6-6M4 20h16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   ),
+  link: (p: IconProps) => (
+    <svg viewBox="0 0 24 24" fill="none" {...p}>
+      <path d="M10 13.5a3.5 3.5 0 004.9.4l2.9-2.6a3.5 3.5 0 10-4.7-5.2l-1.2 1.1" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M14 10.5a3.5 3.5 0 00-4.9-.4l-2.9 2.6a3.5 3.5 0 104.7 5.2l1.2-1.1" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  ),
   home: (p: IconProps) => (
     <svg viewBox="0 0 24 24" fill="none" {...p}>
       <path d="M4 11l8-7 8 7v9a1 1 0 01-1 1h-4v-6h-6v6H5a1 1 0 01-1-1v-9z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />

@@ -541,11 +541,40 @@ export type PromoProgram = {
    */
   createdAt?: string
   /**
-   * Desain promo untuk sosial media (data URL JPEG, di-resize di client).
-   * Diunggah admin; karyawan yang bisa melihat promo dapat mengunduhnya untuk
-   * diposting. `undefined` = belum ada desain. Lihat migration 0036.
+   * Desain PERTAMA yang disetujui (data URL JPEG). Dipertahankan demi data lama
+   * & app versi lama — sumber yang dibaca layar adalah [desainList].
+   * Lihat migration 0039.
    */
   desain?: string
+  /**
+   * Semua gambar desain kartu ini (data URL JPEG, di-resize di client, urut
+   * tampil). Lihat migration 0056.
+   */
+  desainList?: DesainLampiran[]
+  /**
+   * Tautan desain di luar app (Google Drive, Canva, dsb) untuk file yang tidak
+   * masuk akal ditempel sebagai gambar: .ai/.psd, folder berisi banyak varian.
+   * Lihat migration 0056.
+   */
+  desainTautan?: DesainLampiran[]
+}
+
+/**
+ * Satu lampiran desain pada kartu promo — gambar (data URL) atau tautan.
+ *
+ * Statusnya melekat pada LAMPIRAN, bukan pada kartu: operator boleh
+ * melampirkan desain ke kartu tayang mana pun, tapi lampiran itu baru terlihat
+ * (dan bisa diunduh) setelah owner/manajer menyetujuinya. Satu-satunya cara
+ * `status` menjadi 'disetujui' adalah update oleh `is_admin()` — dipaksa
+ * trigger `protect_promo_status`, lihat migration 0057. Layar hanya
+ * mencerminkan aturan itu, tidak menegakkannya.
+ */
+export type DesainLampiran = {
+  /** Data URL JPEG (gambar) atau URL http(s) (tautan). */
+  nilai: string
+  /** Pengunggah (profiles.id). Distempel database, bukan diisi dari layar. */
+  oleh?: string
+  status: 'menunggu' | 'disetujui'
 }
 
 /**

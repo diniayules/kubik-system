@@ -915,6 +915,16 @@ export const NOTIFIKASI_DEFAULT: NotifikasiConfig = {
 export type JobdeskItem = {
   id: string
   label: string
+  /**
+   * Tugas ini DARURAT — harus dikerjakan sekarang, tidak boleh menunggu akhir
+   * bulan. Kosong/false = tugas biasa, tenggatnya akhir periode.
+   *
+   * Sengaja boolean, bukan tanggal tenggat per item: yang dibutuhkan owner
+   * cuma memisahkan "kerjakan hari ini" dari "beres sebelum tutup bulan".
+   * Tenggat per tanggal menuntut owner mengisi kalender tiap baris — biaya
+   * yang tidak sepadan untuk daftar sepanjang lima sampai sepuluh tugas.
+   */
+  darurat?: boolean
   /** Kapan dicentang (ISO). Kosong/undefined = belum selesai. */
   selesaiPada?: string
   /** Id profil yang mencentang — biasanya manajer, bisa juga owner. */

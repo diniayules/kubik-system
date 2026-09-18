@@ -146,7 +146,7 @@ export const PREVIEW_DATA: AppData = {
   jobdeskManajer: {
     [BULAN_INI]: [
       { id: 'j1', label: 'Audit stok kertas mingguan', selesaiPada: iso(`${BULAN_INI}-08`), selesaiOleh: MANAJER },
-      { id: 'j2', label: 'Susun jadwal shift bulan depan' },
+      { id: 'j2', label: 'Susun jadwal shift bulan depan', darurat: true },
       { id: 'j3', label: 'Follow up MoU SMA 3' },
     ],
   },

@@ -4339,6 +4339,48 @@
   flex: 0 0 auto; font-variant-numeric: tabular-nums;
 }
 
+/* Tugas darurat: yang belum beres diberi pita merah muda di kiri baris,
+   dan labelnya didahului chip "Darurat". Chip-nya tetap ada setelah
+   dicentang (jejak bahwa tugas ini sempat mendesak), tapi warna barisnya
+   menyerah pada .is-done — yang sudah beres tidak perlu berteriak lagi. */
+.mgr-jobdesk-row.is-darurat {
+  background: var(--pink-bg);
+  border-color: color-mix(in srgb, var(--pink) 40%, transparent);
+  box-shadow: inset 3px 0 0 var(--pink);
+}
+.mgr-jobdesk-tanda {
+  display: inline-block; margin-right: 8px; vertical-align: 1px;
+  padding: 2px 8px; border-radius: var(--radius-pill);
+  background: var(--pink); color: #fff;
+  font-size: 10.5px; font-weight: 800; letter-spacing: .04em;
+  text-transform: uppercase; text-decoration: none;
+}
+.mgr-jobdesk-row.is-done .mgr-jobdesk-tanda {
+  background: transparent; color: var(--ink-soft);
+  border: 1.5px solid var(--line); padding: 1px 7px;
+}
+.mgr-jobdesk-alarm {
+  margin: -4px 0 12px; padding: 8px 12px; border-radius: var(--radius-md);
+  background: var(--pink-bg); color: var(--pink-deep);
+  border: 1.5px solid color-mix(in srgb, var(--pink) 32%, transparent);
+  font-size: 12.5px; font-weight: 700; line-height: 1.45;
+}
+
+/* Tombol penanda di editor owner: abu-abu saat mati, merah muda penuh saat
+   menyala — statusnya harus terbaca tanpa harus membuka tooltip. */
+.btn-mini-darurat {
+  flex: 0 0 auto;
+  background: var(--surface); color: var(--ink-soft);
+  border: 1.5px solid var(--line);
+}
+.btn-mini-darurat:hover { color: var(--pink-deep); border-color: var(--pink); }
+.btn-mini-darurat.is-aktif {
+  background: var(--pink); color: #fff; border-color: var(--pink);
+}
+.btn-mini-darurat.is-aktif:hover {
+  background: color-mix(in srgb, var(--pink) 85%, #000); color: #fff;
+}
+
 .mgr-jobdesk-editor {
   border: 1.5px dashed var(--line); border-radius: var(--radius-md);
   padding: 14px; background: var(--surface-2);

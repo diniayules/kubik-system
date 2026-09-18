@@ -423,6 +423,8 @@ export function Manajemen({
   const jobdesk = data.jobdeskManajer?.[monthKey] ?? []
   const jobdeskLalu = data.jobdeskManajer?.[bulanSebelumnya(monthKey)] ?? []
   const jobdeskSelesai = jobdesk.filter((j) => j.selesaiPada).length
+  /** Yang ditandai darurat DAN belum dicentang — inilah antrean hari ini. */
+  const jobdeskDarurat = jobdesk.filter((j) => j.darurat && !j.selesaiPada).length
   const [editJobdesk, setEditJobdesk] = useState(false)
 
   function simpanJobdesk(items: JobdeskItem[]) {
@@ -942,8 +944,8 @@ export function Manajemen({
               judul="Jobdesk Manajer"
               sub={
                 isOwner
-                  ? `Tugas yang Anda tetapkan untuk ${labelBulan(monthKey)}. Manajer mencentangnya sendiri di layar ini.`
-                  : `Tugas dari owner untuk ${labelBulan(monthKey)}. Centang setelah beres.`
+                  ? `Tugas yang Anda tetapkan untuk ${labelBulan(monthKey)}. Manajer mencentangnya sendiri di layar ini. Tandai "darurat" untuk yang tidak boleh menunggu akhir bulan.`
+                  : `Tugas dari owner untuk ${labelBulan(monthKey)}. Bertanda "darurat" dikerjakan lebih dulu; sisanya boleh beres sampai akhir bulan.`
               }
               badge={
                 jobdesk.length > 0
@@ -995,6 +997,12 @@ export function Manajemen({
                       {jobdeskSelesai} dari {jobdesk.length} selesai
                     </span>
                   </div>
+                  {jobdeskDarurat > 0 && (
+                    <p className="mgr-jobdesk-alarm">
+                      {jobdeskDarurat} tugas darurat belum beres — kerjakan
+                      sebelum yang lain.
+                    </p>
+                  )}
                   <ul className="mgr-jobdesk">
                     {jobdesk.map((j) => {
                       const oleh = j.selesaiOleh
@@ -1003,7 +1011,14 @@ export function Manajemen({
                       return (
                         <li
                           key={j.id}
-                          className={'mgr-jobdesk-row' + (j.selesaiPada ? ' is-done' : '')}
+                          className={
+                            'mgr-jobdesk-row' +
+                            (j.selesaiPada
+                              ? ' is-done'
+                              : j.darurat
+                                ? ' is-darurat'
+                                : '')
+                          }
                         >
                           <label>
                             <input
@@ -1011,7 +1026,15 @@ export function Manajemen({
                               checked={Boolean(j.selesaiPada)}
                               onChange={() => toggleJobdesk(j.id)}
                             />
-                            <span className="mgr-jobdesk-label">{j.label}</span>
+                            <span className="mgr-jobdesk-label">
+                              {/* Tanda tetap tampil pada tugas darurat yang
+                                  sudah beres — supaya owner bisa melihat
+                                  mana yang sempat mendesak bulan ini. */}
+                              {j.darurat && (
+                                <span className="mgr-jobdesk-tanda">Darurat</span>
+                              )}
+                              {j.label}
+                            </span>
                           </label>
                           {j.selesaiPada && (
                             <span className="mgr-jobdesk-jejak">
@@ -2777,11 +2800,22 @@ function JobdeskEditor({
     setDraf((d) => d.filter((j) => j.id !== id))
   }
 
+  /** Tandai/lepas tanda darurat. Field lain (termasuk centang) dibiarkan. */
+  function toggleDarurat(id: string) {
+    setDraf((d) =>
+      d.map((j) => (j.id === id ? { ...j, darurat: !j.darurat } : j)),
+    )
+  }
+
   function tambah() {
     setDraf((d) => [...d, { id: uid(), label: '' }])
   }
 
-  /** Salin LABEL-nya saja: id & centang bulan lalu tidak boleh ikut terbawa. */
+  /**
+   * Salin LABEL-nya saja: id & centang bulan lalu tidak boleh ikut terbawa.
+   * Tanda darurat juga tidak: "mendesak bulan lalu" bukan alasan otomatis
+   * mendesak bulan ini — owner menilainya ulang.
+   */
   function salinBulanLalu() {
     setDraf((d) => [
       ...d,
@@ -2805,6 +2839,21 @@ function JobdeskEditor({
             onChange={(e) => ubahLabel(j.id, e.target.value)}
             placeholder="mis. Rekap penjualan mingguan ke owner"
           />
+          <button
+            type="button"
+            className={
+              'btn-mini btn-mini-darurat' + (j.darurat ? ' is-aktif' : '')
+            }
+            onClick={() => toggleDarurat(j.id)}
+            aria-pressed={Boolean(j.darurat)}
+            title={
+              j.darurat
+                ? 'Darurat — klik untuk jadikan tugas biasa (tenggat akhir bulan)'
+                : 'Tandai darurat — harus dikerjakan sekarang'
+            }
+          >
+            Darurat
+          </button>
           <button
             type="button"
             className="btn-mini btn-mini-ghost"

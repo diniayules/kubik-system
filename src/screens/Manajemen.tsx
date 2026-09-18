@@ -939,6 +939,95 @@ export function Manajemen({
         <div className="mgr-cols">
           <div className="mgr-col">
             <Panel
+              judul="Jobdesk Manajer"
+              sub={
+                isOwner
+                  ? `Tugas yang Anda tetapkan untuk ${labelBulan(monthKey)}. Manajer mencentangnya sendiri di layar ini.`
+                  : `Tugas dari owner untuk ${labelBulan(monthKey)}. Centang setelah beres.`
+              }
+              badge={
+                jobdesk.length > 0
+                  ? `${jobdeskSelesai}/${jobdesk.length}`
+                  : undefined
+              }
+              aksi={
+                isOwner ? (
+                  <button
+                    type="button"
+                    className="mgr-aksi-btn"
+                    onClick={() => setEditJobdesk((v) => !v)}
+                  >
+                    {editJobdesk ? 'Tutup' : jobdesk.length ? 'Atur jobdesk' : 'Susun jobdesk'}
+                  </button>
+                ) : undefined
+              }
+            >
+              {editJobdesk ? (
+                <JobdeskEditor
+                  key={monthKey}
+                  awal={jobdesk}
+                  bulanLalu={jobdeskLalu}
+                  labelBulanLalu={labelBulan(bulanSebelumnya(monthKey))}
+                  onSimpan={(items) => {
+                    simpanJobdesk(items)
+                    setEditJobdesk(false)
+                  }}
+                  onBatal={() => setEditJobdesk(false)}
+                />
+              ) : jobdesk.length === 0 ? (
+                <p className="mgr-empty">
+                  {isOwner
+                    ? 'Belum ada jobdesk untuk periode ini. Klik "Susun jobdesk" untuk menuliskan daftarnya — manajer langsung melihatnya di sini.'
+                    : 'Owner belum menetapkan jobdesk untuk periode ini.'}
+                </p>
+              ) : (
+                <>
+                  <div className="mgr-jobdesk-head">
+                    <span className="mgr-jobdesk-meter">
+                      <span
+                        className="mgr-jobdesk-fill"
+                        style={{
+                          width: `${(jobdeskSelesai / jobdesk.length) * 100}%`,
+                        }}
+                      />
+                    </span>
+                    <span className="mgr-jobdesk-hitung">
+                      {jobdeskSelesai} dari {jobdesk.length} selesai
+                    </span>
+                  </div>
+                  <ul className="mgr-jobdesk">
+                    {jobdesk.map((j) => {
+                      const oleh = j.selesaiOleh
+                        ? data.employees.find((e) => e.id === j.selesaiOleh)?.nama
+                        : undefined
+                      return (
+                        <li
+                          key={j.id}
+                          className={'mgr-jobdesk-row' + (j.selesaiPada ? ' is-done' : '')}
+                        >
+                          <label>
+                            <input
+                              type="checkbox"
+                              checked={Boolean(j.selesaiPada)}
+                              onChange={() => toggleJobdesk(j.id)}
+                            />
+                            <span className="mgr-jobdesk-label">{j.label}</span>
+                          </label>
+                          {j.selesaiPada && (
+                            <span className="mgr-jobdesk-jejak">
+                              {labelTanggalPendek(todayKey(new Date(j.selesaiPada)))}
+                              {oleh && ` · ${oleh}`}
+                            </span>
+                          )}
+                        </li>
+                      )
+                    })}
+                  </ul>
+                </>
+              )}
+            </Panel>
+
+            <Panel
               judul="Kinerja Karyawan"
               sub="Kehadiran, disiplin jam, dan kontribusi penjualan bulan ini"
             >
@@ -1094,95 +1183,6 @@ export function Manajemen({
                       </ul>
                     </div>
                   )}
-                </>
-              )}
-            </Panel>
-
-            <Panel
-              judul="Jobdesk Manajer"
-              sub={
-                isOwner
-                  ? `Tugas yang Anda tetapkan untuk ${labelBulan(monthKey)}. Manajer mencentangnya sendiri di layar ini.`
-                  : `Tugas dari owner untuk ${labelBulan(monthKey)}. Centang setelah beres.`
-              }
-              badge={
-                jobdesk.length > 0
-                  ? `${jobdeskSelesai}/${jobdesk.length}`
-                  : undefined
-              }
-              aksi={
-                isOwner ? (
-                  <button
-                    type="button"
-                    className="mgr-aksi-btn"
-                    onClick={() => setEditJobdesk((v) => !v)}
-                  >
-                    {editJobdesk ? 'Tutup' : jobdesk.length ? 'Atur jobdesk' : 'Susun jobdesk'}
-                  </button>
-                ) : undefined
-              }
-            >
-              {editJobdesk ? (
-                <JobdeskEditor
-                  key={monthKey}
-                  awal={jobdesk}
-                  bulanLalu={jobdeskLalu}
-                  labelBulanLalu={labelBulan(bulanSebelumnya(monthKey))}
-                  onSimpan={(items) => {
-                    simpanJobdesk(items)
-                    setEditJobdesk(false)
-                  }}
-                  onBatal={() => setEditJobdesk(false)}
-                />
-              ) : jobdesk.length === 0 ? (
-                <p className="mgr-empty">
-                  {isOwner
-                    ? 'Belum ada jobdesk untuk periode ini. Klik "Susun jobdesk" untuk menuliskan daftarnya — manajer langsung melihatnya di sini.'
-                    : 'Owner belum menetapkan jobdesk untuk periode ini.'}
-                </p>
-              ) : (
-                <>
-                  <div className="mgr-jobdesk-head">
-                    <span className="mgr-jobdesk-meter">
-                      <span
-                        className="mgr-jobdesk-fill"
-                        style={{
-                          width: `${(jobdeskSelesai / jobdesk.length) * 100}%`,
-                        }}
-                      />
-                    </span>
-                    <span className="mgr-jobdesk-hitung">
-                      {jobdeskSelesai} dari {jobdesk.length} selesai
-                    </span>
-                  </div>
-                  <ul className="mgr-jobdesk">
-                    {jobdesk.map((j) => {
-                      const oleh = j.selesaiOleh
-                        ? data.employees.find((e) => e.id === j.selesaiOleh)?.nama
-                        : undefined
-                      return (
-                        <li
-                          key={j.id}
-                          className={'mgr-jobdesk-row' + (j.selesaiPada ? ' is-done' : '')}
-                        >
-                          <label>
-                            <input
-                              type="checkbox"
-                              checked={Boolean(j.selesaiPada)}
-                              onChange={() => toggleJobdesk(j.id)}
-                            />
-                            <span className="mgr-jobdesk-label">{j.label}</span>
-                          </label>
-                          {j.selesaiPada && (
-                            <span className="mgr-jobdesk-jejak">
-                              {labelTanggalPendek(todayKey(new Date(j.selesaiPada)))}
-                              {oleh && ` · ${oleh}`}
-                            </span>
-                          )}
-                        </li>
-                      )
-                    })}
-                  </ul>
                 </>
               )}
             </Panel>

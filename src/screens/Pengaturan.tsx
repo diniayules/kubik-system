@@ -4,9 +4,17 @@ import type {
   ClosingTask,
   FontPair,
   FontSize,
+  NotifikasiConfig,
+  PeriksaNotifikasi,
   Shift,
   TampilanMode,
 } from '../types'
+import {
+  NOTIFIKASI_DEFAULT,
+  PERIKSA_LABEL,
+  PERIKSA_NOTIFIKASI,
+} from '../types'
+import { kirimNotifikasiUji } from '../lib/db'
 import { uid, todayKey } from '../storage'
 import { SHIFT_LABEL, SHIFT_LIST } from '../attendance'
 import {
@@ -40,6 +48,12 @@ type Props = {
   theme: Theme
   onChangeTheme: (t: Theme) => void
   isAdmin: boolean
+  /**
+   * Kartu "Pengingat Harian Manajer" hanya untuk owner. Manajer memang
+   * pengelola, tapi dialah yang sedang diingatkan — memberinya sakelar untuk
+   * mematikan pengingatnya sendiri membuat seluruh fiturnya tak ada artinya.
+   */
+  isOwner: boolean
 }
 
 export function Pengaturan({
@@ -48,6 +62,7 @@ export function Pengaturan({
   theme,
   onChangeTheme,
   isAdmin,
+  isOwner,
 }: Props) {
   const toast = useToast()
   const { lang, setLang, t } = useLang()
@@ -202,6 +217,75 @@ export function Pengaturan({
         ? `Checklist pagi tersimpan (${bersih.length} tugas)`
         : 'Checklist pagi dikosongkan — tanpa pengingat pagi',
     )
+  }
+
+  // ---------- Pengingat harian manajer (migration 0062) ----------
+  // Draf lokal + tombol Simpan, pola sama seperti checklist & branding:
+  // chat id diketik karakter demi karakter, dan write-through setData akan
+  // menulis ke database di setiap ketukan kalau tidak ditahan di sini.
+  const notifTersimpan: NotifikasiConfig = {
+    ...NOTIFIKASI_DEFAULT,
+    ...(data.notifikasi ?? {}),
+  }
+  const [notif, setNotif] = useState<NotifikasiConfig>(notifTersimpan)
+  const [ujiJalan, setUjiJalan] = useState(false)
+
+  /** Sebuah pemeriksaan menyala kecuali dimatikan dengan sengaja. */
+  function periksaNyala(k: PeriksaNotifikasi): boolean {
+    return notif.periksa?.[k] !== false
+  }
+
+  function togglePeriksa(k: PeriksaNotifikasi) {
+    setNotif({
+      ...notif,
+      periksa: { ...notif.periksa, [k]: !periksaNyala(k) },
+    })
+  }
+
+  const notifBerubah =
+    notif.aktif !== notifTersimpan.aktif ||
+    notif.chatManajer !== notifTersimpan.chatManajer ||
+    notif.chatOwner !== notifTersimpan.chatOwner ||
+    notif.eskalasiHari !== notifTersimpan.eskalasiHari ||
+    PERIKSA_NOTIFIKASI.some(
+      (k) =>
+        (notif.periksa?.[k] !== false) !==
+        (notifTersimpan.periksa?.[k] !== false),
+    )
+
+  function simpanNotifikasi() {
+    const bersih: NotifikasiConfig = {
+      ...notif,
+      chatManajer: notif.chatManajer.trim(),
+      chatOwner: notif.chatOwner.trim(),
+      eskalasiHari: Math.min(14, Math.max(1, notif.eskalasiHari || 2)),
+    }
+    if (bersih.aktif && !bersih.chatManajer) {
+      toast('warn', 'Isi Chat ID manajer dulu sebelum mengaktifkan')
+      return
+    }
+    setNotif(bersih)
+    setData({ ...data, notifikasi: bersih })
+    toast('ok', 'Pengaturan pengingat disimpan')
+  }
+
+  // Uji coba memakai konfigurasi yang ADA DI SERVER, bukan draf di layar —
+  // karena itu tombolnya terkunci selama masih ada perubahan belum disimpan.
+  async function ujiNotifikasi() {
+    setUjiJalan(true)
+    try {
+      const n = await kirimNotifikasiUji()
+      toast(
+        'ok',
+        n > 0
+          ? `Terkirim — berisi ${n} hal yang sedang menunggak`
+          : 'Terkirim — saat ini tidak ada yang menunggak',
+      )
+    } catch (e) {
+      toast('warn', e instanceof Error ? e.message : 'Gagal mengirim')
+    } finally {
+      setUjiJalan(false)
+    }
   }
 
   function setFontPair(p: FontPair) {
@@ -883,6 +967,133 @@ export function Pengaturan({
               <Icons.check /> Simpan Checklist Pagi
             </button>
           </div>
+        </div>
+      </section>
+      )}
+
+      {isOwner && (
+      <section className="settings-card">
+        <div className="settings-head">
+          <div className="settings-head-ikon">🔔</div>
+          <div>
+            <h2 className="settings-title">Pengingat Harian Manajer</h2>
+            <p className="settings-sub">
+              Tiap pagi sistem memeriksa apa yang masih menggantung — laporan
+              harian, ACC absen, klaim story/live, kartu konten, lead, kendala
+              teknis, roster minggu depan, stok frame — lalu mengirim satu pesan
+              Telegram ke manajer. Kalau semuanya beres, tidak ada pesan yang dikirim sama
+              sekali, jadi pesan yang masuk selalu berarti ada yang perlu
+              dikerjakan.
+            </p>
+          </div>
+        </div>
+
+        <div className="settings-section">
+          <div className="settings-section-label">Tujuan</div>
+          <div className="settings-grid">
+            <div className="field">
+              <label>Chat ID manajer</label>
+              <input
+                type="text"
+                inputMode="numeric"
+                value={notif.chatManajer}
+                onChange={(e) =>
+                  setNotif({ ...notif, chatManajer: e.target.value })
+                }
+                placeholder="mis. 123456789"
+              />
+            </div>
+            <div className="field">
+              <label>Chat ID owner (tembusan eskalasi)</label>
+              <input
+                type="text"
+                inputMode="numeric"
+                value={notif.chatOwner}
+                onChange={(e) =>
+                  setNotif({ ...notif, chatOwner: e.target.value })
+                }
+                placeholder="kosongkan kalau tidak ingin ditembusi"
+              />
+            </div>
+          </div>
+          <div className="form-hint">
+            Mendapatkan chat id: minta orangnya mengirim satu pesan apa pun ke
+            bot, lalu buka <code>api.telegram.org/bot&lt;token&gt;/getUpdates</code>{' '}
+            di browser — angka pada <code>chat.id</code> itulah yang diisi di
+            sini.
+          </div>
+        </div>
+
+        <div className="settings-section">
+          <div className="settings-section-label">Yang diperiksa</div>
+          <div className="closing-cfg-actions">
+            {PERIKSA_NOTIFIKASI.map((k) => (
+              <button
+                key={k}
+                type="button"
+                className={`shift-toggle${periksaNyala(k) ? ' on' : ''}`}
+                onClick={() => togglePeriksa(k)}
+              >
+                {PERIKSA_LABEL[k]}
+              </button>
+            ))}
+          </div>
+          <div className="form-hint">
+            Matikan yang ternyata tidak perlu. Semakin sedikit yang menyala,
+            semakin besar kemungkinan pesannya tetap dibaca.
+          </div>
+        </div>
+
+        <div className="settings-section">
+          <div className="settings-section-label">Eskalasi &amp; status</div>
+          <div className="settings-grid">
+            <div className="field">
+              <label>Tembuskan ke owner setelah (hari)</label>
+              <input
+                type="number"
+                min={1}
+                max={14}
+                value={notif.eskalasiHari}
+                onChange={(e) =>
+                  setNotif({ ...notif, eskalasiHari: Number(e.target.value) })
+                }
+              />
+            </div>
+            <div className="field">
+              <label>Status pengingat</label>
+              <button
+                type="button"
+                className={`shift-toggle${notif.aktif ? ' on' : ''}`}
+                onClick={() => setNotif({ ...notif, aktif: !notif.aktif })}
+              >
+                {notif.aktif ? 'Aktif' : 'Nonaktif'}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="closing-cfg-actions">
+          <button
+            type="button"
+            className="btn btn--primary"
+            onClick={simpanNotifikasi}
+            disabled={!notifBerubah}
+          >
+            Simpan
+          </button>
+          <button
+            type="button"
+            className="btn btn--ghost"
+            onClick={ujiNotifikasi}
+            disabled={notifBerubah || ujiJalan || !notif.chatManajer}
+          >
+            {ujiJalan ? 'Mengirim…' : '✈️ Kirim uji coba'}
+          </button>
+          {notifBerubah && (
+            <span className="form-hint">
+              Simpan dulu — uji coba memakai pengaturan yang sudah tersimpan.
+            </span>
+          )}
         </div>
       </section>
       )}

@@ -433,6 +433,7 @@ function Inner() {
                 theme={theme}
                 onChangeTheme={setTheme}
                 isAdmin={isAdmin}
+                isOwner={auth.isOwner}
               />
             )}
           </main>

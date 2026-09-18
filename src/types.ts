@@ -846,6 +846,64 @@ export type PenilaianOwner = {
 }
 
 /**
+ * Kode setiap pemeriksaan tunggakan. Sama persis dengan kolom `kode` yang
+ * dikembalikan `notifikasi_tunggakan()` di migration 0062 — kalau dua daftar
+ * ini berbeda, sakelarnya tidak akan mengenai apa pun.
+ */
+export const PERIKSA_NOTIFIKASI = [
+  'laporan_harian',
+  'absen_menunggu',
+  'klaim_sosmed',
+  'promo_tayang',
+  'leads_basi',
+  'masalah_teknis',
+  'jadwal_minggu_depan',
+  'stok_frame',
+] as const
+
+export type PeriksaNotifikasi = (typeof PERIKSA_NOTIFIKASI)[number]
+
+/** Label sakelar di Pengaturan. Bunyi pesannya sendiri datang dari SQL. */
+export const PERIKSA_LABEL: Record<PeriksaNotifikasi, string> = {
+  laporan_harian: 'Laporan harian belum diisi',
+  absen_menunggu: 'Absen manual menunggu persetujuan',
+  klaim_sosmed: 'Klaim story/live operator belum di-ACC',
+  promo_tayang: 'Konten tayang tapi kartunya belum ditutup',
+  leads_basi: 'Lead belum di-follow-up lebih dari 3 hari',
+  masalah_teknis: 'Kendala teknis belum ditutup',
+  jadwal_minggu_depan: 'Jadwal minggu depan belum disusun (dicek tiap Jumat)',
+  stok_frame: 'Stok frame tinggal 1 atau habis',
+}
+
+/**
+ * Pengaturan pengingat harian ke manajer via Telegram (migration 0062).
+ *
+ * Yang TIDAK ada di sini, dan memang tidak boleh ada: token bot. `app_config`
+ * terbaca oleh semua user yang login, sedangkan pemegang token bisa mengirim
+ * pesan atas nama bot — jadi token hidup sebagai secret Edge Function.
+ */
+export type NotifikasiConfig = {
+  /** false = tidak ada pengingat yang dikirim sama sekali. */
+  aktif: boolean
+  /** Chat id Telegram manajer — penerima pengingat harian. */
+  chatManajer: string
+  /** Chat id owner. Kosong = eskalasi tidak dikirim ke mana pun. */
+  chatOwner: string
+  /** Umur tunggakan (hari) sebelum ditembuskan ke owner. */
+  eskalasiHari: number
+  /** Sakelar per pemeriksaan. Kunci tidak ada = ikut menyala. */
+  periksa: Partial<Record<PeriksaNotifikasi, boolean>>
+}
+
+export const NOTIFIKASI_DEFAULT: NotifikasiConfig = {
+  aktif: false,
+  chatManajer: '',
+  chatOwner: '',
+  eskalasiHari: 2,
+  periksa: {},
+}
+
+/**
  * Satu baris jobdesk manajer — tugas yang DITETAPKAN OWNER untuk periode
  * `YYYY-MM` tertentu, lalu dicentang sendiri oleh manajer.
  *
@@ -1096,6 +1154,11 @@ export type AppData = {
    * ikut dinilai di mana pun).
    */
   jobdeskManajer: Record<string, JobdeskItem[]>
+  /**
+   * Pengingat tunggakan harian ke manajer. Lihat [NotifikasiConfig] &
+   * migration 0062. Disimpan di `app_config.notifikasi`.
+   */
+  notifikasi: NotifikasiConfig
   /**
    * Laporan closing harian manajer. Lihat [LaporanHarian] & migration 0052.
    * Opsional supaya app tetap naik sebelum migrasinya dijalankan.

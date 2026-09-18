@@ -667,6 +667,49 @@ uji yang paling penting berikutnya.
 
 ---
 
+## 🆕 Pengingat harian manajer via Telegram (migration 0062)
+
+**Masalahnya:** pekerjaan manajer yang terlewat (laporan harian, ACC absen, ACC
+klaim sosmed, menutup kartu konten, follow-up lead) semuanya berupa sesuatu yang
+TIDAK terjadi. Ketiadaan tidak bisa memicu trigger, jadi bentuknya pemeriksaan
+terjadwal — bukan notifikasi per kejadian. Tidak ada satu pun trigger baru.
+
+**Bagian-bagiannya:**
+
+- `notifikasi_tunggakan()` (0062) — mengembalikan `kode, label, jumlah,
+  umur_hari` untuk 8 pemeriksaan. `umur_hari` dikembalikan sebagai ANGKA, bukan
+  kalimat jadi, karena ambang eskalasi diatur owner di layar. `umur_hari = -1`
+  berarti pemeriksaan soal KEADAAN, bukan keterlambatan (`stok_frame`): umurnya
+  tidak ditulis di pesan dan tidak pernah ikut eskalasi ke owner. Ambang stok
+  frame sengaja 1 — frame tidak harus selalu di-restock, dan ambang longgar
+  membuat pesannya berbunyi tiap pagi lalu berhenti dibaca.
+  `select * from public.notifikasi_tunggakan();` memperlihatkan persis apa yang
+  akan dikirim tanpa mengirim apa pun.
+- `app_config.notifikasi` — sakelar per pemeriksaan + chat id tujuan +
+  `eskalasiHari`. **Token bot TIDAK di sini** (app_config terbaca semua user
+  login); token hidup sebagai secret edge function `TELEGRAM_BOT_TOKEN`.
+- `notifikasi_log` — riwayat kirim. Hanya bisa DIBACA pengelola; penulisnya
+  cuma service role, jadi tidak bisa dirapikan oleh orang yang sedang dinilai.
+- Edge function `notifikasi-manajer` — pengirimnya. Otorisasi cron =
+  `Authorization: Bearer <service role key>` (header itu toh wajib untuk lolos
+  `verify_jwt`, jadi tidak ada secret kedua yang perlu dirotasi).
+- Kartu "Pengingat Harian Manajer" di Pengaturan — **owner-only** (`isOwner`),
+  bukan `isAdmin`: manajer memang pengelola, tapi dialah yang sedang diingatkan.
+
+**Aturan yang menjaga fiturnya tetap berguna:** kalau tidak ada yang menunggak,
+tidak ada pesan sama sekali. Sunyi = aman, jadi pesan yang masuk selalu berarti.
+
+**Menambah pemeriksaan** harus di tiga tempat sekaligus — `notifikasi_tunggakan()`,
+`PERIKSA_NOTIFIKASI`, dan `PERIKSA_LABEL` (keduanya di `src/types.ts`). Kalau
+`kode`-nya beda, sakelarnya tidak mengenai apa pun dan pemeriksaannya diam-diam
+selalu menyala.
+
+**STILL TODO (user action):** buat bot di @BotFather, pasang secret
+`TELEGRAM_BOT_TOKEN`, isi chat id di Pengaturan, jadwalkan cron 08:00 WIB.
+Langkah lengkapnya di `supabase/functions/notifikasi-manajer/README.md`.
+
+---
+
 ## Build / run
 - `npm run dev` (Vite, port 5173). `npm run build` = `tsc -b && vite build`.
 - After editing `.env.local`, **restart** dev server.

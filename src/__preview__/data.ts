@@ -4,6 +4,7 @@
 // Lihat README.md di folder ini.
 // =============================================================
 import type { AppData, LaporanIncome } from '../types'
+import { NOTIFIKASI_DEFAULT } from '../types'
 import {
   HARGA_CETAK_DEFAULT,
   HARGA_TIKET_DEFAULT,
@@ -64,6 +65,7 @@ function laporanBulan(
 }
 
 export const PREVIEW_DATA: AppData = {
+  notifikasi: NOTIFIKASI_DEFAULT,
   employees: [
     { id: OWNER, nama: 'Dini', jabatan: 'Owner', pinHash: '', role: 'owner' },
     { id: MANAJER, nama: 'Yules', jabatan: 'Manajer', pinHash: '', role: 'manager' },

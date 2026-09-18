@@ -35,6 +35,7 @@ import type {
   MasalahTeknis,
   PenilaianOwner,
   JobdeskItem,
+  NotifikasiConfig,
   PenyesuaianUangKecil,
   PenarikanUangBesar,
   Pengeluaran,
@@ -51,6 +52,7 @@ import type {
   WarnaTinta,
   TahapanKartu,
 } from '../types'
+import { NOTIFIKASI_DEFAULT } from '../types'
 import {
   HARGA_CETAK_DEFAULT,
   HARGA_PRODUK_DEFAULT,
@@ -319,6 +321,7 @@ type ConfigRow = {
   target_bulanan: Record<string, TargetBulanan> | null
   penilaian_owner: Record<string, PenilaianOwner> | null
   jobdesk_manajer: Record<string, JobdeskItem[]> | null
+  notifikasi: NotifikasiConfig | null
   brand_kicker: string | null
   brand_name: string | null
   dash_judul: string | null
@@ -752,6 +755,9 @@ export async function fetchAppData(): Promise<AppData> {
     // Toleran kalau kolom `jobdesk_manajer` belum ada (migrasi 0054 belum
     // dijalankan): panel Jobdesk Manajer tampil kosong, bukan error.
     jobdeskManajer: config?.jobdesk_manajer ?? {},
+    // Toleran kalau kolom `notifikasi` belum ada (migrasi 0062 belum
+    // dijalankan): pengingatnya sekadar nonaktif, aplikasinya tetap naik.
+    notifikasi: { ...NOTIFIKASI_DEFAULT, ...(config?.notifikasi ?? {}) },
     leads: leadRows.map(
       (r): Lead => ({
         id: r.id,
@@ -1334,6 +1340,7 @@ export async function persistChanges(
     'targetBulanan',
     'penilaianOwner',
     'jobdeskManajer',
+    'notifikasi',
     'brandKicker',
     'brandName',
     'dashJudul',
@@ -1366,6 +1373,7 @@ export async function persistChanges(
             target_bulanan: next.targetBulanan ?? {},
             penilaian_owner: next.penilaianOwner ?? {},
             jobdesk_manajer: next.jobdeskManajer ?? {},
+            notifikasi: next.notifikasi ?? NOTIFIKASI_DEFAULT,
             brand_kicker: next.brandKicker ?? null,
             brand_name: next.brandName ?? null,
             dash_judul: next.dashJudul ?? null,
@@ -1635,4 +1643,38 @@ export async function createKaryawanAccount(input: {
     throw new Error(msg)
   }
   if (data?.error) throw new Error(data.error)
+}
+
+/**
+ * Memanggil edge function `notifikasi-manajer` dari tombol "Kirim uji coba"
+ * di Pengaturan.
+ *
+ * Ada supaya owner tidak perlu menunggu sampai besok pagi untuk tahu chat id
+ * dan token botnya sudah benar. `uji: true` membuat fungsinya tetap mengirim
+ * walau tidak ada yang menunggak — dan sengaja TIDAK mengirim tembusan
+ * eskalasi, supaya uji coba tidak pernah tampak seperti teguran sungguhan.
+ *
+ * Mengembalikan jumlah tunggakan yang ikut terkirim, untuk ditampilkan di toast.
+ */
+export async function kirimNotifikasiUji(): Promise<number> {
+  const { data, error } = await supabase.functions.invoke(
+    'notifikasi-manajer',
+    { body: { uji: true } },
+  )
+  if (error) {
+    // Pola sama seperti createKaryawanAccount: pesan asli ada di body response.
+    let msg = error.message
+    const ctx = (error as { context?: Response }).context
+    if (ctx && typeof ctx.json === 'function') {
+      try {
+        const b = await ctx.json()
+        if (b?.error) msg = b.error
+      } catch {
+        /* biarkan pesan default */
+      }
+    }
+    throw new Error(msg)
+  }
+  if (data?.error) throw new Error(data.error)
+  return Number(data?.tunggakan ?? 0)
 }

@@ -173,6 +173,29 @@ const TAB_MGR: { id: TabMgr; label: string; sub: string }[] = [
   { id: 'keuangan', label: 'Keuangan', sub: 'omzet · target 2×' },
 ]
 
+/**
+ * Peringkat urutan satu jobdesk: 0 darurat & belum beres, 1 tugas biasa & belum
+ * beres, 2 sudah dicentang. Tugas darurat yang SUDAH beres ikut turun — yang
+ * perlu dilihat manajer adalah yang belum dikerjakan.
+ */
+function peringkatJobdesk(j: JobdeskItem): 0 | 1 | 2 {
+  if (j.selesaiPada) return 2
+  return j.darurat ? 0 : 1
+}
+
+/**
+ * Satu-satunya aturan urutan jobdesk, dipakai DUA tempat: daftar yang dibaca
+ * manajer dan penyusun milik owner. Keduanya wajib memanggil ini — kalau
+ * editor memakai urutan mentah sementara layar mengurutkan, owner menyusun
+ * daftar yang tidak pernah dilihat manajer seperti itu.
+ *
+ * `sort` stabil (ES2019), jadi urutan manual di dalam tiap kelompok tetap utuh:
+ * tanda darurat menaikkan satu blok, bukan mengacak isinya.
+ */
+function urutkanJobdesk(items: JobdeskItem[]): JobdeskItem[] {
+  return [...items].sort((a, b) => peringkatJobdesk(a) - peringkatJobdesk(b))
+}
+
 export function Manajemen({
   data,
   setData,
@@ -425,28 +448,8 @@ export function Manajemen({
   const jobdeskSelesai = jobdesk.filter((j) => j.selesaiPada).length
   /** Yang ditandai darurat DAN belum dicentang — inilah antrean hari ini. */
   const jobdeskDarurat = jobdesk.filter((j) => j.darurat && !j.selesaiPada).length
-  /**
-   * Urutan TAMPIL, tiga kelompok: darurat yang belum beres di paling atas, lalu
-   * tugas biasa yang belum beres, lalu yang sudah dicentang di paling bawah.
-   * Begitu satu tugas beres ia berhenti merebut perhatian dan sisa antrean naik
-   * sendiri ke muka. Tugas darurat yang SUDAH dicentang ikut turun ke bawah —
-   * yang perlu dilihat manajer adalah yang belum dikerjakan.
-   *
-   * Di dalam tiap kelompok urutan susunan owner dipertahankan (`sort` stabil,
-   * ES2019), jadi prioritas manual di editor tetap berlaku: darurat naik satu
-   * blok, bukan diacak.
-   *
-   * Yang diurut cuma salinan untuk dirender; `jobdesk` yang tersimpan tetap
-   * memakai urutan susunan owner, supaya mencentang tidak diam-diam menulis
-   * ulang posisi baris dan editor tetap membuka daftar seperti yang ditulis.
-   */
-  function urutanJobdesk(j: JobdeskItem) {
-    if (j.selesaiPada) return 2
-    return j.darurat ? 0 : 1
-  }
-  const jobdeskTampil = [...jobdesk].sort(
-    (a, b) => urutanJobdesk(a) - urutanJobdesk(b),
-  )
+  /** Lihat [urutkanJobdesk]. Yang diurut salinan; `jobdesk` tersimpan apa adanya. */
+  const jobdeskTampil = urutkanJobdesk(jobdesk)
   const [editJobdesk, setEditJobdesk] = useState(false)
 
   function simpanJobdesk(items: JobdeskItem[]) {
@@ -2805,17 +2808,34 @@ function JobdeskEditor({
   onSimpan: (items: JobdeskItem[]) => void
   onBatal: () => void
 }) {
-  const [draf, setDraf] = useState<JobdeskItem[]>(awal)
+  /**
+   * INVARIAN: `draf` selalu dalam urutan [urutkanJobdesk] — sama persis dengan
+   * yang dilihat manajer. Owner menyusun daftar yang benar-benar dibaca, bukan
+   * urutan mentah yang nanti tersusun ulang diam-diam saat disimpan.
+   *
+   * Pengurutan ulang cuma terjadi pada aksi yang MEMANG memindahkan baris
+   * (tandai darurat, tambah baris), tidak saat mengetik label — baris yang
+   * melompat di bawah kursor lebih mengganggu daripada urutan yang telat.
+   */
+  const [draf, setDraf] = useState<JobdeskItem[]>(() => urutkanJobdesk(awal))
 
   function ubahLabel(id: string, label: string) {
     setDraf((d) => d.map((j) => (j.id === id ? { ...j, label } : j)))
   }
 
+  /**
+   * Tukar dengan tetangga, TAPI hanya di dalam kelompok yang sama. Menukar
+   * lintas kelompok percuma: pengurutan mengembalikannya ke tempat semula, dan
+   * tombol yang tidak melakukan apa-apa lebih membingungkan daripada tombol
+   * mati. Tombolnya juga di-disable di tepi kelompok, jadi penjagaan ini
+   * sekadar jaring kedua.
+   */
   function pindah(id: string, arah: -1 | 1) {
     setDraf((d) => {
       const i = d.findIndex((j) => j.id === id)
       const t = i + arah
       if (i < 0 || t < 0 || t >= d.length) return d
+      if (peringkatJobdesk(d[i]) !== peringkatJobdesk(d[t])) return d
       const next = [...d]
       ;[next[i], next[t]] = [next[t], next[i]]
       return next
@@ -2826,15 +2846,24 @@ function JobdeskEditor({
     setDraf((d) => d.filter((j) => j.id !== id))
   }
 
-  /** Tandai/lepas tanda darurat. Field lain (termasuk centang) dibiarkan. */
+  /**
+   * Tandai/lepas tanda darurat. Field lain (termasuk centang) dibiarkan.
+   * Barisnya langsung naik/turun ke kelompoknya — itu justru akibat yang
+   * ditunggu dari klik ini, dan menundanya sampai "Simpan" berarti owner
+   * menutup editor tanpa pernah melihat susunan yang sebenarnya ia buat.
+   */
   function toggleDarurat(id: string) {
     setDraf((d) =>
-      d.map((j) => (j.id === id ? { ...j, darurat: !j.darurat } : j)),
+      urutkanJobdesk(
+        d.map((j) => (j.id === id ? { ...j, darurat: !j.darurat } : j)),
+      ),
     )
   }
 
   function tambah() {
-    setDraf((d) => [...d, { id: uid(), label: '' }])
+    // Diurut ulang supaya baris baru tidak mendarat di bawah tugas yang sudah
+    // dicentang — ia belum dikerjakan, tempatnya di antrean, bukan di arsip.
+    setDraf((d) => urutkanJobdesk([...d, { id: uid(), label: '' }]))
   }
 
   /**
@@ -2843,10 +2872,12 @@ function JobdeskEditor({
    * mendesak bulan ini — owner menilainya ulang.
    */
   function salinBulanLalu() {
-    setDraf((d) => [
-      ...d,
-      ...bulanLalu.map((j) => ({ id: uid(), label: j.label })),
-    ])
+    setDraf((d) =>
+      urutkanJobdesk([
+        ...d,
+        ...bulanLalu.map((j) => ({ id: uid(), label: j.label })),
+      ]),
+    )
   }
 
   return (
@@ -2884,7 +2915,9 @@ function JobdeskEditor({
             type="button"
             className="btn-mini btn-mini-ghost"
             onClick={() => pindah(j.id, -1)}
-            disabled={i === 0}
+            disabled={
+              i === 0 || peringkatJobdesk(draf[i - 1]) !== peringkatJobdesk(j)
+            }
             title="Naikkan"
           >
             ↑
@@ -2893,7 +2926,10 @@ function JobdeskEditor({
             type="button"
             className="btn-mini btn-mini-ghost"
             onClick={() => pindah(j.id, 1)}
-            disabled={i === draf.length - 1}
+            disabled={
+              i === draf.length - 1 ||
+              peringkatJobdesk(draf[i + 1]) !== peringkatJobdesk(j)
+            }
             title="Turunkan"
           >
             ↓

@@ -425,6 +425,28 @@ export function Manajemen({
   const jobdeskSelesai = jobdesk.filter((j) => j.selesaiPada).length
   /** Yang ditandai darurat DAN belum dicentang — inilah antrean hari ini. */
   const jobdeskDarurat = jobdesk.filter((j) => j.darurat && !j.selesaiPada).length
+  /**
+   * Urutan TAMPIL, tiga kelompok: darurat yang belum beres di paling atas, lalu
+   * tugas biasa yang belum beres, lalu yang sudah dicentang di paling bawah.
+   * Begitu satu tugas beres ia berhenti merebut perhatian dan sisa antrean naik
+   * sendiri ke muka. Tugas darurat yang SUDAH dicentang ikut turun ke bawah —
+   * yang perlu dilihat manajer adalah yang belum dikerjakan.
+   *
+   * Di dalam tiap kelompok urutan susunan owner dipertahankan (`sort` stabil,
+   * ES2019), jadi prioritas manual di editor tetap berlaku: darurat naik satu
+   * blok, bukan diacak.
+   *
+   * Yang diurut cuma salinan untuk dirender; `jobdesk` yang tersimpan tetap
+   * memakai urutan susunan owner, supaya mencentang tidak diam-diam menulis
+   * ulang posisi baris dan editor tetap membuka daftar seperti yang ditulis.
+   */
+  function urutanJobdesk(j: JobdeskItem) {
+    if (j.selesaiPada) return 2
+    return j.darurat ? 0 : 1
+  }
+  const jobdeskTampil = [...jobdesk].sort(
+    (a, b) => urutanJobdesk(a) - urutanJobdesk(b),
+  )
   const [editJobdesk, setEditJobdesk] = useState(false)
 
   function simpanJobdesk(items: JobdeskItem[]) {
@@ -438,7 +460,8 @@ export function Manajemen({
    * Centang/batal satu jobdesk. Membatalkan centang MENGHAPUS jejak siapa &
    * kapan (bukan menyimpan `selesaiPada: undefined` di sebelah `selesaiOleh`
    * lama) supaya tidak ada baris yang tampak belum selesai tapi masih membawa
-   * nama pencentangnya.
+   * nama pencentangnya. Tanda `darurat` dibawa terus: itu penilaian owner atas
+   * tugasnya, bukan jejak pencentangan.
    */
   function toggleJobdesk(id: string) {
     simpanJobdesk(
@@ -446,7 +469,7 @@ export function Manajemen({
         j.id !== id
           ? j
           : j.selesaiPada
-            ? { id: j.id, label: j.label }
+            ? { id: j.id, label: j.label, darurat: j.darurat }
             : { ...j, selesaiPada: new Date().toISOString(), selesaiOleh: meId },
       ),
     )
@@ -1004,7 +1027,7 @@ export function Manajemen({
                     </p>
                   )}
                   <ul className="mgr-jobdesk">
-                    {jobdesk.map((j) => {
+                    {jobdeskTampil.map((j) => {
                       const oleh = j.selesaiOleh
                         ? data.employees.find((e) => e.id === j.selesaiOleh)?.nama
                         : undefined
@@ -1934,7 +1957,9 @@ function KesehatanOpsPanel({ ops }: { ops: Operasional }) {
                     <em>
                       {s.hariSisa != null
                         ? `± ${Math.floor(s.hariSisa)} hari lagi habis`
-                        : `ambang ${s.ambang} · belum ada data pemakaian`}
+                        : s.pemakaianHarian > 0
+                          ? `ambang ${s.ambang} ${s.satuan}`
+                          : `ambang ${s.ambang} · belum ada data pemakaian`}
                     </em>
                   </span>
                 </li>
@@ -1944,7 +1969,8 @@ function KesehatanOpsPanel({ ops }: { ops: Operasional }) {
               Urutan memakai <b>hari sisa</b> = stok ÷ rata-rata pemakaian{' '}
               {JENDELA_PEMAKAIAN} hari terakhir. Merah = kurang dari{' '}
               {HARI_SISA_MERAH} hari. Item tanpa riwayat pemakaian (mis. tinta)
-              tetap memakai ambang tetap.
+              tetap memakai ambang tetap. Frame sengaja tidak ikut hitungan hari
+              sisa — baru disebut kalau jenisnya benar-benar habis.
             </p>
           </>
         ))}

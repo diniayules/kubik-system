@@ -1,8 +1,21 @@
 # Pengingat harian manajer (Telegram)
 
-Sekali sehari sistem memeriksa apa yang masih menggantung, lalu mengirim satu
-pesan Telegram ke manajer. Yang sudah lewat ambang umur ditembuskan ke owner.
+Sistem memeriksa apa yang masih menggantung, lalu mengirim satu pesan Telegram
+ke manajer. Yang sudah lewat ambang umur ditembuskan ke owner.
 **Kalau tidak ada yang menunggak, tidak ada pesan yang dikirim.**
+
+Dua sesi, dua watak yang berbeda:
+
+| Sesi | Jam | Isinya | Kenapa |
+|---|---|---|---|
+| `pagi` | 08:00 WIB | seluruh antrean yang menumpuk | ada waktu sehari penuh untuk dibereskan |
+| `malam` | 21:00 WIB | hanya laporan hari ini yang belum ditutup | masih sempat ditulis malam itu juga |
+
+Sesi malam sengaja sesempit itu. Kalau ia ikut memuat seluruh antrean, manajer
+menerima dua pesan berisi hal yang sama tiap hari — dan dua pesan yang saling
+mengulang lebih cepat dibungkam daripada satu pesan yang jarang. Sesi malam juga
+tidak pernah mengeskalasi ke owner: umurnya nol, dan hal yang harinya belum habis
+belum pantas diadukan.
 
 Bagian-bagiannya:
 
@@ -45,15 +58,20 @@ Siapa pun yang memegang token bisa mengirim pesan atas nama bot itu.
 
 ## 4. Menjadwalkan
 
-Cara termudah — Dashboard Supabase → **Integrations → Cron** → *Create job*:
+Dashboard Supabase → **Integrations → Cron** → *Create job*. **Dua job**, dua
+jadwal, hanya body-nya yang berbeda:
 
-- **Name**: `notifikasi-manajer-harian`
-- **Schedule**: `0 1 * * *`  (01:00 UTC = **08:00 WIB**)
-- **Type**: `Supabase Edge Function` → pilih `notifikasi-manajer`
-- **Method**: `POST`, body `{}`
+| | Job pagi | Job malam |
+|---|---|---|
+| Name | `notifikasi-manajer-pagi` | `notifikasi-manajer-malam` |
+| Schedule | `0 1 * * *` (01:00 UTC = 08:00 WIB) | `0 14 * * *` (14:00 UTC = 21:00 WIB) |
+| Type | Supabase Edge Function → `notifikasi-manajer` | sama |
+| Method | `POST` | `POST` |
+| Body | `{}` | `{"sesi":"malam"}` |
 
-Jalur ini otomatis menyertakan header otorisasi, jadi tidak ada kunci yang perlu
-disalin ke mana pun.
+Cron Supabase memakai **UTC**, bukan waktu setempat — itu sebabnya 08:00 WIB
+ditulis `0 1` dan 21:00 WIB ditulis `0 14`. Jalur ini otomatis menyertakan header
+otorisasinya sendiri, jadi tidak ada kunci yang perlu disalin ke mana pun.
 
 <details>
 <summary>Alternatif lewat SQL (kalau UI Cron tidak dipakai)</summary>
@@ -95,7 +113,8 @@ select cron.schedule(
 Apa yang sedang menunggak, tanpa mengirim apa pun:
 
 ```sql
-select * from public.notifikasi_tunggakan();
+select * from public.notifikasi_tunggakan('pagi');
+select * from public.notifikasi_tunggakan('malam');
 ```
 
 Pesan apa saja yang sudah pernah dikirim:

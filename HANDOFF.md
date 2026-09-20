@@ -704,6 +704,14 @@ tidak ada pesan sama sekali. Sunyi = aman, jadi pesan yang masuk selalu berarti.
 `kode`-nya beda, sakelarnya tidak mengenai apa pun dan pemeriksaannya diam-diam
 selalu menyala.
 
+**Dua sesi (migration 0063).** `notifikasi_tunggakan(p_sesi)` — `'pagi'` memuat
+seluruh antrean yang menumpuk, `'malam'` HANYA laporan hari ini yang belum
+ditutup. Alasannya: cek laporan harian versi pagi memindai `current_date - 1` ke
+belakang, jadi ia mengabarkan laporan KEMARIN yang sudah tidak bisa diperbaiki —
+laporan kematian, bukan pengingat. Sesi malam sengaja sesempit itu supaya dua
+pesan sehari tidak saling mengulang, dan tidak pernah mengeskalasi ke owner
+(umurnya nol). Butuh DUA cron job; bedanya cuma body `{}` vs `{"sesi":"malam"}`.
+
 **STILL TODO (user action):** buat bot di @BotFather, pasang secret
 `TELEGRAM_BOT_TOKEN`, isi chat id di Pengaturan, jadwalkan cron 08:00 WIB.
 Langkah lengkapnya di `supabase/functions/notifikasi-manajer/README.md`.

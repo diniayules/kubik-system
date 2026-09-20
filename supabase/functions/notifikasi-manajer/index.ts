@@ -3,8 +3,16 @@
 // -------------------------------------------------------------
 // Mengirim satu pesan Telegram berisi apa saja yang masih menunggak,
 // dan menembuskannya ke owner untuk item yang sudah melewati ambang
-// umur. Dipanggil sekali sehari oleh pg_cron (lihat migration 0062),
-// atau sekali-sekali oleh tombol "Kirim uji coba" di Pengaturan.
+// umur. Dipanggil dua kali sehari oleh cron, atau sekali-sekali oleh
+// tombol "Kirim uji coba" di Pengaturan.
+//
+// DUA SESI, dua watak yang berbeda (lihat migration 0063):
+//   'pagi'  (08:00) — antrean yang menumpuk dari hari-hari sebelumnya,
+//                     punya waktu sehari penuh untuk dibereskan.
+//   'malam' (21:00) — hanya yang masih bisa diselamatkan malam itu juga:
+//                     laporan hari ini yang belum ditutup. TIDAK PERNAH
+//                     jadi eskalasi — harinya belum habis, jadi belum
+//                     pantas diadukan ke owner.
 //
 // Dua jalur masuk, dua cara memeriksa pemanggilnya:
 //   1. pg_cron  → `Authorization: Bearer <service role key>`. Header itu
@@ -92,6 +100,16 @@ function pesanManajer(items: Tunggakan[]): string {
   ].join('\n')
 }
 
+function pesanMalam(items: Tunggakan[]): string {
+  return [
+    `Sebelum tutup hari · ${tanggalPanjang()}`,
+    '',
+    ...items.map(baris),
+    '',
+    'Masih sempat diselesaikan malam ini di system.kubikbox.id.',
+  ].join('\n')
+}
+
 function pesanOwner(items: Tunggakan[], ambang: number): string {
   return [
     `Eskalasi Kubik · ${tanggalPanjang()}`,
@@ -151,6 +169,7 @@ Deno.serve(async (req) => {
 
     const body = await req.json().catch(() => null)
     const uji = body?.uji === true
+    const sesi: 'pagi' | 'malam' = body?.sesi === 'malam' ? 'malam' : 'pagi'
 
     // ---- Siapa yang memanggil ----
     const authHeader = req.headers.get('Authorization') ?? ''
@@ -194,7 +213,10 @@ Deno.serve(async (req) => {
       return json({ error: 'Chat ID manajer belum diisi' }, 400)
 
     // ---- Apa yang menunggak ----
-    const { data: rows, error: rpcErr } = await admin.rpc('notifikasi_tunggakan')
+    const { data: rows, error: rpcErr } = await admin.rpc(
+      'notifikasi_tunggakan',
+      { p_sesi: sesi },
+    )
     if (rpcErr) return json({ error: rpcErr.message }, 500)
 
     const semua = (rows ?? []) as Tunggakan[]
@@ -212,7 +234,7 @@ Deno.serve(async (req) => {
     }))
 
     async function catat(
-      jenis: 'harian' | 'eskalasi' | 'uji',
+      jenis: 'harian' | 'malam' | 'eskalasi' | 'uji',
       tujuan: string,
       isi: string,
       error: string | null,
@@ -229,16 +251,28 @@ Deno.serve(async (req) => {
 
     // ---- Pesan ke manajer ----
     const isiManajer =
-      items.length === 0 ? pesanUjiBersih() : pesanManajer(items)
+      items.length === 0
+        ? pesanUjiBersih()
+        : sesi === 'malam'
+          ? pesanMalam(items)
+          : pesanManajer(items)
     const errManajer = await kirimTelegram(token, chatManajer, isiManajer)
-    await catat(uji ? 'uji' : 'harian', chatManajer, isiManajer, errManajer)
+    await catat(
+      uji ? 'uji' : sesi === 'malam' ? 'malam' : 'harian',
+      chatManajer,
+      isiManajer,
+      errManajer,
+    )
 
     // ---- Tembusan eskalasi ke owner ----
     // Umur negatif tidak pernah ikut naik ke owner — lihat catatan di `baris`.
     // Ditulis tersurat, bukan disandarkan pada `ambang` yang minimal 1 di layar.
-    const lewatAmbang = items.filter(
-      (t) => t.umur_hari >= 0 && t.umur_hari >= ambang,
-    )
+    // Sesi malam berhenti di manajer: umurnya nol, dan hal yang harinya
+    // belum habis belum pantas diadukan ke owner.
+    const lewatAmbang =
+      sesi === 'malam'
+        ? []
+        : items.filter((t) => t.umur_hari >= 0 && t.umur_hari >= ambang)
     let errOwner: string | null = null
     if (lewatAmbang.length > 0 && chatOwner && !uji) {
       const isiOwner = pesanOwner(lewatAmbang, ambang)
@@ -250,6 +284,7 @@ Deno.serve(async (req) => {
     return json(
       {
         kirim: 1,
+        sesi,
         tunggakan: items.length,
         eskalasi: lewatAmbang.length,
         errorOwner: errOwner,

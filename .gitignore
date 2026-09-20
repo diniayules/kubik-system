@@ -8,3 +8,4 @@ dist
 .env.*.local
 .mcp.json
 .vercel
+supabase/.temp

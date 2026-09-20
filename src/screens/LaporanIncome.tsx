@@ -29,7 +29,8 @@ import {
 } from '../income'
 import { hariSeharusnyaKaryawan, hitungSlipGaji } from '../gaji'
 import { gajiPokokBerlaku } from '../bonusSosmed'
-import { hitungRekonsiliasiKas } from '../kas'
+import { bukuKasBulan, hitungRekonsiliasiKas } from '../kas'
+import type { BarisBukuKas, BukuKas } from '../kas'
 import { Icons } from '../components/Icons'
 import { IncomeEntryModal } from './IncomeEntryModal'
 import { Modal, ModalHead } from '../components/Modal'
@@ -287,8 +288,19 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
     [data, rekapAktif, hariIni],
   )
 
+  // Buku kas bulan terpilih — baris terakhirnya == kumulatif.*Diharapkan,
+  // karena keduanya dibangun dari daftar mutasi yang sama (kas.ts).
+  const buku = useMemo(
+    () => bukuKasBulan(data, rekapAktif, hariIni),
+    [data, rekapAktif, hariIni],
+  )
+
   const dompetDiharapkan = kumulatif.dompetDiharapkan
   const rekeningDiharapkan = kumulatif.rekeningDiharapkan
+  // Bulan yang saldo aktualnya belum pernah diisi TIDAK boleh tampil sebagai
+  // selisih merah raksasa: itu cuma berarti belum sempat dicek. `simpanSaldo`
+  // menghapus key saat kedua nilainya 0, jadi ketiadaan key = belum dicek.
+  const sudahDicek = data.saldoAktual[rekapAktif] != null
   const selisihDompet = dompetDraft - dompetDiharapkan
   const selisihRekening = rekeningDraft - rekeningDiharapkan
 
@@ -1098,13 +1110,15 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
             </span>
           </div>
 
-          {/* Rekonsiliasi: cek saldo dompet/rekening (kumulatif s/d bulan ini) */}
+          {/* Buku kas: tiap pergerakan uang bulan ini, lalu dicocokkan dengan
+              uang yang benar-benar ada. Menggantikan panel "cek saldo" lama
+              yang cuma menampilkan angka akhir tanpa cara menelusurinya. */}
           <div className="rekap-rekon">
             <div className="rekap-rekon-topbar">
               <div className="rekap-rekon-head">
-                {t('inc.rekap.rekonTitle')}
+                {t('inc.kas.title')}
                 <span className="rekap-rekon-sd">
-                  {t('inc.rekap.rekonSd', { bulan: labelBulan(rekapAktif) })}
+                  {t('inc.kas.sd', { bulan: labelBulan(rekapAktif) })}
                 </span>
               </div>
               <button
@@ -1116,9 +1130,38 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
               </button>
             </div>
 
-            {/* Saldo awal (opening balance) — diisi sekali saat sistem mulai. */}
-            <div className="rekap-rekon-awal">
-              <div className="rekap-rekon-awal-head">{t('inc.awal.title')}</div>
+            <div className="kas-buku-grid">
+              <BukuKasBlok
+                emoji="💵"
+                judul={t('inc.kas.dompet')}
+                buku={buku.dompet}
+                aktual={dompetDraft}
+                onAktual={setDompetDraft}
+                onSimpan={() => simpanSaldo({ dompet: dompetDraft })}
+                sudahDicek={sudahDicek}
+                selisih={selisihDompet}
+              />
+              <BukuKasBlok
+                emoji="🏦"
+                judul={t('inc.kas.rekening')}
+                buku={buku.rekening}
+                aktual={rekeningDraft}
+                onAktual={setRekeningDraft}
+                onSimpan={() => simpanSaldo({ rekening: rekeningDraft })}
+                sudahDicek={sudahDicek}
+                selisih={selisihRekening}
+              />
+            </div>
+
+            <p className="rekap-hint">{t('inc.kas.hint')}</p>
+
+            {/* Saldo awal berlaku untuk SELURUH riwayat, bukan bulan terpilih —
+                karena itu dipisah ke kaki panel, bukan disejajarkan dengan
+                angka bulanan di atasnya. */}
+            <details className="rekap-rekon-awal">
+              <summary className="rekap-rekon-awal-head">
+                {t('inc.awal.title')}
+              </summary>
               <div className="rekap-rekon-grid">
                 <label className="rekap-rekon-field">
                   <span>💵 {t('inc.awal.dompet')}</span>
@@ -1136,7 +1179,9 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
                   <RupiahInput
                     value={awalRekeningDraft}
                     onChange={setAwalRekeningDraft}
-                    onBlur={() => simpanSaldoAwal({ rekening: awalRekeningDraft })}
+                    onBlur={() =>
+                      simpanSaldoAwal({ rekening: awalRekeningDraft })
+                    }
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
                     }}
@@ -1144,77 +1189,7 @@ export function LaporanIncome({ data, setData, isAdmin, currentUserId }: Props) 
                 </label>
               </div>
               <div className="rekap-rekon-awal-hint">{t('inc.awal.hint')}</div>
-            </div>
-
-            {/* Total setoran tunai → rekening (kumulatif s/d bulan ini). */}
-            <div className="rekap-row rekap-rekon-setoran">
-              <span className="rekap-lbl">🔄 {t('inc.setor.total')}</span>
-              <span className="rekap-val">{formatRupiah(kumulatif.setoran)}</span>
-            </div>
-
-            <div className="rekap-rekon-grid">
-              <div className="rekap-rekon-item">
-                <label className="rekap-rekon-field">
-                  <span>💵 {t('inc.rekap.dompet')}</span>
-                  <RupiahInput
-                    value={dompetDraft}
-                    onChange={setDompetDraft}
-                    onBlur={() => simpanSaldo({ dompet: dompetDraft })}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
-                    }}
-                  />
-                </label>
-                <div className="rekap-rekon-expect">
-                  {t('inc.setor.dompetHarap', {
-                    rp: formatRupiah(dompetDiharapkan),
-                  })}
-                </div>
-                <div
-                  className={
-                    'rekap-rekon-status' +
-                    (selisihDompet === 0 ? ' is-ok' : ' is-off')
-                  }
-                >
-                  {selisihDompet === 0
-                    ? t('inc.rekap.balance')
-                    : t('inc.rekap.selisih', {
-                        rp: formatRupiah(selisihDompet),
-                      })}
-                </div>
-              </div>
-
-              <div className="rekap-rekon-item">
-                <label className="rekap-rekon-field">
-                  <span>🏦 {t('inc.rekap.rekening')}</span>
-                  <RupiahInput
-                    value={rekeningDraft}
-                    onChange={setRekeningDraft}
-                    onBlur={() => simpanSaldo({ rekening: rekeningDraft })}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
-                    }}
-                  />
-                </label>
-                <div className="rekap-rekon-expect">
-                  {t('inc.setor.rekeningHarap', {
-                    rp: formatRupiah(rekeningDiharapkan),
-                  })}
-                </div>
-                <div
-                  className={
-                    'rekap-rekon-status' +
-                    (selisihRekening === 0 ? ' is-ok' : ' is-off')
-                  }
-                >
-                  {selisihRekening === 0
-                    ? t('inc.rekap.balance')
-                    : t('inc.rekap.selisih', {
-                        rp: formatRupiah(selisihRekening),
-                      })}
-                </div>
-              </div>
-            </div>
+            </details>
           </div>
 
               <p className="rekap-hint">{t('inc.rekap.hint')}</p>
@@ -1512,6 +1487,149 @@ function SetoranRekeningModal({
         )}
       </div>
     </Modal>
+  )
+}
+
+// -------------------------------------------------------------------------
+// Satu buku kas (dompet ATAU rekening) untuk bulan terpilih: saldo yang dibawa
+// dari bulan sebelumnya, tiap mutasi bulan ini beserta saldo berjalan, lalu
+// baris "seharusnya" yang dicocokkan dengan uang yang benar-benar ada.
+//
+// Ini pengganti panel "cek saldo" lama. Bedanya: kalau saldonya tidak cocok,
+// penyebabnya bisa DITELUSURI per baris — dulu yang tampil cuma satu angka
+// akhir, jadi selisih Rp 320.000 tidak memberi petunjuk apa pun.
+// -------------------------------------------------------------------------
+function BukuKasBlok({
+  emoji,
+  judul,
+  buku,
+  aktual,
+  onAktual,
+  onSimpan,
+  sudahDicek,
+  selisih,
+}: {
+  emoji: string
+  judul: string
+  buku: BukuKas
+  aktual: number
+  onAktual: (n: number) => void
+  onSimpan: () => void
+  /** Bulan ini pernah diisi saldo aktualnya? Kalau belum, selisih disembunyikan. */
+  sudahDicek: boolean
+  selisih: number
+}) {
+  const { t, lang } = useLang()
+
+  const tglPendek = (tanggal: string) => {
+    const [y, m, d] = tanggal.split('-').map(Number)
+    return new Date(y, m - 1, d).toLocaleDateString(
+      lang === 'en' ? 'en-US' : 'id-ID',
+      { day: '2-digit', month: 'short' },
+    )
+  }
+
+  const ketBaris = (b: BarisBukuKas) => {
+    switch (b.jenis) {
+      case 'income':
+        return t('inc.kas.barisIncome')
+      case 'setoran':
+        // Satu setoran menghasilkan dua baris; tandanya yang membedakan sisi
+        // mana yang sedang dilihat.
+        return b.nilai < 0
+          ? t('inc.kas.barisSetoranKeluar')
+          : t('inc.kas.barisSetoranMasuk')
+      case 'pengeluaran':
+        return t('inc.kas.barisPengeluaran')
+      case 'gaji':
+        return t('inc.kas.barisGaji')
+    }
+  }
+
+  return (
+    <div className="kas-buku">
+      <div className="kas-buku-head">
+        <span className="kas-buku-emoji">{emoji}</span> {judul}
+      </div>
+
+      <table className="kas-buku-tabel">
+        <thead>
+          <tr>
+            <th>{t('inc.kas.kolTgl')}</th>
+            <th>{t('inc.kas.kolKet')}</th>
+            <th className="kas-num">{t('inc.kas.kolNilai')}</th>
+            <th className="kas-num">{t('inc.kas.kolSaldo')}</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr className="kas-buku-awal">
+            <td />
+            <td colSpan={2}>{t('inc.kas.masuk')}</td>
+            <td className="kas-num">{formatRupiah(buku.saldoMasuk)}</td>
+          </tr>
+
+          {buku.baris.length === 0 ? (
+            <tr className="kas-buku-kosong">
+              <td colSpan={4}>{t('inc.kas.kosong')}</td>
+            </tr>
+          ) : (
+            buku.baris.map((b) => (
+              <tr key={b.id}>
+                <td className="kas-buku-tgl">{tglPendek(b.tanggal)}</td>
+                <td className="kas-buku-ket">
+                  {ketBaris(b)}
+                  {b.detail && <em> · {b.detail}</em>}
+                </td>
+                <td
+                  className={
+                    'kas-num ' + (b.nilai < 0 ? 'kas-keluar' : 'kas-masuk')
+                  }
+                >
+                  {b.nilai < 0 ? '−' : '+'}
+                  {formatRupiah(Math.abs(b.nilai))}
+                </td>
+                <td className="kas-num kas-buku-saldo">
+                  {formatRupiah(b.saldo)}
+                </td>
+              </tr>
+            ))
+          )}
+        </tbody>
+        <tfoot>
+          <tr>
+            <td colSpan={3}>{t('inc.kas.seharusnya')}</td>
+            <td className="kas-num">{formatRupiah(buku.saldoAkhir)}</td>
+          </tr>
+        </tfoot>
+      </table>
+
+      <label className="rekap-rekon-field kas-buku-cek">
+        <span>{t('inc.kas.aktual')}</span>
+        <RupiahInput
+          value={aktual}
+          onChange={onAktual}
+          onBlur={onSimpan}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+          }}
+        />
+      </label>
+
+      <div
+        className={
+          'rekap-rekon-status' +
+          (!sudahDicek ? ' is-idle' : selisih === 0 ? ' is-ok' : ' is-off')
+        }
+      >
+        {!sudahDicek
+          ? t('inc.kas.belumDicek')
+          : selisih === 0
+            ? t('inc.kas.cocok')
+            : selisih > 0
+              ? t('inc.kas.lebih', { rp: formatRupiah(selisih) })
+              : t('inc.kas.kurang', { rp: formatRupiah(-selisih) })}
+      </div>
+    </div>
   )
 }
 

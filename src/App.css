@@ -458,6 +458,34 @@
 .rekap-rekon-awal { padding: 12px 14px; margin-bottom: 12px; border-radius: var(--radius-sm); background: var(--surface-2); border: 1.5px dashed var(--line); }
 .rekap-rekon-awal-head { font-size: 12.5px; font-weight: 800; color: var(--ink); margin-bottom: 10px; }
 .rekap-rekon-awal-hint { font-size: 11px; font-weight: 600; color: var(--ink-soft); line-height: 1.5; margin-top: 8px; }
+.rekap-rekon-status.is-idle { color: var(--ink-soft); font-weight: 600; }
+/* Saldo awal kini <details> di kaki panel — ringkasannya jadi tombol buka. */
+.rekap-rekon-awal { margin: 14px 0 0; }
+.rekap-rekon-awal > summary { cursor: pointer; list-style: none; }
+.rekap-rekon-awal > summary::-webkit-details-marker { display: none; }
+.rekap-rekon-awal > summary::before { content: '▸ '; color: var(--ink-soft); }
+.rekap-rekon-awal[open] > summary::before { content: '▾ '; }
+
+/* Buku kas: satu tabel mutasi per sumber dana (dompet & rekening) */
+.kas-buku-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 760px) { .kas-buku-grid { grid-template-columns: 1fr; } }
+.kas-buku { display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; border-radius: var(--radius-sm); background: var(--surface-2); border: 1.5px solid var(--line); }
+.kas-buku-head { font-size: 12.5px; font-weight: 800; color: var(--ink); }
+.kas-buku-emoji { margin-right: 2px; }
+.kas-buku-tabel { width: 100%; border-collapse: collapse; font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.kas-buku-tabel th { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-soft); text-align: left; padding: 0 0 6px; border-bottom: 1.5px solid var(--line); }
+.kas-buku-tabel td { padding: 5px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+.kas-buku-tabel .kas-num { text-align: right; white-space: nowrap; padding-left: 8px; }
+.kas-buku-tgl { white-space: nowrap; color: var(--ink-soft); font-weight: 700; padding-right: 8px; }
+.kas-buku-ket { font-weight: 600; color: var(--ink); }
+.kas-buku-ket em { font-style: normal; font-weight: 600; color: var(--ink-soft); }
+.kas-buku-saldo { font-weight: 700; color: var(--ink); }
+.kas-masuk { color: var(--mint-deep); font-weight: 700; }
+.kas-keluar { color: var(--pink); font-weight: 700; }
+.kas-buku-awal td { color: var(--ink-soft); font-weight: 700; }
+.kas-buku-kosong td { padding: 10px 0; color: var(--ink-soft); font-weight: 600; text-align: center; }
+.kas-buku-tabel tfoot td { padding-top: 8px; border-bottom: none; font-weight: 800; color: var(--ink); font-size: 12.5px; }
+.kas-buku-cek { margin-top: 2px; }
 
 /* Slip gaji: input gaji pokok */
 .gaji-pokok-field { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }

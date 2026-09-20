@@ -43,14 +43,20 @@ import {
 import { isOwner as isAkunOwner, isPengelola } from './lib/roles'
 
 // Ambang "stok menipis" — mengikuti badge `.tipis` di layar Inventaris
-// (kertas & frame < 10, tinta < 2). Amplop belum punya padanan di sana.
+// (kertas < 10, tinta < 2). Amplop belum punya padanan di sana.
 //
 // Ambang tetap ini hanya CADANGAN: begitu sebuah item punya riwayat pemakaian,
 // penilaiannya pindah ke "berapa hari lagi habis" (lihat `operasional()`) —
 // 10 lembar kertas yang laku 1 lembar/hari tidak mendesak, sedangkan 10 lembar
 // yang laku 5/hari harus dibeli hari ini juga.
+//
+// FRAME adalah pengecualian, dan sengaja: frame tidak harus selalu di-restock,
+// jadi dia tidak ikut aturan "berapa hari lagi habis" sama sekali (lihat
+// `operasional()`) dan ambangnya cuma 1 — baru disebut setelah benar-benar
+// habis. Dengan ambang 10 seperti dulu, hampir semua jenis frame selalu ada di
+// daftar, dan daftar yang selalu penuh berhenti dibaca.
 export const AMBANG_KERTAS = 10
-export const AMBANG_FRAME = 10
+export const AMBANG_FRAME = 1
 export const AMBANG_TINTA = 2
 export const AMBANG_AMPLOP = 50
 
@@ -661,8 +667,14 @@ function nilaiStok(
   satuan: string,
   ambang: number,
   perHari: number,
+  /**
+   * Abaikan hari sisa, pakai ambang tetap walau riwayat pemakaiannya ada.
+   * Dipakai frame: barangnya tidak harus selalu tersedia, jadi "akan habis
+   * dalam 9 hari" bukan alasan untuk masuk daftar belanja minggu ini.
+   */
+  hanyaAmbang = false,
 ): StokKritis | null {
-  if (perHari > 0) {
+  if (perHari > 0 && !hanyaAmbang) {
     const hariSisa = stok / perHari
     if (hariSisa >= HARI_SISA_KUNING) return null
     return {
@@ -676,15 +688,17 @@ function nilaiStok(
       dasar: 'pemakaian',
     }
   }
-  // Tanpa data pemakaian (mis. tinta, atau frame yang belum pernah terjual)
-  // ambang tetap tetap berlaku — lebih baik peringatan kasar daripada diam.
+  // Tanpa data pemakaian (mis. tinta) ambang tetap tetap berlaku — lebih baik
+  // peringatan kasar daripada diam.
   if (stok >= ambang) return null
   return {
     nama,
     stok,
     satuan,
     ambang,
-    pemakaianHarian: 0,
+    // Tetap dicatat apa adanya: untuk frame, angkanya ada tapi sengaja tidak
+    // dipakai menilai, dan layar membedakan keduanya lewat angka ini.
+    pemakaianHarian: perHari,
     hariSisa: null,
     tingkat: stok === 0 ? 'merah' : 'kuning',
     dasar: 'ambang',
@@ -704,8 +718,12 @@ export function operasional(
   for (const k of data.stokKertas) {
     tambah(nilaiStok(`Kertas ${k.nama}`, k.stok, 'lembar', AMBANG_KERTAS, pakai.kertas[k.id] ?? 0))
   }
+  // Frame: ambang tetap saja (lihat AMBANG_FRAME). Satu-satunya yang membuatnya
+  // masuk daftar adalah benar-benar habis.
   for (const f of data.stokFrame) {
-    tambah(nilaiStok(`Frame ${f.nama}`, f.stok, 'pcs', AMBANG_FRAME, pakai.frame[f.id] ?? 0))
+    tambah(
+      nilaiStok(`Frame ${f.nama}`, f.stok, 'pcs', AMBANG_FRAME, pakai.frame[f.id] ?? 0, true),
+    )
   }
   // Tinta tidak punya jejak pemakaian per laporan, jadi tetap ambang manual.
   for (const t of data.stokTinta) {

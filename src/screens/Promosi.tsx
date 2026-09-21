@@ -325,6 +325,7 @@ export function Promosi({ data, setData, isAdmin, currentUserId }: Props) {
           onEdit={bukaEdit}
           onHapus={hapus}
           onUnggah={setUnggahUntuk}
+          onTahapan={ubahTahapan}
         />
       )}
 
@@ -513,7 +514,7 @@ function AdminView({
 }
 
 // ======================================================================
-// Karyawan: promo tayang (read-only) + ide yang ia usulkan
+// Karyawan: tugasnya sebagai PIC + promo tayang + ide yang ia usulkan
 // ======================================================================
 function KaryawanView({
   promos,
@@ -523,6 +524,7 @@ function KaryawanView({
   onEdit,
   onHapus,
   onUnggah,
+  onTahapan,
 }: {
   promos: PromoProgram[]
   /** Untuk menampilkan nama PIC — operator perlu tahu kartu mana tugasnya. */
@@ -532,14 +534,74 @@ function KaryawanView({
   onEdit: (p: PromoProgram) => void
   onHapus: (p: PromoProgram) => void
   onUnggah: (p: PromoProgram) => void
+  onTahapan: (p: PromoProgram, kunci: TahapKonten) => void
 }) {
   const { t } = useLang()
-  const tayang = promos.filter((p) => p.status === 'disetujui' && TAHAP_KARYAWAN.includes(p.tahap))
-  // Ide milik sendiri yang masih menunggu (bisa diedit/hapus selama menunggu).
-  const ideSaya = promos.filter((p) => p.dibuatOleh === currentUserId && p.status === 'menunggu')
+  /**
+   * Kartu yang jadi TUGASNYA. Ditaruh paling atas karena inilah satu-satunya
+   * bagian layar ini yang menuntut pekerjaan darinya — sisanya kabar. RLS 0064
+   * yang mengirimkannya (`pic = auth.uid()`), termasuk yang masih di tahap
+   * 'rencana'; sebelum itu tugas baru kelihatan setelah kartunya Coming Soon.
+   */
+  const tugasSaya = promos
+    .filter((p) => p.pic === currentUserId)
+    .sort(
+      (a, b) =>
+        // Kartu yang sudah ditutup turun ke bawah, sisanya menurut deadline —
+        // tanpa deadline dianggap paling belakang.
+        Number(a.tahap === 'selesai') - Number(b.tahap === 'selesai') ||
+        (a.deadline ?? '9999').localeCompare(b.deadline ?? '9999'),
+    )
+  // Promo tim yang tayang. Kartu miliknya sendiri — usulannya atau tugasnya —
+  // dikeluarkan dari sini supaya tidak muncul dua kali.
+  const tayang = promos.filter(
+    (p) =>
+      p.status === 'disetujui' &&
+      TAHAP_KARYAWAN.includes(p.tahap) &&
+      p.dibuatOleh !== currentUserId &&
+      p.pic !== currentUserId,
+  )
+  /**
+   * SEMUA kartu yang ia usulkan, apa pun tahap dan statusnya — bukan hanya yang
+   * masih menunggu. Tanpa ini ide yang sudah di-ACC seolah lenyap: kartunya
+   * pindah ke tahap 'rencana' yang tidak tayang, lalu muncul kembali sebagai
+   * promo tim tanpa jejak bahwa itu idenya. RLS 0035 memang sudah mengirim
+   * kartu miliknya sendiri ke klien (`created_by = auth.uid()`) di tahap mana
+   * pun, jadi yang kurang selama ini murni saringan di layar ini.
+   */
+  const milikSaya = promos
+    // Kartu yang sekaligus tugasnya sudah tampil di atas — satu kartu, satu tempat.
+    .filter((p) => p.dibuatOleh === currentUserId && p.pic !== currentUserId)
+    .sort((a, b) => TAHAP_ORDER.indexOf(a.tahap) - TAHAP_ORDER.indexOf(b.tahap))
 
   return (
     <>
+      {/* Tugas saya sebagai PIC — paling atas, sebelum kabar promo tim. */}
+      {tugasSaya.length > 0 && (
+        <>
+          <div className="section-head">
+            <h2>
+              {t('prom.tugasAnda')} <span className="count-badge">{tugasSaya.length}</span>
+            </h2>
+          </div>
+          <p className="promo-milik-nota">{t('prom.tugasAnda.nota')}</p>
+          <div className="promo-list">
+            {tugasSaya.map((p) => (
+              <PromoRow
+                key={p.id}
+                p={p}
+                namaById={namaById}
+                isAdmin={false}
+                currentUserId={currentUserId}
+                onUnggah={onUnggah}
+                onTahapan={onTahapan}
+                actions={<DownloadDesainBtn p={p} />}
+              />
+            ))}
+          </div>
+        </>
+      )}
+
       <div className="section-head">
         <h2>
           {t('prom.tahap.berjalan')} & {t('prom.tahap.comingsoon')}{' '}
@@ -550,7 +612,9 @@ function KaryawanView({
         </button>
       </div>
 
-      {tayang.length === 0 ? (
+      {/* Kotak kosong hanya kalau benar-benar tidak ada apa pun untuk dilihat:
+          punya kartu sendiri yang sedang berjalan bukan "belum ada promo". */}
+      {tayang.length === 0 && milikSaya.length === 0 && tugasSaya.length === 0 ? (
         <div className="emp-empty">
           <div className="ee-emoji">📣</div>
           <h3>{t('page.promosi.title')}</h3>
@@ -589,16 +653,17 @@ function KaryawanView({
         })
       )}
 
-      {/* Ide yang saya usulkan (menunggu ACC) */}
-      {ideSaya.length > 0 && (
+      {/* Ide yang saya usulkan — dari menunggu ACC sampai kartunya ditutup */}
+      {milikSaya.length > 0 && (
         <>
           <div className="section-head">
             <h2>
-              {t('prom.badge.ideAnda')} <span className="count-badge">{ideSaya.length}</span>
+              {t('prom.badge.ideAnda')} <span className="count-badge">{milikSaya.length}</span>
             </h2>
           </div>
+          <p className="promo-milik-nota">{t('prom.ideAnda.nota')}</p>
           <div className="promo-list">
-            {ideSaya.map((p) => (
+            {milikSaya.map((p) => (
               <PromoRow
                 key={p.id}
                 p={p}
@@ -609,12 +674,18 @@ function KaryawanView({
                 actions={
                   <>
                     <DownloadDesainBtn p={p} />
-                    <button type="button" className="btn btn--ghost btn-mini-ghost" onClick={() => onEdit(p)}>
-                      <Icons.pencil /> {t('prom.edit')}
-                    </button>
-                    <button type="button" className="emp-x" onClick={() => onHapus(p)} title={t('prom.hapus')}>
-                      <Icons.trash />
-                    </button>
+                    {/* Edit & hapus hanya selama ide belum di-ACC — sesudah itu
+                        kartunya milik pengelola (policy UPDATE/DELETE 0035). */}
+                    {p.status === 'menunggu' && (
+                      <>
+                        <button type="button" className="btn btn--ghost btn-mini-ghost" onClick={() => onEdit(p)}>
+                          <Icons.pencil /> {t('prom.edit')}
+                        </button>
+                        <button type="button" className="emp-x" onClick={() => onHapus(p)} title={t('prom.hapus')}>
+                          <Icons.trash />
+                        </button>
+                      </>
+                    )}
                   </>
                 }
               />
@@ -657,6 +728,10 @@ function PromoRow({
   const { t } = useLang()
   const [open, setOpen] = useState(false)
   const nama = p.dibuatOleh ? namaById?.get(p.dibuatOleh) : undefined
+  // Kartu ini idenya sendiri (dilihat sebagai operator) — ia berhak tahu sudah
+  // sampai mana kartunya berjalan, meski tahapnya bukan tahap yang tayang.
+  const milikku = !isAdmin && p.dibuatOleh === currentUserId
+  const posisiTahap = TAHAP_ORDER.indexOf(p.tahap)
   const gambar = terlihat(gambarKartu(p), isAdmin, currentUserId)
   const tautan = terlihat(tautanKartu(p), isAdmin, currentUserId)
   const gambarAcc = gambar.filter(sudahAcc)
@@ -793,6 +868,28 @@ function PromoRow({
                 </span>
               </div>
             )}
+          {/* Perjalanan kartu, hanya untuk pengusulnya. Bukan panel baru: ia
+              menjawab pertanyaan yang selama ini tidak terjawab di layar
+              operator — "ide saya jadi apa?". Tahapnya digerakkan pengelola. */}
+          {milikku && (
+            <div className="promo-jejak">
+              <span className="promo-jejak-lbl">{t('prom.jejak.lbl')}</span>
+              <div className="promo-jejak-list">
+                {TAHAP_ORDER.map((th, i) => (
+                  <span
+                    key={th}
+                    className={
+                      'promo-jejak-chip' +
+                      (i < posisiTahap ? ' is-lewat' : i === posisiTahap ? ' is-kini' : '')
+                    }
+                  >
+                    {i <= posisiTahap ? '✓' : '○'} {t(`prom.tahap.${th}`)}
+                  </span>
+                ))}
+              </div>
+              <span className="promo-jejak-nota">{t('prom.jejak.nota')}</span>
+            </div>
+          )}
           {p.deskripsi ? (
             <div className="promo-card-desc">{p.deskripsi}</div>
           ) : (

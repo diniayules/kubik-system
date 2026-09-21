@@ -4396,12 +4396,34 @@
   font-size: 11.5px; font-weight: 700; color: var(--mint-deep);
   flex: 0 0 auto; font-variant-numeric: tabular-nums;
 }
+.mgr-jobdesk-jejak.is-telat { color: var(--ink-soft); }
+
+/* Tenggat tiap baris. Netral selama masih ada waktu (ia cuma tanggal, bukan
+   peringatan), menyala kuning pada hari-H dan merah muda begitu lewat —
+   warnanya baru bicara saat tanggalnya benar-benar menuntut sesuatu. */
+.mgr-jobdesk-tenggat {
+  flex: 0 0 auto; padding: 2px 9px; border-radius: var(--radius-pill);
+  border: 1.5px solid var(--line); background: var(--surface);
+  font-size: 11.5px; font-weight: 800; color: var(--ink-soft);
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.mgr-jobdesk-tenggat.is-hari-ini {
+  background: var(--yellow-bg); color: var(--ink);
+  border-color: color-mix(in srgb, var(--yellow) 55%, transparent);
+}
+.mgr-jobdesk-tenggat.is-telat {
+  background: var(--pink); color: #fff; border-color: var(--pink);
+}
+.mgr-jobdesk-tenggat.is-done {
+  background: transparent; color: var(--ink-soft); text-decoration: line-through;
+}
 
 /* Tugas darurat: yang belum beres diberi pita merah muda di kiri baris,
    dan labelnya didahului chip "Darurat". Chip-nya tetap ada setelah
    dicentang (jejak bahwa tugas ini sempat mendesak), tapi warna barisnya
    menyerah pada .is-done — yang sudah beres tidak perlu berteriak lagi. */
-.mgr-jobdesk-row.is-darurat {
+.mgr-jobdesk-row.is-darurat,
+.mgr-jobdesk-row.is-telat {
   background: var(--pink-bg);
   border-color: color-mix(in srgb, var(--pink) 40%, transparent);
   box-shadow: inset 3px 0 0 var(--pink);
@@ -4444,7 +4466,7 @@
   padding: 14px; background: var(--surface-2);
   display: flex; flex-direction: column; gap: 10px;
 }
-.mgr-jobdesk-edit-row { display: flex; align-items: center; gap: 8px; }
+.mgr-jobdesk-edit-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .mgr-jobdesk-num {
   font-size: 13px; font-weight: 800; color: var(--ink-soft);
   flex: 0 0 auto; min-width: 20px;
@@ -4455,6 +4477,16 @@
   color: var(--ink); font-size: 13.5px; font-weight: 600;
 }
 .mgr-jobdesk-edit-row input[type='text']:focus-visible { outline: none; box-shadow: var(--ring); }
+/* Kolom tanggal: selebar isinya saja, dan label teksnya tetap boleh menyusut
+   (min-width: 0 di atas) supaya baris tidak pecah sebelum layar benar-benar
+   sempit. Di bawah 720px seluruh barisnya memang dibiarkan membungkus. */
+.mgr-jobdesk-edit-row input[type='date'] {
+  flex: 0 0 auto; padding: 7px 9px; border-radius: var(--radius-sm);
+  border: 1.5px solid var(--line); background: var(--surface);
+  color: var(--ink); font-size: 12.5px; font-weight: 700;
+  font-family: inherit; font-variant-numeric: tabular-nums;
+}
+.mgr-jobdesk-edit-row input[type='date']:focus-visible { outline: none; box-shadow: var(--ring); }
 .mgr-jobdesk-edit-aksi { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 2px; }
 .mgr-jobdesk-edit-aksi .spacer { flex: 1; }
 

@@ -916,13 +916,23 @@ export type JobdeskItem = {
   id: string
   label: string
   /**
-   * Tugas ini DARURAT — harus dikerjakan sekarang, tidak boleh menunggu akhir
-   * bulan. Kosong/false = tugas biasa, tenggatnya akhir periode.
+   * Tenggat tugas ini, `YYYY-MM-DD`. Selalu di dalam periode jobdesk-nya.
    *
-   * Sengaja boolean, bukan tanggal tenggat per item: yang dibutuhkan owner
-   * cuma memisahkan "kerjakan hari ini" dari "beres sebelum tutup bulan".
-   * Tenggat per tanggal menuntut owner mengisi kalender tiap baris — biaya
-   * yang tidak sepadan untuk daftar sepanjang lima sampai sepuluh tugas.
+   * Kosong = tenggatnya akhir periode. Itu memang arti default sebuah jobdesk
+   * bulanan, jadi baris yang disusun sebelum kolom ini ada tetap bermakna
+   * benar tanpa owner perlu mengisi ulang satu per satu.
+   *
+   * Inilah urutan antrean manajer: yang paling dekat jatuh temponya di atas
+   * (lihat `urutkanJobdesk` di layar Manajemen).
+   */
+  tenggat?: string
+  /**
+   * Tugas ini DARURAT — naik ke atas antrean APA PUN tenggatnya.
+   *
+   * Tetap ada di sebelah `tenggat` karena keduanya menjawab hal berbeda:
+   * tenggat adalah kapan tugas harus beres, `darurat` adalah penilaian owner
+   * bahwa tugas ini menyela yang lain sekarang juga — mis. keluhan pelanggan
+   * yang sedang berjalan, yang tanggalnya tidak menggambarkan mendesaknya.
    */
   darurat?: boolean
   /** Kapan dicentang (ISO). Kosong/undefined = belum selesai. */

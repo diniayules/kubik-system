@@ -185,16 +185,51 @@ function peringkatJobdesk(j: JobdeskItem): 0 | 1 | 2 {
 }
 
 /**
+ * Kunci urut tenggat. Tanpa tanggal = akhir periode (lihat [JobdeskItem]),
+ * jadi ia jatuh paling belakang di antara tanggal-tanggal bulan itu — persis
+ * arti "boleh beres sampai tutup bulan". Sentinelnya dipakai supaya fungsi ini
+ * tidak perlu tahu periode mana yang sedang dibuka.
+ */
+function kunciTenggat(j: JobdeskItem): string {
+  return j.tenggat || '9999-12-31'
+}
+
+/**
  * Satu-satunya aturan urutan jobdesk, dipakai DUA tempat: daftar yang dibaca
  * manajer dan penyusun milik owner. Keduanya wajib memanggil ini — kalau
  * editor memakai urutan mentah sementara layar mengurutkan, owner menyusun
  * daftar yang tidak pernah dilihat manajer seperti itu.
  *
- * `sort` stabil (ES2019), jadi urutan manual di dalam tiap kelompok tetap utuh:
- * tanda darurat menaikkan satu blok, bukan mengacak isinya.
+ * Dua tingkat: kelompok dulu (darurat → biasa → selesai), lalu tenggat
+ * terdekat di dalam kelompoknya. Karena itu tugas yang sudah lewat tenggat
+ * otomatis duduk paling atas blok tugas biasa — tanpa aturan "telat" sendiri
+ * yang harus ikut berubah tiap hari.
+ *
+ * `sort` stabil (ES2019), jadi urutan manual antar baris BERTENGGAT SAMA tetap
+ * utuh: tanggal menaikkan baris, bukan mengacak sisanya.
  */
 function urutkanJobdesk(items: JobdeskItem[]): JobdeskItem[] {
-  return [...items].sort((a, b) => peringkatJobdesk(a) - peringkatJobdesk(b))
+  return [...items].sort(
+    (a, b) =>
+      peringkatJobdesk(a) - peringkatJobdesk(b) ||
+      kunciTenggat(a).localeCompare(kunciTenggat(b)),
+  )
+}
+
+/**
+ * Dua baris boleh saling ditukar manual? Hanya kalau [urutkanJobdesk] tidak
+ * punya pendapat tentang urutan keduanya — kelompok sama DAN tenggat sama.
+ * Kalau tidak, tukarannya akan dibatalkan diam-diam saat daftar diurut ulang,
+ * dan owner menyimpan susunan yang tidak pernah dilihat manajer.
+ */
+function sekelompokJobdesk(a: JobdeskItem, b: JobdeskItem): boolean {
+  return peringkatJobdesk(a) === peringkatJobdesk(b) && kunciTenggat(a) === kunciTenggat(b)
+}
+
+/** "2026-09" → "2026-09-30". Tenggat default jobdesk tanpa tanggal. */
+function akhirPeriode(monthKey: string): string {
+  const [y, m] = monthKey.split('-').map(Number)
+  return todayKey(new Date(y, m, 0))
 }
 
 /** Jam dinding sekarang sebagai menit sejak tengah malam. */
@@ -471,6 +506,19 @@ export function Manajemen({
   const jobdeskSelesai = jobdesk.filter((j) => j.selesaiPada).length
   /** Yang ditandai darurat DAN belum dicentang — inilah antrean hari ini. */
   const jobdeskDarurat = jobdesk.filter((j) => j.darurat && !j.selesaiPada).length
+  /**
+   * Tenggat yang dipakai sebuah baris: tanggalnya sendiri, atau akhir periode
+   * kalau owner tidak mengisi. Dihitung di sini (bukan di [kunciTenggat])
+   * karena hanya layar ini yang tahu periode mana yang sedang dibuka.
+   */
+  const tenggatBaris = (j: JobdeskItem) => j.tenggat || akhirPeriode(monthKey)
+  /**
+   * Lewat tenggat & belum dicentang. Untuk periode yang sudah lewat, seluruh
+   * sisa tugas memang masuk hitungan ini — itu bukan bug, itu rapornya.
+   */
+  const jobdeskTelat = jobdesk.filter(
+    (j) => !j.selesaiPada && tenggatBaris(j) < hariIni,
+  ).length
   /** Lihat [urutkanJobdesk]. Yang diurut salinan; `jobdesk` tersimpan apa adanya. */
   const jobdeskTampil = urutkanJobdesk(jobdesk)
   const [editJobdesk, setEditJobdesk] = useState(false)
@@ -486,8 +534,8 @@ export function Manajemen({
    * Centang/batal satu jobdesk. Membatalkan centang MENGHAPUS jejak siapa &
    * kapan (bukan menyimpan `selesaiPada: undefined` di sebelah `selesaiOleh`
    * lama) supaya tidak ada baris yang tampak belum selesai tapi masih membawa
-   * nama pencentangnya. Tanda `darurat` dibawa terus: itu penilaian owner atas
-   * tugasnya, bukan jejak pencentangan.
+   * nama pencentangnya. Tenggat & tanda `darurat` dibawa terus: keduanya
+   * penetapan owner atas tugasnya, bukan jejak pencentangan.
    */
   function toggleJobdesk(id: string) {
     simpanJobdesk(
@@ -495,7 +543,7 @@ export function Manajemen({
         j.id !== id
           ? j
           : j.selesaiPada
-            ? { id: j.id, label: j.label, darurat: j.darurat }
+            ? { id: j.id, label: j.label, tenggat: j.tenggat, darurat: j.darurat }
             : { ...j, selesaiPada: new Date().toISOString(), selesaiOleh: meId },
       ),
     )
@@ -1015,8 +1063,8 @@ export function Manajemen({
               judul="Jobdesk Manajer"
               sub={
                 isOwner
-                  ? `Tugas yang Anda tetapkan untuk ${labelBulan(monthKey)}. Manajer mencentangnya sendiri di layar ini. Tandai "darurat" untuk yang tidak boleh menunggu akhir bulan.`
-                  : `Tugas dari owner untuk ${labelBulan(monthKey)}. Bertanda "darurat" dikerjakan lebih dulu; sisanya boleh beres sampai akhir bulan.`
+                  ? `Tugas yang Anda tetapkan untuk ${labelBulan(monthKey)}, lengkap dengan tenggatnya. Manajer mencentangnya sendiri di layar ini; tenggat terdekat naik ke atas.`
+                  : `Tugas dari owner untuk ${labelBulan(monthKey)}. Urutannya mengikuti tenggat — yang paling dekat jatuh temponya dikerjakan lebih dulu.`
               }
               badge={
                 jobdesk.length > 0
@@ -1041,6 +1089,7 @@ export function Manajemen({
                   awal={jobdesk}
                   bulanLalu={jobdeskLalu}
                   labelBulanLalu={labelBulan(bulanSebelumnya(monthKey))}
+                  monthKey={monthKey}
                   onSimpan={(items) => {
                     simpanJobdesk(items)
                     setEditJobdesk(false)
@@ -1068,10 +1117,17 @@ export function Manajemen({
                       {jobdeskSelesai} dari {jobdesk.length} selesai
                     </span>
                   </div>
-                  {jobdeskDarurat > 0 && (
+                  {/* Satu baris peringatan, bukan dua kotak merah bertumpuk:
+                      telat & darurat sama-sama berarti "dahulukan ini". */}
+                  {(jobdeskTelat > 0 || jobdeskDarurat > 0) && (
                     <p className="mgr-jobdesk-alarm">
-                      {jobdeskDarurat} tugas darurat belum beres — kerjakan
-                      sebelum yang lain.
+                      {[
+                        jobdeskTelat > 0 ? `${jobdeskTelat} tugas lewat tenggat` : null,
+                        jobdeskDarurat > 0 ? `${jobdeskDarurat} tugas darurat belum beres` : null,
+                      ]
+                        .filter(Boolean)
+                        .join(' · ')}{' '}
+                      — kerjakan sebelum yang lain.
                     </p>
                   )}
                   <ul className="mgr-jobdesk">
@@ -1079,6 +1135,18 @@ export function Manajemen({
                       const oleh = j.selesaiOleh
                         ? data.employees.find((e) => e.id === j.selesaiOleh)?.nama
                         : undefined
+                      const tenggat = tenggatBaris(j)
+                      const dicentangPada = j.selesaiPada
+                        ? todayKey(new Date(j.selesaiPada))
+                        : undefined
+                      /* Lewat tenggat: yang belum dicentang dihitung sampai
+                         hari ini, yang sudah dicentang sampai hari ia beres —
+                         tugas yang selesai tepat waktu tidak boleh berubah
+                         jadi "telat" hanya karena bulannya berlalu. */
+                      const telat = dicentangPada
+                        ? dicentangPada > tenggat
+                        : tenggat < hariIni
+                      const hariH = !j.selesaiPada && tenggat === hariIni
                       return (
                         <li
                           key={j.id}
@@ -1086,9 +1154,11 @@ export function Manajemen({
                             'mgr-jobdesk-row' +
                             (j.selesaiPada
                               ? ' is-done'
-                              : j.darurat
-                                ? ' is-darurat'
-                                : '')
+                              : telat
+                                ? ' is-telat'
+                                : j.darurat
+                                  ? ' is-darurat'
+                                  : '')
                           }
                         >
                           <label>
@@ -1107,9 +1177,30 @@ export function Manajemen({
                               {j.label}
                             </span>
                           </label>
-                          {j.selesaiPada && (
-                            <span className="mgr-jobdesk-jejak">
-                              {labelTanggalPendek(todayKey(new Date(j.selesaiPada)))}
+                          {/* Tenggat tetap tampil setelah dicentang: owner
+                              menilai bukan cuma apa yang beres, tapi apakah
+                              beresnya sebelum tanggal yang ia tetapkan. */}
+                          <span
+                            className={
+                              'mgr-jobdesk-tenggat' +
+                              (j.selesaiPada ? ' is-done' : telat ? ' is-telat' : hariH ? ' is-hari-ini' : '')
+                            }
+                          >
+                            {!j.selesaiPada && telat
+                              ? 'Telat · '
+                              : hariH
+                                ? 'Hari ini · '
+                                : ''}
+                            {labelTanggalPendek(tenggat)}
+                          </span>
+                          {dicentangPada && (
+                            <span
+                              className={
+                                'mgr-jobdesk-jejak' + (telat ? ' is-telat' : '')
+                              }
+                            >
+                              {telat ? 'Beres telat ' : 'Beres '}
+                              {labelTanggalPendek(dicentangPada)}
                               {oleh && ` · ${oleh}`}
                             </span>
                           )}
@@ -2843,6 +2934,7 @@ function JobdeskEditor({
   awal,
   bulanLalu,
   labelBulanLalu,
+  monthKey,
   onSimpan,
   onBatal,
 }: {
@@ -2850,6 +2942,8 @@ function JobdeskEditor({
   /** Jobdesk periode sebelumnya — bahan tombol "Salin dari ...". */
   bulanLalu: JobdeskItem[]
   labelBulanLalu: string
+  /** Periode yang sedang disusun — mengurung tenggat di dalam bulannya. */
+  monthKey: string
   onSimpan: (items: JobdeskItem[]) => void
   onBatal: () => void
 }) {
@@ -2863,24 +2957,47 @@ function JobdeskEditor({
    * melompat di bawah kursor lebih mengganggu daripada urutan yang telat.
    */
   const [draf, setDraf] = useState<JobdeskItem[]>(() => urutkanJobdesk(awal))
+  /**
+   * Tenggat dikurung di dalam periodenya: jobdesk memang milik satu bulan, dan
+   * tanggal di luar bulan itu tidak akan pernah terbaca benar di layar manajer
+   * (yang ia buka adalah periode ini). Tugas awal bulan depan tempatnya di
+   * daftar bulan depan.
+   */
+  const mulaiPeriode = `${monthKey}-01`
+  const tutupPeriode = akhirPeriode(monthKey)
 
   function ubahLabel(id: string, label: string) {
     setDraf((d) => d.map((j) => (j.id === id ? { ...j, label } : j)))
   }
 
   /**
-   * Tukar dengan tetangga, TAPI hanya di dalam kelompok yang sama. Menukar
-   * lintas kelompok percuma: pengurutan mengembalikannya ke tempat semula, dan
-   * tombol yang tidak melakukan apa-apa lebih membingungkan daripada tombol
-   * mati. Tombolnya juga di-disable di tepi kelompok, jadi penjagaan ini
-   * sekadar jaring kedua.
+   * Tanggal diterima apa adanya SAMBIL diketik — pengurutan ulang ditunda ke
+   * `onBlur` (lihat [rapikan]). Mengurut tiap ketikan membuat baris melompat
+   * saat kolom tanggalnya masih setengah terisi.
+   */
+  function ubahTenggat(id: string, tenggat: string) {
+    setDraf((d) => d.map((j) => (j.id === id ? { ...j, tenggat: tenggat || undefined } : j)))
+  }
+
+  /** Dipanggil saat kursor meninggalkan kolom tanggal: baris mendarat di tempatnya. */
+  function rapikan() {
+    setDraf((d) => urutkanJobdesk(d))
+  }
+
+  /**
+   * Tukar dengan tetangga, TAPI hanya kalau [urutkanJobdesk] tidak punya
+   * pendapat soal urutan keduanya (lihat [sekelompokJobdesk]). Menukar lintas
+   * kelompok atau lintas tenggat percuma: pengurutan mengembalikannya ke
+   * tempat semula, dan tombol yang tidak melakukan apa-apa lebih
+   * membingungkan daripada tombol mati. Tombolnya juga di-disable di batas
+   * itu, jadi penjagaan ini sekadar jaring kedua.
    */
   function pindah(id: string, arah: -1 | 1) {
     setDraf((d) => {
       const i = d.findIndex((j) => j.id === id)
       const t = i + arah
       if (i < 0 || t < 0 || t >= d.length) return d
-      if (peringkatJobdesk(d[i]) !== peringkatJobdesk(d[t])) return d
+      if (!sekelompokJobdesk(d[i], d[t])) return d
       const next = [...d]
       ;[next[i], next[t]] = [next[t], next[i]]
       return next
@@ -2908,19 +3025,23 @@ function JobdeskEditor({
   function tambah() {
     // Diurut ulang supaya baris baru tidak mendarat di bawah tugas yang sudah
     // dicentang — ia belum dikerjakan, tempatnya di antrean, bukan di arsip.
-    setDraf((d) => urutkanJobdesk([...d, { id: uid(), label: '' }]))
+    // Tenggat awalnya akhir periode: itu tenggat terlonggar yang mungkin, jadi
+    // owner tinggal MEMAJUKAN tanggal, bukan mengisi kalender dari nol.
+    setDraf((d) => urutkanJobdesk([...d, { id: uid(), label: '', tenggat: tutupPeriode }]))
   }
 
   /**
    * Salin LABEL-nya saja: id & centang bulan lalu tidak boleh ikut terbawa.
    * Tanda darurat juga tidak: "mendesak bulan lalu" bukan alasan otomatis
-   * mendesak bulan ini — owner menilainya ulang.
+   * mendesak bulan ini — owner menilainya ulang. Tenggatnya pun tidak: tanggal
+   * bulan lalu tidak ada di bulan ini, jadi barisnya turun ke akhir periode
+   * dan owner memajukannya sendiri.
    */
   function salinBulanLalu() {
     setDraf((d) =>
       urutkanJobdesk([
         ...d,
-        ...bulanLalu.map((j) => ({ id: uid(), label: j.label })),
+        ...bulanLalu.map((j) => ({ id: uid(), label: j.label, tenggat: tutupPeriode })),
       ]),
     )
   }
@@ -2941,6 +3062,17 @@ function JobdeskEditor({
             onChange={(e) => ubahLabel(j.id, e.target.value)}
             placeholder="mis. Rekap penjualan mingguan ke owner"
           />
+          <input
+            type="date"
+            className="mgr-jobdesk-tgl"
+            value={j.tenggat ?? ''}
+            min={mulaiPeriode}
+            max={tutupPeriode}
+            onChange={(e) => ubahTenggat(j.id, e.target.value)}
+            onBlur={rapikan}
+            title="Tenggat tugas ini — kosong berarti akhir periode"
+            aria-label={`Tenggat: ${j.label || 'tugas baru'}`}
+          />
           <button
             type="button"
             className={
@@ -2950,8 +3082,8 @@ function JobdeskEditor({
             aria-pressed={Boolean(j.darurat)}
             title={
               j.darurat
-                ? 'Darurat — klik untuk jadikan tugas biasa (tenggat akhir bulan)'
-                : 'Tandai darurat — harus dikerjakan sekarang'
+                ? 'Darurat — klik untuk jadikan tugas biasa (ikut urutan tenggat)'
+                : 'Tandai darurat — menyela antrean apa pun tenggatnya'
             }
           >
             Darurat
@@ -2960,9 +3092,7 @@ function JobdeskEditor({
             type="button"
             className="btn-mini btn-mini-ghost"
             onClick={() => pindah(j.id, -1)}
-            disabled={
-              i === 0 || peringkatJobdesk(draf[i - 1]) !== peringkatJobdesk(j)
-            }
+            disabled={i === 0 || !sekelompokJobdesk(draf[i - 1], j)}
             title="Naikkan"
           >
             ↑
@@ -2971,10 +3101,7 @@ function JobdeskEditor({
             type="button"
             className="btn-mini btn-mini-ghost"
             onClick={() => pindah(j.id, 1)}
-            disabled={
-              i === draf.length - 1 ||
-              peringkatJobdesk(draf[i + 1]) !== peringkatJobdesk(j)
-            }
+            disabled={i === draf.length - 1 || !sekelompokJobdesk(draf[i + 1], j)}
             title="Turunkan"
           >
             ↓

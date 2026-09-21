@@ -145,9 +145,12 @@ export const PREVIEW_DATA: AppData = {
   },
   jobdeskManajer: {
     [BULAN_INI]: [
-      { id: 'j1', label: 'Audit stok kertas mingguan', selesaiPada: iso(`${BULAN_INI}-08`), selesaiOleh: MANAJER },
-      { id: 'j2', label: 'Susun jadwal shift bulan depan', darurat: true },
-      { id: 'j3', label: 'Follow up MoU SMA 3' },
+      { id: 'j1', label: 'Audit stok kertas mingguan', tenggat: `${BULAN_INI}-07`, selesaiPada: iso(`${BULAN_INI}-08`), selesaiOleh: MANAJER },
+      { id: 'j2', label: 'Susun jadwal shift bulan depan', tenggat: `${BULAN_INI}-20`, darurat: true },
+      { id: 'j3', label: 'Follow up MoU SMA 3', tenggat: `${BULAN_INI}-12` },
+      // Tanpa `tenggat` — baris warisan sebelum kolom ini ada; layar wajib
+      // memperlakukannya sebagai "tenggat akhir periode", bukan tanpa tenggat.
+      { id: 'j4', label: 'Rapikan arsip nota bulan lalu' },
     ],
   },
   klaimSosmed: [

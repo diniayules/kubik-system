@@ -27,7 +27,12 @@ import type {
   TahapKonten,
   TargetBulanan,
 } from './types'
-import { cariTakeover, hitungRingkasan, isHariKerja } from './attendance'
+import {
+  cariTakeover,
+  hitungRingkasan,
+  isHariKerja,
+  SHIFT_JADWAL,
+} from './attendance'
 import { hitungEvent } from './event'
 import {
   formatRupiah,
@@ -1095,6 +1100,89 @@ export function aktivitasSosmed(
     bolong: dinilai.filter((h) => !h.aktif).map((h) => h.tanggal),
     belumDicatat: (data.klaimSosmed ?? []).length === 0,
   }
+}
+
+/**
+ * Berapa lama sebelum shift berakhir story hari itu mulai ditagih.
+ *
+ * Dua jam: masih cukup untuk mengingatkan operator DAN dikerjakan sebelum
+ * pulang, tapi sudah cukup dekat ke jam tutup sehingga orang yang memang
+ * berencana story menjelang ramai tidak ditagih sejak pagi.
+ */
+export const AMBANG_STORY_MENIT = 120
+
+/** 'HH:MM' → menit sejak tengah malam. */
+function menitJam(jam: string): number {
+  const [h, m] = jam.split(':').map(Number)
+  return h * 60 + m
+}
+
+export type StoryTertinggal = {
+  employeeId: string
+  nama: string
+  shift: Shift
+  /** Jam shift ini berakhir, mis. '15:00'. */
+  jamPulang: string
+}
+
+/**
+ * Operator yang HARI INI bekerja, shift-nya tinggal dua jam lagi, dan belum
+ * melaporkan story sama sekali.
+ *
+ * Kenapa ini satu-satunya tugas sosmed HARIAN yang pantas jadi antrean
+ * manajer: story dilaporkan sendiri oleh tiap operator begitu ia
+ * mengerjakannya, jadi selama semuanya berjalan manajer tidak punya pekerjaan
+ * di situ — memasukkan tugas operator ke daftar manajer cuma memindahkan
+ * centang orang lain ke layarnya. Yang ditagih di sini bukan tugas operator,
+ * melainkan tugas manajer yang terlewat: MENGINGATKAN, selagi harinya masih
+ * bisa diselamatkan. Karena itu barisnya baru menyala menjelang jam pulang —
+ * sebelum itu belum ada yang lalai.
+ *
+ * Laporan dihitung APA PUN STATUSNYA. Klaim yang masih 'menunggu' berarti
+ * operatornya sudah mengerjakan; kalau ia harus di-ACC dulu, pengingat ini
+ * berbunyi gara-gara manajer telat memeriksa — persis kesalahan yang dihindari
+ * migrasi 0060. Untuk bonus gaji tetap hanya yang 'disetujui' yang dihitung
+ * (lihat `bonusSosmed.ts`); pengingat dan bukti memang dua pertanyaan berbeda.
+ */
+export function storyTertinggalHariIni(
+  data: AppData,
+  hariIni: string,
+  menitSekarang: number,
+): StoryTertinggal[] {
+  const sudahLapor = new Set(
+    (data.klaimSosmed ?? [])
+      .filter((k) => k.tanggal === hariIni && k.jenis === 'story')
+      .map((k) => k.employeeId),
+  )
+
+  const hasil: StoryTertinggal[] = []
+  for (const rec of data.records) {
+    if (rec.tanggal !== hariIni) continue
+    // Entri manual yang belum di-ACC belum jadi bukti kehadiran.
+    if (rec.status === 'menunggu') continue
+    // 'pantau', cuti, libur & general cleaning bukan hari kerja — sama persis
+    // dengan penyebut bonus story di `bonusSosmed.ts`.
+    if (!isHariKerja(rec.shift)) continue
+    if (sudahLapor.has(rec.employeeId)) continue
+
+    const jamPulang = SHIFT_JADWAL[rec.shift].pulang
+    if (!jamPulang) continue
+    if (menitSekarang < menitJam(jamPulang) - AMBANG_STORY_MENIT) continue
+
+    const emp = data.employees.find((e) => e.id === rec.employeeId)
+    // Pengelola tidak ditagih story: yang bertanggung jawab atas akun studio
+    // hari itu adalah operator yang sedang shift.
+    if (!emp || isPengelola(emp.role)) continue
+
+    hasil.push({
+      employeeId: emp.id,
+      nama: emp.nama,
+      shift: rec.shift,
+      jamPulang,
+    })
+  }
+
+  return hasil.sort((a, b) => a.nama.localeCompare(b.nama))
 }
 
 

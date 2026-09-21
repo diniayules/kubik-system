@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import type {
   AppData,
@@ -52,6 +52,7 @@ import {
   ringkasanBulan,
   saranTarget,
   skorKPI,
+  storyTertinggalHariIni,
   targetBerlaku,
 } from '../manajemen'
 import type {
@@ -196,6 +197,12 @@ function urutkanJobdesk(items: JobdeskItem[]): JobdeskItem[] {
   return [...items].sort((a, b) => peringkatJobdesk(a) - peringkatJobdesk(b))
 }
 
+/** Jam dinding sekarang sebagai menit sejak tengah malam. */
+function menitSaatIni(): number {
+  const d = new Date()
+  return d.getHours() * 60 + d.getMinutes()
+}
+
 export function Manajemen({
   data,
   setData,
@@ -211,6 +218,22 @@ export function Manajemen({
   const hariIni = todayKey()
   const periodeList = useMemo(() => bulanTersedia(data, hariIni), [data, hariIni])
   const [monthKey, setMonthKey] = useState(() => hariIni.slice(0, 7))
+
+  /*
+    Antrean story menagih berdasarkan JAM, bukan cuma tanggal: dashboard yang
+    dibuka pagi lalu ditinggal terbuka harus ikut menyalakan barisnya saat shift
+    tinggal dua jam. Lima menit sudah cukup rapat untuk ambang sebesar itu, dan
+    cukup jarang untuk tidak terasa sebagai layar yang berkedip sendiri.
+  */
+  const [menitSekarang, setMenitSekarang] = useState(menitSaatIni)
+  useEffect(() => {
+    const t = setInterval(() => setMenitSekarang(menitSaatIni()), 5 * 60_000)
+    return () => clearInterval(t)
+  }, [])
+  const storyTertinggal = useMemo(
+    () => storyTertinggalHariIni(data, hariIni, menitSekarang),
+    [data, hariIni, menitSekarang],
+  )
 
   /*
     Keduanya mendarat di Operasional — tugas nomor satu, dan satu-satunya yang
@@ -635,6 +658,28 @@ export function Manajemen({
       nada: 'primary' as const,
     },
 
+    {
+      /*
+        Satu-satunya tugas sosmed HARIAN yang pantas ada di sini — dan bukan
+        karena tugasnya. Story dicentang sendiri oleh tiap operator setelah ia
+        mengerjakannya, jadi selama semuanya jalan manajer tidak punya apa-apa
+        untuk dibereskan dan daftar ini diam. Yang muncul di sini adalah
+        kelalaian manajer: operator hampir pulang dan belum story, artinya tidak
+        ada yang mengingatkannya. Lihat `storyTertinggalHariIni`.
+      */
+      tugas: 'sosmed' as TabMgr,
+      bobot: 0,
+      jumlah: storyTertinggal.length,
+      label:
+        storyTertinggal.length > 0
+          ? `Belum menayangkan story hari ini — ${storyTertinggal
+              .map((s) => `${s.nama} (pulang ${s.jamPulang})`)
+              .join(', ')}`
+          : 'Belum menayangkan story hari ini',
+      aksi: 'Ingatkan & buka jadwal',
+      onClick: onLihatJadwal,
+      nada: 'pink' as const,
+    },
     {
       tugas: 'sosmed' as TabMgr,
       bobot: 1,

@@ -46,9 +46,6 @@ const NAV_ITEMS: Item[] = [
   { id: 'inventaris', label: 'Inventaris & Stok', icon: Icons.box, group: 'Operasional' },
   // Karyawan boleh lihat menu Promosi — konten difilter per peran + RLS.
   { id: 'promosi', label: 'Papan Promosi', icon: Icons.sun, group: 'Operasional' },
-  // Pipeline sales: data komersial. Operator boleh membuka menunya — RLS 0047
-  // hanya memberinya lead yang di-PIC-kan padanya.
-  { id: 'leads', label: 'Leads & Sales', icon: Icons.cart, group: 'Event' },
   { id: 'laporan', label: 'Studio', icon: Icons.wallet, group: 'Keuangan' },
   { id: 'pengeluaran', label: 'Pengeluaran', icon: Icons.cart, group: 'Keuangan' },
   // Owner melihat semua slip; karyawan hanya slip miliknya sendiri (difilter di
@@ -60,6 +57,9 @@ const NAV_ITEMS: Item[] = [
     group: 'Keuangan',
     roles: ['owner', 'karyawan'],
   },
+  // Pipeline sales: data komersial. Operator boleh membuka menunya — RLS 0047
+  // hanya memberinya lead yang di-PIC-kan padanya.
+  { id: 'leads', label: 'Leads & Sales', icon: Icons.cart, group: 'Event' },
   // Event: tiap kategori jadi menu sendiri (halaman penuh, tanpa sub-tab).
   { id: 'event-photobooth', label: 'Photobooth', icon: Icons.camera, group: 'Event' },
   { id: 'event-game', label: 'Photo Game', icon: Icons.camera, group: 'Event' },

@@ -1205,6 +1205,38 @@ export const STATUS_LAPORAN_PENDEK: Record<StatusLaporanHarian, string> = {
   eskalasi: 'Perlu owner',
 }
 
+/**
+ * Studio sudah tutup pada tanggal itu — yaitu operator SHIFT PENUTUP sudah
+ * clock out. Closing-an Kubik jatuh malam (sore & full sama-sama pulang
+ * 21:00), jadi pulangnya shift pagi jam 15:00 BUKAN tanda studio tutup:
+ * tokonya masih buka sampai malam dan kejadian hari itu belum selesai.
+ *
+ * Shift penutup diambil dari jadwal hari itu sendiri, bukan dipaku 'sore':
+ * pada hari yang memang hanya dijadwalkan pagi, pulangnya shift pagi itulah
+ * closing-nya. Kalau dipaku, hari seperti itu tidak akan pernah bisa
+ * dilaporkan.
+ *
+ * Absen yang masih 'menunggu' persetujuan tetap dihitung: yang ditanya di
+ * sini adalah fakta fisik "orangnya sudah pulang", bukan sah atau tidaknya
+ * catatan itu untuk gaji.
+ *
+ * Inilah SATU-SATUNYA definisi "sudah closing" di aplikasi, dipakai dua
+ * tempat yang harus sepakat: gerbang formulir laporan di layar Manajemen dan
+ * hitungan hari yang berutang laporan di [laporanClosing]. Kalau layar memakai
+ * aturan sendiri, manajer bisa melihat formulir terkunci untuk hari yang
+ * justru sedang ditagih — atau sebaliknya.
+ */
+export function sudahClosing(data: AppData, tanggal: string): boolean {
+  // Hanya shift kerja: kunjungan 'pantau' pengelola bukan jaga toko, dan
+  // pulangnya manajer tidak boleh membuka laporannya sendiri.
+  const hariItu = data.records.filter(
+    (r) => r.tanggal === tanggal && isHariKerja(r.shift),
+  )
+  const malam = hariItu.filter((r) => r.shift === 'sore' || r.shift === 'full')
+  const penutup = malam.length > 0 ? malam : hariItu
+  return penutup.some((r) => r.events.some((e) => e.tipe === 'pulang'))
+}
+
 export type HariLaporan = {
   tanggal: string
   /** Tanggalnya sudah lewat / sedang berjalan. */
@@ -1280,13 +1312,10 @@ export function laporanClosing(
     Hari ini baru boleh ditagih SETELAH ada yang clock out — namanya laporan
     closing. Tanpa syarat ini, antrean sudah menuntut laporan sejak operator
     pertama absen masuk pagi-pagi, dan manajer belajar mengabaikannya.
+    Syarat yang sama mengunci formulirnya di layar — lihat [sudahClosing].
   */
-  const sudahClosing =
-    hariIni.startsWith(monthKey) &&
-    data.records.some(
-      (r) =>
-        r.tanggal === hariIni && r.events.some((e) => e.tipe === 'pulang'),
-    )
+  const closingHariIni =
+    hariIni.startsWith(monthKey) && sudahClosing(data, hariIni)
 
   // Hari yang benar-benar berutang laporan. Hari ini ikut begitu tokonya
   // tutup — atau begitu laporannya sudah ditulis lebih awal.
@@ -1294,7 +1323,7 @@ export function laporanClosing(
     (h) =>
       h.berjalan &&
       h.hariKerja &&
-      (h.tanggal !== hariIni || sudahClosing || !!h.status),
+      (h.tanggal !== hariIni || closingHariIni || !!h.status),
   )
   const terisi = dinilai.filter((h) => h.status).length
   const hitung = (st: StatusLaporanHarian) =>

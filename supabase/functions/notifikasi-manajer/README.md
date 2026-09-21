@@ -64,13 +64,18 @@ jadwal, hanya body-nya yang berbeda:
 | | Job pagi | Job malam |
 |---|---|---|
 | Name | `notifikasi-manajer-pagi` | `notifikasi-manajer-malam` |
-| Schedule | `0 1 * * *` (01:00 UTC = 08:00 WIB) | `0 14 * * *` (14:00 UTC = 21:00 WIB) |
+| Schedule | `0 1 * * *` (01:00 UTC = 08:00 WIB) | `30 14 * * *` (14:30 UTC = 21:30 WIB) |
 | Type | Supabase Edge Function → `notifikasi-manajer` | sama |
 | Method | `POST` | `POST` |
 | Body | `{}` | `{"sesi":"malam"}` |
 
 Cron Supabase memakai **UTC**, bukan waktu setempat — itu sebabnya 08:00 WIB
-ditulis `0 1` dan 21:00 WIB ditulis `0 14`. Jalur ini otomatis menyertakan header
+ditulis `0 1` dan 21:30 WIB ditulis `30 14`.
+
+Sesi malam sengaja setengah jam SETELAH shift sore berakhir (21:00), bukan tepat
+di jamnya: formulir laporan closing baru terbuka setelah operator shift penutup
+clock out, jadi pengingat yang datang pas jam 21:00 berisiko menyuruh manajer
+menulis laporan yang layarnya masih terkunci. Jalur ini otomatis menyertakan header
 otorisasinya sendiri, jadi tidak ada kunci yang perlu disalin ke mana pun.
 
 <details>

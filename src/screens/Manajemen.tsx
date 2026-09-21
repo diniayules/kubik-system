@@ -53,6 +53,7 @@ import {
   saranTarget,
   skorKPI,
   storyTertinggalHariIni,
+  sudahClosing,
   targetBerlaku,
 } from '../manajemen'
 import type {
@@ -373,6 +374,24 @@ export function Manajemen({
   const laporanTerpilih = (data.laporanHarian ?? []).find(
     (r) => r.tanggal === tglLaporan,
   )
+  /**
+   * Formulir hari ini baru terbuka setelah STUDIO TUTUP — yaitu operator shift
+   * penutup clock out di malam hari (lihat [sudahClosing]). Laporan closing
+   * memang laporan atas hari yang sudah selesai; menulisnya sore-sore berarti
+   * melaporkan malam yang belum terjadi.
+   *
+   * Hari yang sudah lewat tidak ikut dikunci: closing-nya jelas sudah lewat,
+   * dan justru hari-hari itulah yang ditagih antrean sebagai bolong. Hari ini
+   * yang laporannya TERLANJUR ada juga tetap bisa disunting/dihapus — pintu
+   * keluar untuk baris yang terlanjur salah tulis.
+   */
+  const closingHariIni = sudahClosing(data, hariIni)
+  const kunciLaporan: 'nanti' | 'belumClosing' | undefined =
+    tglLaporan > hariIni
+      ? 'nanti'
+      : tglLaporan === hariIni && !closingHariIni && !laporanTerpilih
+        ? 'belumClosing'
+        : undefined
   /*
     Laporan ini boleh ditulis manajer MAUPUN owner, dan sampai sekarang
     keduanya terlihat identik di layar. Nama penulisnya sudah tersimpan di
@@ -1417,9 +1436,11 @@ export function Manajemen({
                       `${labelHariTanggal(h.tanggal)} — ` +
                       (h.status
                         ? `${STATUS_LAPORAN_PENDEK[h.status]}${h.catatan ? `: ${h.catatan}` : ''}`
-                        : h.hariKerja
-                          ? 'belum ada laporan'
-                          : 'tidak ada kegiatan')
+                        : h.tanggal === hariIni && !closingHariIni
+                          ? 'menunggu studio tutup'
+                          : h.hariKerja
+                            ? 'belum ada laporan'
+                            : 'tidak ada kegiatan')
                     }
                   >
                     {Number(h.tanggal.slice(8))}
@@ -1432,9 +1453,10 @@ export function Manajemen({
                 tanggal={tglLaporan}
                 awal={laporanTerpilih}
                 penulis={penulisLaporan}
-                // Hari yang belum tiba tidak bisa dilaporkan; tanggalnya tetap
-                // bisa diklik supaya kalender terasa utuh.
-                bisaTulis={tglLaporan <= hariIni}
+                // Hari yang belum tiba — dan hari ini yang belum ada
+                // closing-nya — tidak bisa dilaporkan; tanggalnya tetap bisa
+                // diklik supaya kalender terasa utuh.
+                kunci={kunciLaporan}
                 onSimpan={simpanLaporan}
                 onHapus={hapusLaporan}
               />
@@ -2587,7 +2609,7 @@ function LaporanBox({
   tanggal,
   awal,
   penulis,
-  bisaTulis,
+  kunci,
   onSimpan,
   onHapus,
 }: {
@@ -2595,7 +2617,13 @@ function LaporanBox({
   awal?: LaporanHarian
   /** Nama penulisnya, sudah dicarikan pemanggil dari `awal.oleh`. */
   penulis?: string
-  bisaTulis: boolean
+  /**
+   * Kenapa formulirnya tertutup — `undefined` berarti boleh ditulis.
+   * `'nanti'` = harinya belum tiba, `'belumClosing'` = studio hari ini belum
+   * tutup. Dua alasan, dua kalimat: "belum tiba" pada sore hari yang sedang
+   * berjalan hanya akan membuat manajer mengira ada bug.
+   */
+  kunci?: 'nanti' | 'belumClosing'
   onSimpan: (
     tanggal: string,
     status: StatusLaporanHarian,
@@ -2633,11 +2661,21 @@ function LaporanBox({
     setCatatan(awal?.catatan ?? '')
   }
 
-  if (!bisaTulis) {
+  if (kunci) {
     return (
       <p className="mgr-empty">
-        {labelHariTanggal(tanggal)} belum tiba — laporannya ditulis setelah
-        closing hari itu.
+        {kunci === 'nanti' ? (
+          <>
+            {labelHariTanggal(tanggal)} belum tiba — laporannya ditulis setelah
+            closing hari itu.
+          </>
+        ) : (
+          <>
+            Studio belum tutup. Laporan closing terbuka setelah operator shift
+            penutup clock out malam ini — sampai itu, hari yang masih bolong
+            bisa ditulis lewat strip tanggal di atas.
+          </>
+        )}
       </p>
     )
   }

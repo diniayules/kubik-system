@@ -35,6 +35,7 @@ import {
 } from '../manajemen'
 import { Icons } from '../components/Icons'
 import { Modal, ModalHead } from '../components/Modal'
+import RupiahInput from '../components/RupiahInput'
 import { useToast } from '../components/Toast'
 import { Kemitraan } from './Kemitraan'
 
@@ -361,15 +362,13 @@ function LeadModal({
   const [sumber, setSumber] = useState(existing?.sumber ?? '')
   const [kategori, setKategori] = useState<LeadKategori>(existing?.kategori ?? 'lainnya')
   const [tahap, setTahap] = useState<LeadTahap>(existing?.tahap ?? 'baru')
-  const [estimasi, setEstimasi] = useState(String(existing?.nilaiEstimasi ?? 0))
-  const [realisasi, setRealisasi] = useState(String(existing?.nilaiRealisasi ?? 0))
+  const [estimasi, setEstimasi] = useState(existing?.nilaiEstimasi ?? 0)
+  const [realisasi, setRealisasi] = useState(existing?.nilaiRealisasi ?? 0)
   const [pic, setPic] = useState(existing?.pic ?? '')
   const [masuk, setMasuk] = useState(existing?.tanggalMasuk ?? todayKey())
   const [alasan, setAlasan] = useState(existing?.alasanGagal ?? '')
   const [catatan, setCatatan] = useState(existing?.catatan ?? '')
   const [fuText, setFuText] = useState('')
-
-  const angka = (t: string) => Number(t.replace(/[^\d]/g, '')) || 0
 
   function simpan() {
     if (!nama.trim()) {
@@ -383,8 +382,8 @@ function LeadModal({
       sumber: sumber.trim(),
       kategori,
       tahap,
-      nilaiEstimasi: angka(estimasi),
-      nilaiRealisasi: angka(realisasi),
+      nilaiEstimasi: estimasi,
+      nilaiRealisasi: realisasi,
       pic: pic || undefined,
       tanggalMasuk: masuk,
       // Distempel database saat tahap berpindah ke 'closing' — jangan dikirim.
@@ -466,23 +465,11 @@ function LeadModal({
           </div>
           <div className="field">
             <label>Estimasi nilai (Rp)</label>
-            <input
-              type="number"
-              inputMode="numeric"
-              value={estimasi}
-              disabled={!bisaUbah}
-              onChange={(e) => setEstimasi(e.target.value)}
-            />
+            <RupiahInput value={estimasi} onChange={setEstimasi} disabled={!bisaUbah} />
           </div>
           <div className="field">
             <label>Realisasi (Rp)</label>
-            <input
-              type="number"
-              inputMode="numeric"
-              value={realisasi}
-              disabled={!bisaUbah}
-              onChange={(e) => setRealisasi(e.target.value)}
-            />
+            <RupiahInput value={realisasi} onChange={setRealisasi} disabled={!bisaUbah} />
           </div>
           <div className="field">
             <label>PIC</label>

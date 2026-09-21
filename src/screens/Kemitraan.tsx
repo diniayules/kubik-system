@@ -39,6 +39,7 @@ import {
 } from '../manajemen'
 import { Icons } from '../components/Icons'
 import { Modal, ModalHead } from '../components/Modal'
+import RupiahInput from '../components/RupiahInput'
 import { useToast } from '../components/Toast'
 
 /** Kategori baris `pengeluaran` yang dibuat otomatis dari sponsor dibayar. */
@@ -419,8 +420,8 @@ function PengajuanModal({
   const [masuk, setMasuk] = useState(existing?.tanggalMasuk ?? todayKey())
   const [status, setStatus] = useState<KemitraanStatus>(existing?.status ?? 'masuk')
   const [permintaan, setPermintaan] = useState(existing?.permintaan ?? '')
-  const [diminta, setDiminta] = useState(String(existing?.nilaiDiminta ?? 0))
-  const [disetujui, setDisetujui] = useState(String(existing?.nilaiDisetujui ?? 0))
+  const [diminta, setDiminta] = useState(existing?.nilaiDiminta ?? 0)
+  const [disetujui, setDisetujui] = useState(existing?.nilaiDisetujui ?? 0)
   const [bentuk, setBentuk] = useState<KemitraanBentuk>(existing?.bentuk ?? 'uang')
   const [imbalan, setImbalan] = useState<KemitraanImbalan[]>(existing?.imbalan ?? [])
   const [imbalanBaru, setImbalanBaru] = useState('')
@@ -431,7 +432,6 @@ function PengajuanModal({
   const [pic, setPic] = useState(existing?.pic ?? '')
   const [sumber, setSumber] = useState<'cash' | 'rekening'>('cash')
 
-  const angka = (t: string) => Number(t.replace(/[^\d]/g, '')) || 0
   const adaMou = jenis === 'mou' || jenis === 'keduanya'
   const sudahDicatat =
     !!existing?.pengeluaranId &&
@@ -450,8 +450,8 @@ function PengajuanModal({
       tanggalMasuk: masuk,
       status,
       permintaan: permintaan.trim(),
-      nilaiDiminta: angka(diminta),
-      nilaiDisetujui: angka(disetujui),
+      nilaiDiminta: diminta,
+      nilaiDisetujui: disetujui,
       bentuk,
       imbalan,
       mouMulai: adaMou ? mouMulai || undefined : undefined,
@@ -608,23 +608,11 @@ function PengajuanModal({
         <div className="lead-form-grid">
           <div className="field">
             <label>Nilai diminta (Rp)</label>
-            <input
-              type="number"
-              inputMode="numeric"
-              value={diminta}
-              disabled={!bisaUbah}
-              onChange={(e) => setDiminta(e.target.value)}
-            />
+            <RupiahInput value={diminta} onChange={setDiminta} disabled={!bisaUbah} />
           </div>
           <div className="field">
             <label>Nilai disetujui (Rp)</label>
-            <input
-              type="number"
-              inputMode="numeric"
-              value={disetujui}
-              disabled={!bisaUbah}
-              onChange={(e) => setDisetujui(e.target.value)}
-            />
+            <RupiahInput value={disetujui} onChange={setDisetujui} disabled={!bisaUbah} />
           </div>
           <div className="field">
             <label>Bentuk sponsor</label>

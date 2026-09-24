@@ -224,7 +224,11 @@ export function Promosi({ data, setData, isAdmin, currentUserId }: Props) {
   }
 
   function setTahap(p: PromoProgram, tahap: PromoTahap) {
-    simpan({ ...p, tahap }, { silent: true })
+    // Dipindah lewat tombol = ditutup saat itu juga; tanggal tayang lampau
+    // hanya lewat form (kartu yang dicatat susulan).
+    const selesaiPada =
+      tahap !== 'selesai' ? undefined : p.tahap === 'selesai' ? p.selesaiPada : todayKey()
+    simpan({ ...p, tahap, selesaiPada }, { silent: true })
   }
 
   function setujui(p: PromoProgram) {
@@ -756,8 +760,8 @@ function PromoRow({
     )
   }
   const namaPic = p.pic ? namaById?.get(p.pic) : undefined
-  // Status deadline: telat kalau sudah selesai lewat batas, atau menunggak
-  // kalau batasnya sudah lewat tapi kartunya belum selesai.
+  // Status deadline: telat kalau tayang lewat batas, atau menunggak kalau
+  // batasnya sudah lewat tapi kartunya belum selesai.
   const deadlineNada = !p.deadline
     ? null
     : p.tahap === 'selesai'
@@ -767,6 +771,11 @@ function PromoRow({
       : p.deadline < todayKey()
         ? 'menunggak'
         : 'menunggu'
+  const susulan =
+    p.tahap === 'selesai' &&
+    !!p.selesaiPada &&
+    !!p.createdAt &&
+    todayKey(new Date(p.createdAt)) > p.selesaiPada
   const periode =
     p.tanggalMulai || p.tanggalSelesai
       ? [p.tanggalMulai, p.tanggalSelesai]
@@ -810,6 +819,13 @@ function PromoRow({
                 {deadlineNada === 'menunggak' && ' · lewat'}
                 {deadlineNada === 'telat' && ' · telat'}
                 {deadlineNada === 'tepat' && ' · tepat'}
+              </span>
+            )}
+            {susulan && (
+              /* Terlambat mencatat ≠ terlambat tayang: tidak memengaruhi
+                 tepat/telat, tapi kebiasaannya tetap kelihatan. */
+              <span className="promo-item-flag">
+                <Icons.pencil /> {t('prom.susulan')}
               </span>
             )}
             {punyaDesain(p) && (
@@ -1349,6 +1365,7 @@ function PromoModal({
   const [jenis, setJenis] = useState<PromoJenis>(existing?.jenis ?? 'campaign')
   const [pic, setPic] = useState(existing?.pic ?? '')
   const [deadline, setDeadline] = useState(existing?.deadline ?? '')
+  const [tayang, setTayang] = useState(existing?.selesaiPada ?? '')
   const [gambar, setGambar] = useState<DesainLampiran[]>(() =>
     existing ? terlihat(gambarKartu(existing), isAdmin, currentUserId) : [],
   )
@@ -1397,8 +1414,12 @@ function PromoModal({
       // belum punya penanggung jawab sampai admin menetapkannya.
       pic: isAdmin ? pic || undefined : existing?.pic,
       deadline: isAdmin ? deadline || undefined : existing?.deadline,
-      // `selesaiPada` distempel database (0046) — jangan pernah dikirim client.
-      selesaiPada: existing?.selesaiPada,
+      // Tanggal tayang: kosong = hari ini. Database hanya menerimanya dari
+      // pengelola & tidak melewati hari ini (0066).
+      selesaiPada:
+        tahap !== 'selesai' || !isAdmin
+          ? existing?.selesaiPada
+          : tayang || (existing?.tahap === 'selesai' ? existing.selesaiPada : todayKey()),
       dibuatOleh: existing?.dibuatOleh ?? currentUserId,
       // `desain` (kolom lama) hanya boleh berisi desain yang tayang — 0056.
       desain: gambarFinal.find(sudahAcc)?.nilai,
@@ -1504,10 +1525,24 @@ function PromoModal({
                 )}
               </div>
               <span className="promo-desain-hint">
-                Ketepatan terhadap deadline dinilai otomatis saat kartu masuk
-                tahap “selesai”.
+                Ketepatan terhadap deadline dinilai dari tanggal tayang.
               </span>
             </div>
+            {tahap === 'selesai' && (
+              <div className="field">
+                <label>Tanggal tayang</label>
+                <input
+                  type="date"
+                  value={tayang}
+                  max={todayKey()}
+                  onChange={(e) => setTayang(e.target.value)}
+                />
+                <span className="promo-desain-hint">
+                  Isi kalau konten sudah tayang sebelum kartunya dicatat.
+                  Kosong = hari ini.
+                </span>
+              </div>
+            )}
           </>
         )}
         <div className="promo-form-dates">

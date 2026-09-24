@@ -480,10 +480,10 @@ export type PromoProgram = {
   /** Batas waktu penyelesaian. Format YYYY-MM-DD. */
   deadline?: string
   /**
-   * Tanggal kartu benar-benar masuk tahap 'selesai'. DISTEMPEL DATABASE
-   * (trigger `promo_stamp_selesai`, migration 0046), bukan diisi dari layar —
-   * inilah satu-satunya bukti ketepatan waktu terhadap `deadline`.
-   * Read-only bagi client.
+   * Tanggal tayang — dasar ketepatan waktu terhadap `deadline` & bulan bonus.
+   * Distempel database saat kartu masuk tahap 'selesai' (migration 0046);
+   * hanya pengelola yang boleh menyebut tanggal lampau, untuk kartu yang
+   * dicatat susulan (0066). Operator tidak bisa mengubahnya.
    */
   selesaiPada?: string
   /**

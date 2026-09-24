@@ -1019,9 +1019,10 @@ export async function persistChanges(
       // trigger promo_stamp_tahapan (0051) dengan alasan yang sama seperti
       // `selesai_pada` di bawah.
       tahapan: (p.tahapan ?? []).map((t) => ({ kunci: t.kunci, oleh: t.oleh ?? null })),
-      // `selesai_pada` sengaja TIDAK ditulis dari sini — distempel trigger
-      // promo_stamp_selesai (0046). Mengirimnya dari client akan membuat
-      // "tepat waktu" bisa dikarang.
+      // Tanggal tayang. Trigger promo_stamp_selesai (0066) hanya menerimanya
+      // dari pengelola & tidak melewati hari ini; selain itu ia distempel
+      // server — "tepat waktu" tetap tidak bisa dikarang operator.
+      selesai_pada: p.selesaiPada ?? null,
     }),
     userId,
   )
